@@ -62,10 +62,33 @@ cd frontend && pnpm exec playwright install --with-deps chromium
 cd frontend && pnpm exec playwright test
 ```
 
+## Demo: 反应式赔付
+
+```bash
+# 启动
+./scripts/dev.sh
+
+# 1. 浏览器登录 → 拿 cookie (或脚本)
+# 2. 调 /policies 买险
+curl -X POST http://localhost:8000/policies \
+  -H "Content-Type: application/json" \
+  -b "rialo_session=YOUR_JWT" \
+  -d '{"flight_id":"<某 callsign>-<YYYYMMDD>","premium":10}'
+
+# 3. admin 注入延误 (替代真延误等待)
+curl -X POST http://localhost:8000/admin/inject-delay \
+  -H "Content-Type: application/json" \
+  -H "X-Admin-Token: $ADMIN_TOKEN" \
+  -d '{"flight_id":"<同上>","delay_minutes":45}'
+
+# 4. 等 30s (ClaimEngine 下一轮), 看赔付
+curl http://localhost:8000/claims/recent
+```
+
 ## 项目状态
 
 - [x] **Plan 1 · Foundation**
-- [ ] Plan 2 · Reactive Insurance Core
+- [x] **Plan 2 · Reactive Insurance Core** ← 当前
 - [ ] Plan 3 · Live Dashboard
 
 ## License
