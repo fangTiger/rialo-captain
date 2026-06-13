@@ -25,8 +25,8 @@
 - [ ] 4.5 vcrpy 录制 OpenSky 响应做契约测试
 
 ## 5. 反应式合约抽象（reactive-insurance-core）
-- [ ] 5.1 `backend/contracts/base.py`：Protocol + `Condition` + `ContractRef` + `TxResult` 类型
-- [ ] 5.2 `MockRialoAdapter` 实现（`watch` / `fetch_external` / `trigger_claim` / `get_signature`）
+- [x] 5.1 `backend/contracts/base.py`：Protocol + `Condition` + `ContractRef` + `TxResult` 类型
+- [x] 5.2 `MockRialoAdapter` 实现（`watch` / `fetch_external` / `trigger_claim` / `get_signature`）
 - [ ] 5.3 `RealRialoAdapter` 占位（NotImplementedError + 注释 SDK 公开后填）
 - [ ] 5.4 Adapter 契约测试集（parametrize Mock 全绿，Real skip-if）
 - [ ] 5.5 `get_contract_adapter()` factory + `RIALO_MODE` 配置
