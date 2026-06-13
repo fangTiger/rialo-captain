@@ -20,8 +20,8 @@
 ## 4. 航班数据（flight-data）
 - [ ] 4.1 OpenSky HTTP client（httpx + 指数退避 + 30s 短缓存）
 - [ ] 4.2 in-memory 活跃航班 cache + degraded mode 标记
-- [ ] 4.3 `GET /flights/live` + `GET /flights/:id` endpoints
-- [ ] 4.4 历史延误率统计（按 callsign 累积）
+- [x] 4.3 `GET /flights/live` + `GET /flights/:id` endpoints
+- [x] 4.4 历史延误率统计（按 callsign 累积）
 - [ ] 4.5 vcrpy 录制 OpenSky 响应做契约测试
 
 ## 5. 反应式合约抽象（reactive-insurance-core）

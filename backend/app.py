@@ -5,12 +5,35 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.auth.routes import router as auth_router
 from backend.db import init_db
+from backend.flights.cache import FlightCache
+from backend.flights.opensky import OpenSkyClient
+from backend.flights.routes import router as flights_router
+
+
+_flight_cache_singleton = FlightCache(ttl_seconds=30)
+_opensky_singleton: OpenSkyClient | None = None
+
+
+def get_flight_cache() -> FlightCache:
+    return _flight_cache_singleton
+
+
+def get_opensky_client() -> OpenSkyClient | None:
+    return _opensky_singleton
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global _opensky_singleton
     await init_db()
-    yield
+    _opensky_singleton = OpenSkyClient()
+    app.state.flight_cache = _flight_cache_singleton
+    app.state.opensky = _opensky_singleton
+    try:
+        yield
+    finally:
+        if _opensky_singleton is not None:
+            await _opensky_singleton.aclose()
 
 
 def create_app() -> FastAPI:
@@ -28,7 +51,9 @@ def create_app() -> FastAPI:
     async def health() -> dict[str, str]:
         return {"status": "ok", "service": "rialo-captain"}
 
+    app.state.flight_cache = _flight_cache_singleton
     app.include_router(auth_router)
+    app.include_router(flights_router)
     return app
 
 
