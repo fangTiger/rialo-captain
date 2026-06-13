@@ -1,12 +1,16 @@
+import asyncio
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.auth.routes import router as auth_router
+from backend.claims.engine import ClaimEngine
+from backend.claims.routes import router as claims_router
 from backend.contracts.factory import get_contract_adapter
 from backend.contracts.mock_rialo import MockRialoAdapter
-from backend.db import init_db
+from backend.db import get_session_factory, init_db
 from backend.flights.cache import FlightCache
 from backend.flights.opensky import OpenSkyClient
 from backend.flights.routes import router as flights_router
@@ -31,12 +35,27 @@ async def lifespan(app: FastAPI):
     await init_db()
     _opensky_singleton = OpenSkyClient()
     adapter = get_contract_adapter()
+    engine = ClaimEngine(adapter=adapter, session_factory=get_session_factory())
+
     app.state.flight_cache = _flight_cache_singleton
     app.state.opensky = _opensky_singleton
     app.state.contract_adapter = adapter
+    app.state.claim_engine = engine
+
+    engine_task: asyncio.Task | None = None
+    if os.environ.get("CLAIM_ENGINE_ENABLED", "true").lower() != "false":
+        engine_task = asyncio.create_task(engine.run_forever())
+
     try:
         yield
     finally:
+        engine.stop()
+        if engine_task is not None:
+            engine_task.cancel()
+            try:
+                await engine_task
+            except asyncio.CancelledError:
+                pass
         if _opensky_singleton is not None:
             await _opensky_singleton.aclose()
         if isinstance(adapter, MockRialoAdapter):
@@ -53,7 +72,9 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     app.state.flight_cache = _flight_cache_singleton
-    app.state.contract_adapter = get_contract_adapter()
+    adapter = get_contract_adapter()
+    app.state.contract_adapter = adapter
+    app.state.claim_engine = ClaimEngine(adapter=adapter, session_factory=get_session_factory())
 
     @app.get("/health")
     async def health() -> dict[str, str]:
@@ -62,6 +83,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_router)
     app.include_router(flights_router)
     app.include_router(policies_router)
+    app.include_router(claims_router)
     return app
 
 

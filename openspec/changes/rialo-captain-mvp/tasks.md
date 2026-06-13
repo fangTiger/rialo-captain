@@ -35,7 +35,7 @@
 - [x] 6.1 PolicyService：费率算法（延误率 → 赔付倍率）+ 创建保单
 - [x] 6.2 `POST /policies` + `GET /policies` endpoints
 - [x] 6.3 ClaimEngine：asyncio 后台循环 + 触发逻辑 + 单失败隔离
-- [ ] 6.4 `GET /claims/recent` endpoint
+- [x] 6.4 `GET /claims/recent` endpoint
 - [ ] 6.5 admin endpoint `POST /admin/inject-delay`（手动注入模拟延误，演示用）
 - [ ] 6.6 整套保险业务的契约测试（用 MockRialoAdapter）
 
