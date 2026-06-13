@@ -1,0 +1,110 @@
+:root {
+  /* Surfaces */
+  --surface-0: #050608;
+  --surface-1: #0B0E12;
+  --surface-2: #14181F;
+
+  /* Borders */
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-emphasis: rgba(0, 255, 157, 0.24);
+
+  /* Accents */
+  --accent-radar: #00FF9D;
+  --accent-radar-dim: rgba(0, 255, 157, 0.20);
+  --warn-amber: #FFB400;
+  --danger-flare: #FF3D5C;
+  --info-beige: #E8E3D5;
+
+  /* Text */
+  --text-primary: rgba(232, 227, 213, 0.95);
+  --text-secondary: rgba(232, 227, 213, 0.60);
+  --text-tertiary: rgba(232, 227, 213, 0.35);
+
+  /* Typography (避开 Inter / Roboto) */
+  --font-display: "Geist", "Söhne", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-ui: var(--font-display);
+  --font-mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Radius */
+  --radius-sharp: 2px;
+  --radius-soft: 8px;
+  --radius-pill: 999px;
+
+  /* Shadow */
+  --elev-1: 0 0 0 1px var(--border-subtle);
+  --elev-2: 0 0 0 1px var(--border-subtle), 0 1px 0 rgba(0, 0, 0, 0.4);
+  --glow-radar: 0 0 16px var(--accent-radar-dim);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background-color: var(--surface-0);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  position: relative;
+  overflow-x: hidden;
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.8'/></svg>");
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+@keyframes radar-sweep {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.radar-sweep {
+  animation: radar-sweep 6s linear infinite;
+  transform-origin: center;
+}
+
+@keyframes flare-burst {
+  0% {
+    box-shadow: 0 0 0 0 var(--accent-radar);
+    opacity: 1;
+  }
+
+  60% {
+    box-shadow: 0 0 0 32px rgba(0, 255, 157, 0);
+    opacity: 0.8;
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 255, 157, 0);
+    opacity: 1;
+  }
+}
+
+.flare-burst {
+  animation: flare-burst 400ms cubic-bezier(0.22, 1, 0.36, 1);
+}
