@@ -73,8 +73,14 @@ class ClaimEngine:
         return summary
 
     async def _process(self, policy: Policy) -> None:
+        from backend.admin.routes import get_injected_delay
+
         condition = self._parse_condition(policy.condition_json)
-        observation = await self._adapter.fetch_external(self._observe_url(policy.flight_id))
+        injected = get_injected_delay(policy.flight_id)
+        if injected is not None:
+            observation = {"delay_minutes": injected, "source": "admin-injection"}
+        else:
+            observation = await self._adapter.fetch_external(self._observe_url(policy.flight_id))
         if not condition.is_triggered(observation):
             return
 

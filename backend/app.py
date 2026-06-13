@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from backend.admin.routes import router as admin_router
 from backend.auth.routes import router as auth_router
 from backend.claims.engine import ClaimEngine
 from backend.claims.routes import router as claims_router
@@ -84,6 +85,7 @@ def create_app() -> FastAPI:
     app.include_router(flights_router)
     app.include_router(policies_router)
     app.include_router(claims_router)
+    app.include_router(admin_router)
     return app
 
 
