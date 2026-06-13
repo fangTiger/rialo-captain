@@ -27,9 +27,9 @@
 ## 5. 反应式合约抽象（reactive-insurance-core）
 - [x] 5.1 `backend/contracts/base.py`：Protocol + `Condition` + `ContractRef` + `TxResult` 类型
 - [x] 5.2 `MockRialoAdapter` 实现（`watch` / `fetch_external` / `trigger_claim` / `get_signature`）
-- [ ] 5.3 `RealRialoAdapter` 占位（NotImplementedError + 注释 SDK 公开后填）
+- [x] 5.3 `RealRialoAdapter` 占位（NotImplementedError + 注释 SDK 公开后填）
 - [ ] 5.4 Adapter 契约测试集（parametrize Mock 全绿，Real skip-if）
-- [ ] 5.5 `get_contract_adapter()` factory + `RIALO_MODE` 配置
+- [x] 5.5 `get_contract_adapter()` factory + `RIALO_MODE` 配置
 
 ## 6. 保险产品（reactive-insurance-core）
 - [ ] 6.1 PolicyService：费率算法（延误率 → 赔付倍率）+ 创建保单
