@@ -32,7 +32,7 @@
 - [x] 5.5 `get_contract_adapter()` factory + `RIALO_MODE` 配置
 
 ## 6. 保险产品（reactive-insurance-core）
-- [ ] 6.1 PolicyService：费率算法（延误率 → 赔付倍率）+ 创建保单
+- [x] 6.1 PolicyService：费率算法（延误率 → 赔付倍率）+ 创建保单
 - [ ] 6.2 `POST /policies` + `GET /policies` endpoints
 - [ ] 6.3 ClaimEngine：asyncio 后台循环 + 触发逻辑 + 单失败隔离
 - [ ] 6.4 `GET /claims/recent` endpoint
