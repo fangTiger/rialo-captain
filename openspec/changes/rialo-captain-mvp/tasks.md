@@ -14,7 +14,7 @@
 - [ ] 3.1 Google OAuth ID token 校验端点 `POST /auth/google`
 - [ ] 3.2 JWT cookie 中间件 + `GET /me` 端点
 - [ ] 3.3 用户首次登录送 1000 RIA + 余额读写 service
-- [ ] 3.4 前端 Google Sign-In 按钮 + 登录后路由守卫
+- [x] 3.4 前端 Google Sign-In 按钮 + 登录后路由守卫
 - [ ] 3.5 端到端 OAuth 集成测试（mock Google verify）
 
 ## 4. 航班数据（flight-data）
