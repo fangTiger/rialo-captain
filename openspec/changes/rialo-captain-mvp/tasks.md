@@ -33,7 +33,7 @@
 
 ## 6. 保险产品（reactive-insurance-core）
 - [x] 6.1 PolicyService：费率算法（延误率 → 赔付倍率）+ 创建保单
-- [ ] 6.2 `POST /policies` + `GET /policies` endpoints
+- [x] 6.2 `POST /policies` + `GET /policies` endpoints
 - [ ] 6.3 ClaimEngine：asyncio 后台循环 + 触发逻辑 + 单失败隔离
 - [ ] 6.4 `GET /claims/recent` endpoint
 - [ ] 6.5 admin endpoint `POST /admin/inject-delay`（手动注入模拟延误，演示用）
