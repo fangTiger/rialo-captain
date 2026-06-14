@@ -16,6 +16,7 @@
 - [ ] 3.3 用户首次登录送 1000 RIA + 余额读写 service
 - [x] 3.4 前端 Google Sign-In 按钮 + 登录后路由守卫
 - [ ] 3.5 端到端 OAuth 集成测试（mock Google verify）
+- [x] 3.6 Dev-only fake login + 本地 HTTP cookie secure 配置
 
 ## 4. 航班数据（flight-data）
 - [ ] 4.1 OpenSky HTTP client（httpx + 指数退避 + 30s 短缓存）

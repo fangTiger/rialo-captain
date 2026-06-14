@@ -13,6 +13,8 @@ async def app_client(monkeypatch, tmp_path):
     monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{db_file}")
     monkeypatch.setenv("JWT_SECRET", "test-secret-32-chars-min-padding-xx")
     monkeypatch.setenv("GOOGLE_CLIENT_ID", "fake-client-id.apps.googleusercontent.com")
+    monkeypatch.setenv("COOKIE_SECURE", "false")
+    monkeypatch.setenv("DEV_LOGIN_ENABLED", "false")
     from backend.config import get_settings
 
     get_settings.cache_clear()
@@ -48,7 +50,7 @@ async def test_google_auth_creates_user_and_sets_cookie(app_client: AsyncClient)
     assert body["balance"] == 1000
     assert "rialo_session" in res.cookies
     assert "HttpOnly" in res.headers["set-cookie"]
-    assert "Secure" in res.headers["set-cookie"]
+    assert "Secure" not in res.headers["set-cookie"]
 
 
 @pytest.mark.asyncio
