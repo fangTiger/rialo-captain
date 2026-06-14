@@ -25,6 +25,9 @@ const WORLD_TOPOJSON_URL =
 const MIN_K = 0.6;
 const MAX_K = 12;
 const TICK_INTERVAL_MS = 500;
+// Demo 时间加速 - 真实飞机 240 m/s 在全球 zoom 下每秒只动 0.007 像素, 肉眼不可见.
+// 加速 10× 让飞机以"分钟"为单位被看到, 同时跳变控制在 < 1 像素 (SWR 每 15s 拉新数据).
+const TIME_ACCEL = 10;
 
 export function GlobeMap({ onSelectFlight }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -110,16 +113,16 @@ export function GlobeMap({ onSelectFlight }: Props) {
     [flights],
   );
 
-  // 飞机当前应处位置（OpenSky 数据 + velocity × 已过秒数 沿 heading 方向外推）
+  // 飞机当前应处位置 (OpenSky 数据 + velocity × 已过秒数 × TIME_ACCEL 沿 heading 方向外推)
   const livePosition = (f: PositionedFlight): [number, number] => {
-    const dtSec = Math.max(0, tick - lastFetchTickRef.current);
+    const dtSec = Math.max(0, tick - lastFetchTickRef.current) * TIME_ACCEL;
     if (!f.velocity || f.heading === null || f.heading === undefined) {
       return [f.longitude, f.latitude];
     }
     const v = f.velocity; // m/s
     const headingRad = ((f.heading) * Math.PI) / 180;
-    const dxM = v * Math.sin(headingRad) * dtSec; // east meters
-    const dyM = v * Math.cos(headingRad) * dtSec; // north meters
+    const dxM = v * Math.sin(headingRad) * dtSec;
+    const dyM = v * Math.cos(headingRad) * dtSec;
     const dLat = dyM / 111_000;
     const cosLat = Math.cos((f.latitude * Math.PI) / 180);
     const dLon = dxM / (111_000 * Math.max(0.1, cosLat));
@@ -276,8 +279,9 @@ export function GlobeMap({ onSelectFlight }: Props) {
               const baseR = isHover ? 4 : 2.2;
               const r = baseR / viewport.k;
 
-              // 8 秒前位置 (沿 heading 反方向推) - 形成弱尾迹, 让运动方向可见
-              const trailSeconds = isHover ? 30 : 8;
+              // 航迹尾迹: 反向用 velocity × N 秒推位置, 形成可见的"过去走过的痕迹".
+              // 全球 zoom 下 1 像素 = 33 km, 10 分钟 × 240 m/s = 144 km = 约 4 像素.
+              const trailSeconds = isHover ? 1800 : 600;
               let tail: [number, number] | null = null;
               if (f.velocity && f.heading !== null && f.heading !== undefined) {
                 const v = f.velocity;
