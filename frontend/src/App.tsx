@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Login } from "./routes/Login";
 import { TowerShell } from "./routes/TowerShell";
 import { FlightDetail } from "./routes/FlightDetail";
+import { MyHangar } from "./routes/MyHangar";
 import { ProtectedRoute } from "./auth/ProtectedRoute";
 import { TopNav } from "./components/shell/TopNav";
 import { StatusBar } from "./components/shell/StatusBar";
@@ -43,6 +44,16 @@ export default function App() {
             <ProtectedRoute>
               <AppShell>
                 <FlightDetail />
+              </AppShell>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/policies"
+          element={
+            <ProtectedRoute>
+              <AppShell>
+                <MyHangar />
               </AppShell>
             </ProtectedRoute>
           }
