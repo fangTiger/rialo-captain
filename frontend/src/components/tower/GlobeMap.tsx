@@ -48,11 +48,12 @@ export function GlobeMap({ onSelectFlight }: Props) {
   const { flights, stale, staleSeconds } = useFlights();
   const [tick, setTick] = useState(0);
   const lastFetchTickRef = useRef(0);
-  // Hover 时拉的 OpenSky 历史航迹缓存. value 类型:
-  // - undefined: 未加载
-  // - "loading": fetch 中
-  // - "failed": 后端失败
-  // - [number, number][]: 路径点 (lon, lat) 数组
+  // 客户端真实历史 buffer: 每次 SWR 拉新数据时, 给每个 icao24 push 当前位置.
+  // 开 demo 时每架飞机 1-2 个点, 累积 N 分钟后每架 N×4 个点.
+  // 用 ref 避免无谓 re-render (hover state 变化时 render 自动读最新).
+  const historyRef = useRef<Map<string, [number, number][]>>(new Map());
+  const MAX_HISTORY = 240; // 最多保留 240 点 ≈ 1 小时 @ 15s
+  // Hover 拉 OpenSky 后端 track (备用, 未来如果 OpenSky 重开 tracks endpoint)
   type TrackResult = "loading" | "failed" | [number, number][];
   const [tracks, setTracks] = useState<Record<string, TrackResult>>({});
 
@@ -136,19 +137,29 @@ export function GlobeMap({ onSelectFlight }: Props) {
 
   const pathFn = useMemo(() => geoPath(projection), [projection]);
 
-  // 当前 hover 飞机的历史航迹 polyline (屏幕坐标, 在 viewport transform 内)
-  const hoverTrackPath = useMemo<string | null>(() => {
+  // 当前 hover 飞机的历史航迹 polyline.
+  // 优先用后端 track (OpenSky), 失败/未加载时 fallback 用客户端 history.
+  const hoverTrackInfo = useMemo<{ path: string; source: "opensky" | "client"; pointCount: number } | null>(() => {
     if (!hovered) return null;
-    const result = tracks[hovered.icao24];
-    if (!Array.isArray(result) || result.length < 2) return null;
+    const backendResult = tracks[hovered.icao24];
+    const useBackend = Array.isArray(backendResult) && backendResult.length >= 2;
+    const points: [number, number][] = useBackend
+      ? (backendResult as [number, number][])
+      : historyRef.current.get(hovered.icao24) ?? [];
+    if (points.length < 2) return null;
     const parts: string[] = [];
-    for (const [lon, lat] of result) {
+    for (const [lon, lat] of points) {
       const proj = projection([lon, lat]);
       if (!proj) continue;
       parts.push(`${proj[0]},${proj[1]}`);
     }
-    return parts.length >= 2 ? parts.join(" ") : null;
-  }, [hovered, tracks, projection]);
+    if (parts.length < 2) return null;
+    return {
+      path: parts.join(" "),
+      source: useBackend ? "opensky" : "client",
+      pointCount: points.length,
+    };
+  }, [hovered, tracks, projection, tick]);
 
   const hoverTrackStatus = hovered ? tracks[hovered.icao24] : undefined;
 
@@ -159,6 +170,20 @@ export function GlobeMap({ onSelectFlight }: Props) {
       ),
     [flights],
   );
+
+  // 每次拿到新 flights 数据, 给每个 icao24 累积历史点
+  useEffect(() => {
+    if (validFlights.length === 0) return;
+    for (const f of validFlights) {
+      const list = historyRef.current.get(f.icao24) || [];
+      const last = list[list.length - 1];
+      if (!last || last[0] !== f.longitude || last[1] !== f.latitude) {
+        list.push([f.longitude, f.latitude]);
+        if (list.length > MAX_HISTORY) list.shift();
+        historyRef.current.set(f.icao24, list);
+      }
+    }
+  }, [validFlights]);
 
   // 飞机当前应处位置 (OpenSky 数据 + velocity × 已过秒数 × TIME_ACCEL 沿 heading 方向外推)
   const livePosition = (f: PositionedFlight): [number, number] => {
@@ -316,11 +341,15 @@ export function GlobeMap({ onSelectFlight }: Props) {
             </g>
           )}
 
-          {hoverTrackPath && (
+          {hoverTrackInfo && (
             <polyline
-              points={hoverTrackPath}
+              points={hoverTrackInfo.path}
               fill="none"
-              stroke="rgba(0,255,157,0.7)"
+              stroke={
+                hoverTrackInfo.source === "opensky"
+                  ? "rgba(0,255,157,0.7)"
+                  : "rgba(0,255,157,0.55)"
+              }
               strokeWidth={1.4 / viewport.k}
               strokeLinejoin="round"
               strokeLinecap="round"
@@ -451,12 +480,12 @@ export function GlobeMap({ onSelectFlight }: Props) {
                   fontFamily="JetBrains Mono, ui-monospace, monospace"
                   fontSize={9}
                 >
-                  {hoverTrackStatus === "loading"
+                  {hoverTrackInfo
+                    ? `${hoverTrackInfo.pointCount} pts ${
+                        hoverTrackInfo.source === "opensky" ? "opensky" : "client log"
+                      } · click to insure`
+                    : hoverTrackStatus === "loading"
                     ? "loading track…"
-                    : hoverTrackStatus === "failed"
-                    ? "track unavailable"
-                    : Array.isArray(hoverTrackStatus) && hoverTrackStatus.length > 1
-                    ? `${hoverTrackStatus.length} pts · click to insure`
                     : "click to insure"}
                 </text>
               </g>
