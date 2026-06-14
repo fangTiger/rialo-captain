@@ -12,8 +12,10 @@ from backend.claims.routes import router as claims_router
 from backend.contracts.factory import get_contract_adapter
 from backend.contracts.mock_rialo import MockRialoAdapter
 from backend.db import get_session_factory, init_db
+from backend.config import get_settings
 from backend.flights.cache import FlightCache
 from backend.flights.fetcher import FlightFetcher
+from backend.flights.mock import MockOpenSky
 from backend.flights.opensky import OpenSkyClient
 from backend.flights.routes import router as flights_router
 from backend.policies.routes import router as policies_router
@@ -25,25 +27,34 @@ def get_flight_cache() -> FlightCache:
     return _flight_cache_singleton
 
 
-def get_opensky_client() -> OpenSkyClient:
+def get_opensky_client():
     return _opensky_singleton
 
 
+def _make_opensky_client():
+    """根据 settings.opensky_enabled 选择真 OpenSky 或本地 mock."""
+    if get_settings().opensky_enabled:
+        return OpenSkyClient()
+    return MockOpenSky()
+
+
 _flight_cache_singleton = FlightCache(ttl_seconds=30)
-_opensky_singleton: OpenSkyClient | None = None
+_opensky_singleton = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _opensky_singleton
     await init_db()
-    _opensky_singleton = OpenSkyClient()
+    _opensky_singleton = _make_opensky_client()
     broadcaster = Broadcaster()
     adapter = get_contract_adapter()
+    opensky_enabled = get_settings().opensky_enabled
     engine = ClaimEngine(
         adapter=adapter,
         session_factory=get_session_factory(),
         broadcaster=broadcaster,
+        external_observation_enabled=opensky_enabled,
     )
     fetcher = FlightFetcher(
         opensky=_opensky_singleton,
@@ -101,9 +112,10 @@ def create_app() -> FastAPI:
         adapter=adapter,
         session_factory=get_session_factory(),
         broadcaster=broadcaster,
+        external_observation_enabled=get_settings().opensky_enabled,
     )
     app.state.flight_fetcher = FlightFetcher(
-        opensky=_opensky_singleton or OpenSkyClient(),
+        opensky=_opensky_singleton or _make_opensky_client(),
         cache=_flight_cache_singleton,
         session_factory=get_session_factory(),
     )

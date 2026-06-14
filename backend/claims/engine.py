@@ -50,6 +50,7 @@ class ClaimEngine:
         now: Callable[[], int] | None = None,
         interval_seconds: int = 30,
         broadcaster: ClaimBroadcaster | None = None,
+        external_observation_enabled: bool = True,
     ) -> None:
         self._adapter = adapter
         self._session_factory = session_factory
@@ -57,6 +58,7 @@ class ClaimEngine:
         self._now = now or (lambda: int(time.time()))
         self._interval = interval_seconds
         self._broadcaster = broadcaster
+        self._external_observation_enabled = external_observation_enabled
         self._stop_event = asyncio.Event()
 
     def set_broadcaster(self, broadcaster: ClaimBroadcaster | None) -> None:
@@ -91,8 +93,11 @@ class ClaimEngine:
         injected = get_injected_delay(policy.flight_id)
         if injected is not None:
             observation = {"delay_minutes": injected, "source": "admin-injection"}
-        else:
+        elif self._external_observation_enabled:
             observation = await self._adapter.fetch_external(self._observe_url(policy.flight_id))
+        else:
+            # 外部 observation 关闭且无 admin 注入: 跳过, 避免不必要的外部请求
+            return
         if not condition.is_triggered(observation):
             return
 

@@ -1,0 +1,117 @@
+"""Mock 飞行数据源 - 当 OPENSKY_ENABLED=false 时替代真 OpenSkyClient.
+
+提供与 OpenSkyClient 相同的接口 (fetch_all / fetch_track / aclose),
+不打任何外部网络. 位置基于当前时间小幅度漂移, 让前端 SWR 能感受到运动.
+"""
+import math
+import time
+
+from backend.flights.opensky import FlightState, TrackPoint
+
+
+# 20 个分布全球的虚拟航线
+# (callsign, icao24, base_lon, base_lat, country, velocity m/s, heading deg)
+_ROUTES: list[tuple[str, str, float, float, str, float, float]] = [
+    ("BA178", "400a01", -1.0, 51.5, "United Kingdom", 240.0, 270.0),
+    ("DL101", "a12345", -73.78, 40.64, "United States", 235.0, 90.0),
+    ("UA200", "ac0001", -122.4, 37.6, "United States", 250.0, 180.0),
+    ("AF1380", "39c1a3", 2.4, 48.9, "France", 220.0, 0.0),
+    ("CX251", "780abc", 114.0, 22.3, "Hong Kong", 245.0, 280.0),
+    ("JL5", "86abcd", 139.8, 35.5, "Japan", 230.0, 90.0),
+    ("SQ22", "76cdef", 103.9, 1.4, "Singapore", 250.0, 45.0),
+    ("EK401", "896aaa", 55.3, 25.3, "United Arab Emirates", 235.0, 120.0),
+    ("TK1", "4bba01", 28.8, 41.0, "Turkey", 220.0, 90.0),
+    ("LH400", "3c0123", 8.6, 50.0, "Germany", 240.0, 200.0),
+    ("EY8", "896bbb", 54.7, 24.4, "United Arab Emirates", 230.0, 60.0),
+    ("QF11", "7c1cab", 151.2, -33.9, "Australia", 240.0, 270.0),
+    ("AZ610", "300abc", 12.5, 41.9, "Italy", 225.0, 90.0),
+    ("AC859", "c01234", -79.6, 43.7, "Canada", 235.0, 270.0),
+    ("IB6253", "342abc", -3.7, 40.4, "Spain", 230.0, 0.0),
+    ("KL643", "484abc", 4.8, 52.3, "Netherlands", 230.0, 90.0),
+    ("AY103", "461abc", 24.9, 60.3, "Finland", 215.0, 180.0),
+    ("LO27", "489abc", 21.0, 52.2, "Poland", 225.0, 180.0),
+    ("MS753", "010abc", 31.2, 30.0, "Egypt", 230.0, 0.0),
+    ("ET500", "044abc", 38.8, 9.0, "Ethiopia", 240.0, 90.0),
+]
+
+
+def _drift_position(
+    base_lon: float, base_lat: float, velocity: float, heading: float, elapsed_sec: float
+) -> tuple[float, float]:
+    heading_rad = math.radians(heading)
+    dx_m = velocity * math.sin(heading_rad) * elapsed_sec
+    dy_m = velocity * math.cos(heading_rad) * elapsed_sec
+    dlat = dy_m / 111_000
+    cos_lat = math.cos(math.radians(base_lat))
+    dlon = dx_m / (111_000 * max(0.1, cos_lat))
+    new_lon = base_lon + dlon
+    new_lat = base_lat + dlat
+    # 经度 wrap 到 [-180, 180]
+    new_lon = ((new_lon + 180) % 360) - 180
+    # 纬度 clamp 到 [-85, 85]
+    new_lat = max(-85.0, min(85.0, new_lat))
+    return new_lon, new_lat
+
+
+def generate_mock_states(now: int | None = None) -> list[FlightState]:
+    """生成虚拟航班状态. 位置基于 (now % 1800) 缓慢漂移 (30 分钟周期)."""
+    if now is None:
+        now = int(time.time())
+    elapsed = float(now % 1800)
+    states: list[FlightState] = []
+    for callsign, icao24, base_lon, base_lat, country, velocity, heading in _ROUTES:
+        lon, lat = _drift_position(base_lon, base_lat, velocity, heading, elapsed)
+        states.append(
+            FlightState(
+                icao24=icao24,
+                callsign=callsign,
+                origin_country=country,
+                longitude=lon,
+                latitude=lat,
+                velocity=velocity,
+                heading=heading,
+                on_ground=False,
+            )
+        )
+    return states
+
+
+def generate_mock_track(*, icao24: str, now: int | None = None) -> list[TrackPoint]:
+    """生成过去 30 分钟的虚拟航迹点 (每 60 秒一个点)."""
+    if now is None:
+        now = int(time.time())
+    # 找到这架飞机的基础数据
+    matched = next((r for r in _ROUTES if r[1].lower() == icao24.lower()), None)
+    if matched is None:
+        return []
+    _, _, base_lon, base_lat, _, velocity, heading = matched
+    points: list[TrackPoint] = []
+    elapsed_now = float(now % 1800)
+    for offset_back in range(30, 0, -1):
+        elapsed = max(0.0, elapsed_now - offset_back * 60.0)
+        lon, lat = _drift_position(base_lon, base_lat, velocity, heading, elapsed)
+        points.append(
+            TrackPoint(
+                time=now - offset_back * 60,
+                latitude=lat,
+                longitude=lon,
+                altitude=11000.0,
+                heading=heading,
+                on_ground=False,
+            )
+        )
+    return points
+
+
+class MockOpenSky:
+    """与 OpenSkyClient 接口兼容的 mock, 不打外部网络."""
+
+    async def fetch_all(self) -> list[FlightState]:
+        return generate_mock_states()
+
+    async def fetch_track(self, *, icao24: str, time: int = 0) -> list[TrackPoint]:
+        del time
+        return generate_mock_track(icao24=icao24)
+
+    async def aclose(self) -> None:
+        return None
