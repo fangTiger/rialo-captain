@@ -1,0 +1,96 @@
+import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
+import { SWRConfig } from "swr";
+import { BuyDrawer } from "../components/drawer/BuyDrawer";
+
+const fakeFlight = {
+  id: "BA178-20260614",
+  callsign: "BA178",
+  origin: "LHR",
+  destination: "JFK",
+  delay_rate: 0.1,
+  samples: 30,
+};
+
+describe("BuyDrawer", () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify(fakeFlight), { status: 200 }),
+        ),
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("renders flight callsign and route", async () => {
+    render(
+      <SWRConfig value={{ provider: () => new Map() }}>
+        <MemoryRouter
+          future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+        >
+          <BuyDrawer flightId="BA178-20260614" onClose={() => {}} />
+        </MemoryRouter>
+      </SWRConfig>,
+    );
+
+    await waitFor(() => expect(screen.getByText("BA178")).toBeInTheDocument());
+    expect(screen.getByText(/LHR/)).toBeInTheDocument();
+    expect(screen.getByText(/JFK/)).toBeInTheDocument();
+  });
+
+  it("calls POST /policies on Confirm", async () => {
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          id: "p1",
+          flight_id: "BA178-20260614",
+          premium: 10,
+          payout: 60,
+          status: "active",
+          contract_ref: "mock-p1",
+          created_at: 1,
+        }),
+        { status: 201 },
+      ),
+    );
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          id: "u1",
+          email: "x@y.com",
+          name: "X",
+          avatar_url: "",
+          balance: 990,
+        }),
+        { status: 200 },
+      ),
+    );
+
+    render(
+      <SWRConfig value={{ provider: () => new Map() }}>
+        <MemoryRouter
+          future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+        >
+          <BuyDrawer flightId="BA178-20260614" onClose={() => {}} />
+        </MemoryRouter>
+      </SWRConfig>,
+    );
+
+    await waitFor(() => screen.getByText("BA178"));
+    fireEvent.click(screen.getByRole("button", { name: /Confirm/i }));
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find((c) =>
+        String(c[0]).includes("/policies"),
+      );
+      expect(call).toBeDefined();
+    });
+  });
+});
