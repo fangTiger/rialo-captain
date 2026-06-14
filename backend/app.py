@@ -16,6 +16,8 @@ from backend.flights.cache import FlightCache
 from backend.flights.opensky import OpenSkyClient
 from backend.flights.routes import router as flights_router
 from backend.policies.routes import router as policies_router
+from backend.ws.broadcaster import Broadcaster
+from backend.ws.routes import router as ws_router
 
 
 def get_flight_cache() -> FlightCache:
@@ -42,6 +44,7 @@ async def lifespan(app: FastAPI):
     app.state.opensky = _opensky_singleton
     app.state.contract_adapter = adapter
     app.state.claim_engine = engine
+    app.state.broadcaster = Broadcaster()
 
     engine_task: asyncio.Task | None = None
     if os.environ.get("CLAIM_ENGINE_ENABLED", "true").lower() != "false":
@@ -73,6 +76,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     app.state.flight_cache = _flight_cache_singleton
+    app.state.broadcaster = Broadcaster()
     adapter = get_contract_adapter()
     app.state.contract_adapter = adapter
     app.state.claim_engine = ClaimEngine(adapter=adapter, session_factory=get_session_factory())
@@ -86,6 +90,7 @@ def create_app() -> FastAPI:
     app.include_router(policies_router)
     app.include_router(claims_router)
     app.include_router(admin_router)
+    app.include_router(ws_router)
     return app
 
 

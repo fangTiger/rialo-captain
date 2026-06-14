@@ -40,8 +40,8 @@
 - [ ] 6.6 整套保险业务的契约测试（用 MockRialoAdapter）
 
 ## 7. 实时推送（live-dashboard）
-- [ ] 7.1 WebSocket broadcaster 模块 + 事件类型 enum（state_update / FLARE / toast）
-- [ ] 7.2 `WS /ws` endpoint + JWT cookie 鉴权 + hello 帧
+- [x] 7.1 WebSocket broadcaster 模块 + 事件类型 enum（state_update / FLARE / toast）
+- [x] 7.2 `WS /ws` endpoint + JWT cookie 鉴权 + hello 帧
 - [ ] 7.3 前端 `useWebSocket` hook + 指数退避重连
 - [ ] 7.4 底部 StatusBar 三态 LED（绿/黄/红）
 
