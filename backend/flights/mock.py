@@ -2,16 +2,20 @@
 
 提供与 OpenSkyClient 相同的接口 (fetch_all / fetch_track / aclose),
 不打任何外部网络. 位置基于当前时间小幅度漂移, 让前端 SWR 能感受到运动.
+
+数据组成: 20 个命名航班 (BA178/DL101/... 易识别) + N 个程序化生成航班 (默认 300),
+总数受 MOCK_FLIGHT_COUNT env 控制. 程序化航班分布在常见飞行走廊 (北纬 -50..70).
 """
 import math
+import os
 import time
 
 from backend.flights.opensky import FlightState, TrackPoint
 
 
-# 20 个分布全球的虚拟航线
+# 命名航班 - 用真实航司前缀, 便于 demo 现场识别
 # (callsign, icao24, base_lon, base_lat, country, velocity m/s, heading deg)
-_ROUTES: list[tuple[str, str, float, float, str, float, float]] = [
+_NAMED_ROUTES: list[tuple[str, str, float, float, str, float, float]] = [
     ("BA178", "400a01", -1.0, 51.5, "United Kingdom", 240.0, 270.0),
     ("DL101", "a12345", -73.78, 40.64, "United States", 235.0, 90.0),
     ("UA200", "ac0001", -122.4, 37.6, "United States", 250.0, 180.0),
@@ -33,6 +37,65 @@ _ROUTES: list[tuple[str, str, float, float, str, float, float]] = [
     ("MS753", "010abc", 31.2, 30.0, "Egypt", 230.0, 0.0),
     ("ET500", "044abc", 38.8, 9.0, "Ethiopia", 240.0, 90.0),
 ]
+
+_AIRLINE_PREFIXES = [
+    "AAL", "UAL", "DAL", "SWA", "JBU", "NKS", "ACA", "WJA",
+    "BAW", "VIR", "EZY", "RYR", "AFR", "DLH", "KLM", "SAS",
+    "IBE", "AZA", "SWR", "AUA", "FIN", "LOT", "TAP", "BEL",
+    "JAL", "ANA", "CES", "CCA", "CSN", "CPA", "EVA", "CAL",
+    "SIA", "MAS", "THA", "GIA", "VJC", "PAL", "ANZ", "QFA",
+    "UAE", "QTR", "ETD", "SVA", "MSR", "RJA", "MEA", "KAC",
+    "ETH", "KQA", "RAM", "TAR", "DAH", "TAM", "AVA", "ARG",
+]
+
+_COUNTRIES = [
+    "United States", "United Kingdom", "Germany", "France", "Spain",
+    "Italy", "Netherlands", "Japan", "China", "Singapore", "Australia",
+    "United Arab Emirates", "Turkey", "Brazil", "Canada", "India",
+    "South Korea", "Mexico", "Egypt", "South Africa",
+]
+
+
+def _generated_routes(count: int) -> list[tuple[str, str, float, float, str, float, float]]:
+    """程序化生成 count 个虚拟航班.
+
+    分布策略: 经度均匀 -180..180, 纬度集中 -50..70 (飞行密集带),
+    heading 用质数让分布看起来不规则, velocity 200-280 m/s.
+    Deterministic - 同 count 多次调用结果一致.
+    """
+    out: list[tuple[str, str, float, float, str, float, float]] = []
+    for i in range(count):
+        airline = _AIRLINE_PREFIXES[i % len(_AIRLINE_PREFIXES)]
+        flight_num = ((i // len(_AIRLINE_PREFIXES)) * 11 + (i % 9) + 100)
+        callsign = f"{airline}{flight_num}"
+        icao24 = f"{(0x100000 + i):06x}"
+        # 全球均匀分布
+        lon = -180.0 + (i * 360.0 / max(1, count))
+        # 纬度: 用三角函数把数值映射到 -50..70 中间密集区
+        lat_norm = (i * 17 % 100) / 100.0  # 0..1
+        # 集中在赤道两边: bias 到 -10..60
+        lat = -50.0 + lat_norm * 120.0
+        heading = float((i * 37) % 360)
+        velocity = 200.0 + float((i * 13) % 80)
+        country = _COUNTRIES[i % len(_COUNTRIES)]
+        out.append((callsign, icao24, lon, lat, country, velocity, heading))
+    return out
+
+
+def _all_routes() -> list[tuple[str, str, float, float, str, float, float]]:
+    """命名航班 + 程序化生成. 数量由 MOCK_FLIGHT_COUNT env 控制."""
+    try:
+        total = int(os.environ.get("MOCK_FLIGHT_COUNT", "300"))
+    except ValueError:
+        total = 300
+    total = max(len(_NAMED_ROUTES), min(2000, total))
+    needed = total - len(_NAMED_ROUTES)
+    if needed <= 0:
+        return list(_NAMED_ROUTES)
+    return list(_NAMED_ROUTES) + _generated_routes(needed)
+
+
+_ROUTES = _all_routes()
 
 
 def _drift_position(
