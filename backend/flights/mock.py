@@ -8,6 +8,7 @@
 """
 import math
 import os
+import random
 import time
 
 from backend.flights.opensky import FlightState, TrackPoint
@@ -56,28 +57,58 @@ _COUNTRIES = [
 ]
 
 
+# 真实飞行密集区域 (lon_min, lon_max, lat_min, lat_max, weight)
+# lon_max 可以 > 180 表示跨日期变更线 (使用时会 wrap 到 [-180, 180])
+_HOTSPOTS: list[tuple[str, float, float, float, float, float]] = [
+    ("NorthAmerica",   -125, -70,  28,  55, 0.18),
+    ("Europe",          -10,  35,  35,  62, 0.16),
+    ("EastAsia",        105, 145,  22,  48, 0.13),
+    ("NorthAtlantic",   -55, -15,  42,  60, 0.08),
+    ("NorthPacific",    155, 220,  35,  55, 0.07),  # 跨日期变更线
+    ("MiddleEast",       35,  60,  22,  40, 0.06),
+    ("SouthAsia",        65,  95,  12,  32, 0.06),
+    ("SoutheastAsia",    95, 135, -10,  22, 0.06),
+    ("Australia",       112, 155, -42, -12, 0.04),
+    ("SouthAmerica",    -75, -35, -38,   8, 0.05),
+    ("Africa",           -5,  45, -28,  30, 0.05),
+    ("Other",          -180, 180, -55,  70, 0.06),
+]
+
+
+def _pick_region(rng: random.Random) -> tuple[float, float, float, float]:
+    r = rng.random()
+    cumulative = 0.0
+    for _, lon_min, lon_max, lat_min, lat_max, weight in _HOTSPOTS:
+        cumulative += weight
+        if r <= cumulative:
+            return lon_min, lon_max, lat_min, lat_max
+    last = _HOTSPOTS[-1]
+    return last[1], last[2], last[3], last[4]
+
+
 def _generated_routes(count: int) -> list[tuple[str, str, float, float, str, float, float]]:
     """程序化生成 count 个虚拟航班.
 
-    分布策略: 经度均匀 -180..180, 纬度集中 -50..70 (飞行密集带),
-    heading 用质数让分布看起来不规则, velocity 200-280 m/s.
-    Deterministic - 同 count 多次调用结果一致.
+    Deterministic (seed=42) - 同 count 多次调用结果一致.
+    按真实飞行密集区域加权分布: 北美/欧洲/东亚 占大头, 海洋稀疏.
     """
+    rng = random.Random(42)
     out: list[tuple[str, str, float, float, str, float, float]] = []
     for i in range(count):
         airline = _AIRLINE_PREFIXES[i % len(_AIRLINE_PREFIXES)]
-        flight_num = ((i // len(_AIRLINE_PREFIXES)) * 11 + (i % 9) + 100)
+        flight_num = (i // len(_AIRLINE_PREFIXES)) * 7 + 100 + (i % 11)
         callsign = f"{airline}{flight_num}"
         icao24 = f"{(0x100000 + i):06x}"
-        # 全球均匀分布
-        lon = -180.0 + (i * 360.0 / max(1, count))
-        # 纬度: 用三角函数把数值映射到 -50..70 中间密集区
-        lat_norm = (i * 17 % 100) / 100.0  # 0..1
-        # 集中在赤道两边: bias 到 -10..60
-        lat = -50.0 + lat_norm * 120.0
-        heading = float((i * 37) % 360)
-        velocity = 200.0 + float((i * 13) % 80)
-        country = _COUNTRIES[i % len(_COUNTRIES)]
+
+        lon_min, lon_max, lat_min, lat_max = _pick_region(rng)
+        lon = rng.uniform(lon_min, lon_max)
+        # wrap 跨日期变更线的经度回到 [-180, 180]
+        if lon > 180.0:
+            lon -= 360.0
+        lat = rng.uniform(lat_min, lat_max)
+        heading = rng.uniform(0.0, 360.0)
+        velocity = rng.uniform(200.0, 280.0)
+        country = _COUNTRIES[rng.randint(0, len(_COUNTRIES) - 1)]
         out.append((callsign, icao24, lon, lat, country, velocity, heading))
     return out
 
