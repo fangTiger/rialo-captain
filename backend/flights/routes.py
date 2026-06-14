@@ -6,12 +6,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db import get_session
 from backend.flights.cache import FlightCache
+from backend.flights.opensky import OpenSkyClient, OpenSkyError
 from backend.flights.service import FlightService
 
 router = APIRouter()
 
 
 class FlightPublic(BaseModel):
+    icao24: str
     callsign: str
     origin_country: str
     longitude: float | None
@@ -19,6 +21,18 @@ class FlightPublic(BaseModel):
     velocity: float | None
     heading: float | None
     on_ground: bool
+
+
+class TrackPointPublic(BaseModel):
+    longitude: float
+    latitude: float
+    altitude: float | None
+    time: int
+
+
+class TrackResponse(BaseModel):
+    icao24: str
+    points: list[TrackPointPublic]
 
 
 class LiveResponse(BaseModel):
@@ -49,6 +63,7 @@ async def flights_live(request: Request) -> LiveResponse:
         stale_seconds=entry.stale_seconds,
         flights=[
             FlightPublic(
+                icao24=s.icao24,
                 callsign=s.callsign,
                 origin_country=s.origin_country,
                 longitude=s.longitude,
@@ -58,6 +73,32 @@ async def flights_live(request: Request) -> LiveResponse:
                 on_ground=s.on_ground,
             )
             for s in entry.states
+        ],
+    )
+
+
+@router.get("/flights/track/{icao24}", response_model=TrackResponse)
+async def flight_track(icao24: str, request: Request) -> TrackResponse:
+    client: OpenSkyClient | None = getattr(request.app.state, "opensky", None)
+    if client is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="opensky client not ready",
+        )
+    try:
+        points = await client.fetch_track(icao24=icao24, time=0)
+    except OpenSkyError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+    return TrackResponse(
+        icao24=icao24,
+        points=[
+            TrackPointPublic(
+                longitude=p.longitude,
+                latitude=p.latitude,
+                altitude=p.altitude,
+                time=p.time,
+            )
+            for p in points
         ],
     )
 

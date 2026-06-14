@@ -1,7 +1,7 @@
 import httpx
 import pytest
 
-from backend.flights.opensky import FlightState, OpenSkyClient, OpenSkyError
+from backend.flights.opensky import FlightState, OpenSkyClient, OpenSkyError, TrackPoint
 
 
 @pytest.mark.asyncio
@@ -89,3 +89,76 @@ async def test_5xx_raises_opensky_error_after_retries():
         await client.aclose()
 
     assert calls == 3
+
+
+@pytest.mark.asyncio
+async def test_fetch_track_returns_track_points():
+    fake_payload = {
+        "icao24": "a1b2c3",
+        "startTime": 1718000000,
+        "endTime": 1718003600,
+        "callsign": "BA178   ",
+        "path": [
+            [1718000000, 51.47, -0.45, 11000, 280.0, False],
+            [1718001800, 52.10, -8.20, 11500, 285.0, False],
+            [1718003600, 53.50, -20.00, 11500, 290.0, False],
+        ],
+    }
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert "tracks/all" in str(request.url)
+        return httpx.Response(200, json=fake_payload)
+
+    transport = httpx.MockTransport(handler)
+    client = OpenSkyClient(base_url="https://opensky.test", transport=transport)
+    try:
+        points = await client.fetch_track(icao24="A1B2C3", time=0)
+    finally:
+        await client.aclose()
+
+    assert len(points) == 3
+    assert isinstance(points[0], TrackPoint)
+    assert points[0].latitude == 51.47
+    assert points[0].longitude == -0.45
+    assert points[2].longitude == -20.0
+
+
+@pytest.mark.asyncio
+async def test_fetch_track_returns_empty_on_404():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404)
+
+    transport = httpx.MockTransport(handler)
+    client = OpenSkyClient(base_url="https://opensky.test", transport=transport)
+    try:
+        points = await client.fetch_track(icao24="missing", time=0)
+    finally:
+        await client.aclose()
+
+    assert points == []
+
+
+@pytest.mark.asyncio
+async def test_fetch_track_skips_rows_with_missing_position():
+    fake_payload = {
+        "path": [
+            [1718000000, None, None, None, None, False],
+            [1718001800, 52.0, -8.0, 11500, 285.0, False],
+            [1718003600, 53.5, -20.0, None, None, False],
+        ],
+    }
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=fake_payload)
+
+    transport = httpx.MockTransport(handler)
+    client = OpenSkyClient(base_url="https://opensky.test", transport=transport)
+    try:
+        points = await client.fetch_track(icao24="x", time=0)
+    finally:
+        await client.aclose()
+
+    assert len(points) == 2
+    assert points[0].longitude == -8.0
+    assert points[1].longitude == -20.0
+    assert points[1].altitude is None

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { geoEquirectangular, geoPath, type GeoProjection } from "d3-geo";
 import { feature } from "topojson-client";
 import type { FeatureCollection, Geometry } from "geojson";
+import { apiFetch } from "../../api/client";
 import { useFlights, type FlightPublic } from "../../hooks/useFlights";
 
 interface Props {
@@ -47,6 +48,13 @@ export function GlobeMap({ onSelectFlight }: Props) {
   const { flights, stale, staleSeconds } = useFlights();
   const [tick, setTick] = useState(0);
   const lastFetchTickRef = useRef(0);
+  // Hover 时拉的 OpenSky 历史航迹缓存. value 类型:
+  // - undefined: 未加载
+  // - "loading": fetch 中
+  // - "failed": 后端失败
+  // - [number, number][]: 路径点 (lon, lat) 数组
+  type TrackResult = "loading" | "failed" | [number, number][];
+  const [tracks, setTracks] = useState<Record<string, TrackResult>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -97,6 +105,29 @@ export function GlobeMap({ onSelectFlight }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flights]);
 
+  // Hover 一个飞机 → 拉它的 OpenSky 历史航迹 (有缓存)
+  useEffect(() => {
+    if (!hovered) return;
+    const icao24 = hovered.icao24;
+    if (!icao24) return;
+    if (tracks[icao24] !== undefined) return;
+    setTracks((t) => ({ ...t, [icao24]: "loading" }));
+    apiFetch<{
+      icao24: string;
+      points: { longitude: number; latitude: number }[];
+    }>(`/flights/track/${icao24}`)
+      .then((res) => {
+        const path: [number, number][] = res.points.map((p) => [
+          p.longitude,
+          p.latitude,
+        ]);
+        setTracks((t) => ({ ...t, [icao24]: path }));
+      })
+      .catch(() => {
+        setTracks((t) => ({ ...t, [icao24]: "failed" }));
+      });
+  }, [hovered, tracks]);
+
   const projection: GeoProjection = useMemo(() => {
     return geoEquirectangular()
       .scale(size.width / (2 * Math.PI))
@@ -104,6 +135,22 @@ export function GlobeMap({ onSelectFlight }: Props) {
   }, [size.width, size.height]);
 
   const pathFn = useMemo(() => geoPath(projection), [projection]);
+
+  // 当前 hover 飞机的历史航迹 polyline (屏幕坐标, 在 viewport transform 内)
+  const hoverTrackPath = useMemo<string | null>(() => {
+    if (!hovered) return null;
+    const result = tracks[hovered.icao24];
+    if (!Array.isArray(result) || result.length < 2) return null;
+    const parts: string[] = [];
+    for (const [lon, lat] of result) {
+      const proj = projection([lon, lat]);
+      if (!proj) continue;
+      parts.push(`${proj[0]},${proj[1]}`);
+    }
+    return parts.length >= 2 ? parts.join(" ") : null;
+  }, [hovered, tracks, projection]);
+
+  const hoverTrackStatus = hovered ? tracks[hovered.icao24] : undefined;
 
   const validFlights = useMemo<PositionedFlight[]>(
     () =>
@@ -269,6 +316,19 @@ export function GlobeMap({ onSelectFlight }: Props) {
             </g>
           )}
 
+          {hoverTrackPath && (
+            <polyline
+              points={hoverTrackPath}
+              fill="none"
+              stroke="rgba(0,255,157,0.7)"
+              strokeWidth={1.4 / viewport.k}
+              strokeLinejoin="round"
+              strokeLinecap="round"
+              strokeDasharray={`${6 / viewport.k} ${4 / viewport.k}`}
+              pointerEvents="none"
+            />
+          )}
+
           <g>
             {validFlights.map((f) => {
               const [lon, lat] = livePosition(f);
@@ -391,7 +451,13 @@ export function GlobeMap({ onSelectFlight }: Props) {
                   fontFamily="JetBrains Mono, ui-monospace, monospace"
                   fontSize={9}
                 >
-                  click to insure
+                  {hoverTrackStatus === "loading"
+                    ? "loading track…"
+                    : hoverTrackStatus === "failed"
+                    ? "track unavailable"
+                    : Array.isArray(hoverTrackStatus) && hoverTrackStatus.length > 1
+                    ? `${hoverTrackStatus.length} pts · click to insure`
+                    : "click to insure"}
                 </text>
               </g>
             );

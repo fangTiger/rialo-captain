@@ -2,6 +2,7 @@ import useSWR from "swr";
 import { apiFetch } from "../api/client";
 
 export interface FlightPublic {
+  icao24: string;
   callsign: string;
   origin_country: string;
   longitude: number | null;

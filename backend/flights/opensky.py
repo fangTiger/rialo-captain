@@ -22,6 +22,16 @@ class FlightState:
     on_ground: bool
 
 
+@dataclass(frozen=True)
+class TrackPoint:
+    time: int
+    latitude: float
+    longitude: float
+    altitude: float | None
+    heading: float | None
+    on_ground: bool
+
+
 def _parse_state(row: list) -> FlightState | None:
     # OpenSky /states/all 列顺序见官方 REST API 文档。
     try:
@@ -73,3 +83,52 @@ class OpenSkyClient:
                 if attempt < self._max_attempts - 1:
                     await asyncio.sleep(self._base_backoff * (2**attempt))
         raise OpenSkyError(f"OpenSky failed after {self._max_attempts} attempts: {last_error}")
+
+    async def fetch_track(self, *, icao24: str, time: int = 0) -> list[TrackPoint]:
+        """OpenSky /tracks/all: aircraft 的最近航迹路径 (最多 ~30 天).
+
+        参数:
+            icao24: 飞机 ICAO 24 位地址 (小写 hex)
+            time: 0 表示当前活跃 track; 其他值是 unix 时间戳
+
+        返回: 按时间升序的航迹点列表; OpenSky 找不到时返回 [].
+        """
+        last_error: Exception | None = None
+        for attempt in range(self._max_attempts):
+            try:
+                resp = await self._client.get(
+                    f"{self._base}/tracks/all",
+                    params={"icao24": icao24.lower(), "time": time},
+                )
+                if resp.status_code == 404:
+                    return []
+                if resp.status_code >= 500:
+                    raise OpenSkyError(f"upstream {resp.status_code}")
+                resp.raise_for_status()
+                data = resp.json() or {}
+                path = data.get("path") or []
+                points: list[TrackPoint] = []
+                for row in path:
+                    if not isinstance(row, list) or len(row) < 6:
+                        continue
+                    if row[1] is None or row[2] is None:
+                        continue
+                    try:
+                        points.append(
+                            TrackPoint(
+                                time=int(row[0]),
+                                latitude=float(row[1]),
+                                longitude=float(row[2]),
+                                altitude=float(row[3]) if row[3] is not None else None,
+                                heading=float(row[4]) if row[4] is not None else None,
+                                on_ground=bool(row[5]),
+                            )
+                        )
+                    except (TypeError, ValueError):
+                        continue
+                return points
+            except (OpenSkyError, httpx.HTTPError) as exc:
+                last_error = exc
+                if attempt < self._max_attempts - 1:
+                    await asyncio.sleep(self._base_backoff * (2**attempt))
+        raise OpenSkyError(f"OpenSky tracks failed: {last_error}")
