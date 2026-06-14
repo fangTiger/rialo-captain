@@ -1,0 +1,111 @@
+import { useEffect, useRef } from "react";
+import { useEventStore, type FlareEvent } from "../store/eventStore";
+
+const BACKOFF_SCHEDULE = [1000, 2000, 4000, 8000, 16000, 30000];
+
+interface WsMessage {
+  type?: string;
+  payload?: unknown;
+}
+
+function makeWebSocketUrl(path: string) {
+  const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return `${proto}//${window.location.host}${path}`;
+}
+
+function parseWsMessage(data: MessageEvent["data"]): WsMessage | null {
+  if (typeof data !== "string") return null;
+
+  try {
+    return JSON.parse(data) as WsMessage;
+  } catch {
+    return null;
+  }
+}
+
+function isFlareEvent(payload: unknown): payload is FlareEvent {
+  if (!payload || typeof payload !== "object") return false;
+
+  const flare = payload as Record<string, unknown>;
+  return (
+    typeof flare.flight_id === "string" &&
+    typeof flare.policy_id === "string" &&
+    typeof flare.payout === "number" &&
+    typeof flare.delay_minutes === "number" &&
+    typeof flare.signature === "string" &&
+    typeof flare.settle_duration_ms === "number"
+  );
+}
+
+export function useWebSocket(path = "/ws") {
+  const wsRef = useRef<WebSocket | null>(null);
+  const stoppedRef = useRef(false);
+  const attemptRef = useRef(0);
+  const retryTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    stoppedRef.current = false;
+
+    const connect = () => {
+      if (stoppedRef.current) return;
+
+      useEventStore.getState().setWsState("connecting");
+      const ws = new WebSocket(makeWebSocketUrl(path));
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        attemptRef.current = 0;
+        useEventStore.getState().setWsState("open");
+      };
+
+      ws.onmessage = (event: MessageEvent) => {
+        const msg = parseWsMessage(event.data);
+        if (!msg) return;
+
+        if (
+          (msg.type === "flare" || msg.type === "FLARE") &&
+          isFlareEvent(msg.payload)
+        ) {
+          useEventStore.getState().addFlare(msg.payload);
+        } else if (msg.type === "toast" && typeof msg.payload === "string") {
+          const id = `t-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+          useEventStore.getState().addToast({ id, message: msg.payload });
+          window.setTimeout(() => {
+            useEventStore.getState().dismissToast(id);
+          }, 4000);
+        }
+      };
+
+      ws.onclose = () => {
+        if (stoppedRef.current) return;
+
+        useEventStore.getState().setWsState("retrying");
+        const backoff =
+          BACKOFF_SCHEDULE[
+            Math.min(attemptRef.current, BACKOFF_SCHEDULE.length - 1)
+          ];
+        attemptRef.current += 1;
+        retryTimerRef.current = window.setTimeout(connect, backoff);
+      };
+
+      ws.onerror = () => {
+        try {
+          ws.close();
+        } catch {
+          /* noop */
+        }
+      };
+    };
+
+    connect();
+
+    return () => {
+      stoppedRef.current = true;
+      if (retryTimerRef.current !== null) {
+        window.clearTimeout(retryTimerRef.current);
+      }
+      wsRef.current?.close();
+      useEventStore.getState().setWsState("closed");
+    };
+  }, [path]);
+}

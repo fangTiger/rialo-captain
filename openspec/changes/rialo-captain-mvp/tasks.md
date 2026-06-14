@@ -42,8 +42,8 @@
 ## 7. 实时推送（live-dashboard）
 - [x] 7.1 WebSocket broadcaster 模块 + 事件类型 enum（state_update / FLARE / toast）
 - [x] 7.2 `WS /ws` endpoint + JWT cookie 鉴权 + hello 帧
-- [ ] 7.3 前端 `useWebSocket` hook + 指数退避重连
-- [ ] 7.4 底部 StatusBar 三态 LED（绿/黄/红）
+- [x] 7.3 前端 `useWebSocket` hook + 指数退避重连
+- [x] 7.4 底部 StatusBar 三态 LED（绿/黄/红）
 
 ## 8. Design System（live-dashboard）
 - [ ] 8.1 `frontend/src/design/tokens.css`：全量颜色 / 字体 / 间距 / 圆角 / 阴影 token
