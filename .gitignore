@@ -41,5 +41,8 @@ frontend/.env.local
 # OS
 .DS_Store
 
+# Superpowers brainstorm
+.superpowers/
+
 # Graphify output (项目流程产物)
 graphify-out/
