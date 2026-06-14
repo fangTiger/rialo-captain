@@ -68,6 +68,28 @@ describe("App routes", () => {
         );
       }
 
+      if (url.includes("/api/routes/hot?limit=30")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([
+              {
+                callsign: "BA178",
+                policy_count: 5,
+                delay_rate: 0.6,
+                samples: 5,
+              },
+              {
+                callsign: "DL101",
+                policy_count: 3,
+                delay_rate: 0.2,
+                samples: 3,
+              },
+            ]),
+            { status: 200 },
+          ),
+        );
+      }
+
       return Promise.resolve(new Response("{}", { status: 200 }));
     }));
   });
@@ -107,6 +129,22 @@ describe("App routes", () => {
     expect(screen.getByText("1 claims, paid by reactive contract")).toBeInTheDocument();
     expect(screen.getByText("policy-alp…")).toBeInTheDocument();
     expect(screen.getByText("+80 RIA")).toBeInTheDocument();
+    expect(screen.getByText("990 RIA")).toBeInTheDocument();
+  });
+
+  it("mounts Hot Routes at /routes inside the protected app shell", async () => {
+    window.history.pushState({}, "", "/routes");
+
+    render(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <App />
+      </SWRConfig>,
+    );
+
+    await waitFor(() => expect(screen.getByText("BA178")).toBeInTheDocument());
+    expect(screen.getByText("DL101")).toBeInTheDocument();
+    expect(screen.getByText("5 pol")).toBeInTheDocument();
+    expect(screen.getByText("60%")).toBeInTheDocument();
     expect(screen.getByText("990 RIA")).toBeInTheDocument();
   });
 });

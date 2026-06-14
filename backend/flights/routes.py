@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -80,3 +80,11 @@ async def flight_detail(
         delay_rate=stats.delay_rate,
         samples=stats.samples,
     )
+
+
+@router.get("/routes/hot")
+async def hot_routes(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    limit: int = Query(20, ge=1, le=100),
+):
+    return await FlightService(session).hot_routes(limit=limit)

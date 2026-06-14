@@ -36,6 +36,29 @@ class FlightService:
         rate = (delayed / samples) if samples else 0.0
         return DelayStats(samples=samples, delayed=delayed, delay_rate=rate)
 
+    async def hot_routes(self, *, limit: int = 20):
+        stmt = (
+            select(Flight.callsign, func.count(Policy.id).label("policy_count"))
+            .select_from(Policy)
+            .join(Flight, Flight.id == Policy.flight_id)
+            .group_by(Flight.callsign)
+            .order_by(func.count(Policy.id).desc())
+            .limit(limit)
+        )
+        rows = (await self._session.execute(stmt)).all()
+        results = []
+        for callsign, count in rows:
+            stats = await self.delay_stats(callsign=callsign)
+            results.append(
+                {
+                    "callsign": callsign,
+                    "policy_count": int(count),
+                    "delay_rate": stats.delay_rate,
+                    "samples": stats.samples,
+                },
+            )
+        return results
+
     async def get_flight(self, flight_id: str) -> Flight | None:
         stmt = select(Flight).where(Flight.id == flight_id)
         return (await self._session.execute(stmt)).scalar_one_or_none()
