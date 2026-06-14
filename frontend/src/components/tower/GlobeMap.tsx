@@ -275,8 +275,40 @@ export function GlobeMap({ onSelectFlight }: Props) {
               const isHover = hovered?.callsign === f.callsign;
               const baseR = isHover ? 4 : 2.2;
               const r = baseR / viewport.k;
+
+              // 8 秒前位置 (沿 heading 反方向推) - 形成弱尾迹, 让运动方向可见
+              const trailSeconds = isHover ? 30 : 8;
+              let tail: [number, number] | null = null;
+              if (f.velocity && f.heading !== null && f.heading !== undefined) {
+                const v = f.velocity;
+                const headingRad = (f.heading * Math.PI) / 180;
+                const dxM = -v * Math.sin(headingRad) * trailSeconds;
+                const dyM = -v * Math.cos(headingRad) * trailSeconds;
+                const dLat = dyM / 111_000;
+                const cosLat = Math.cos((lat * Math.PI) / 180);
+                const dLon = dxM / (111_000 * Math.max(0.1, cosLat));
+                const projTrail = projection([lon + dLon, lat + dLat]);
+                if (projTrail) tail = [projTrail[0], projTrail[1]];
+              }
+
               return (
                 <g key={f.callsign}>
+                  {tail && (
+                    <line
+                      x1={tail[0]}
+                      y1={tail[1]}
+                      x2={x}
+                      y2={y}
+                      stroke={
+                        isHover
+                          ? "rgba(0,255,157,0.55)"
+                          : "rgba(0,255,157,0.22)"
+                      }
+                      strokeWidth={(isHover ? 1.2 : 0.8) / viewport.k}
+                      strokeLinecap="round"
+                      pointerEvents="none"
+                    />
+                  )}
                   {isHover && (
                     <circle
                       cx={x}
