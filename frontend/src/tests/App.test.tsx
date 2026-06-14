@@ -147,4 +147,19 @@ describe("App routes", () => {
     expect(screen.getByText("60%")).toBeInTheDocument();
     expect(screen.getByText("990 RIA")).toBeInTheDocument();
   });
+
+  it("mounts Rialo Inside at /rialo-inside inside the protected app shell", async () => {
+    window.history.pushState({}, "", "/rialo-inside");
+
+    render(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <App />
+      </SWRConfig>,
+    );
+
+    await waitFor(() => expect(screen.getByText(/Six roles/)).toBeInTheDocument());
+    expect(screen.getByText("TRADITIONAL")).toBeInTheDocument();
+    expect(screen.getByText("Reactive Contract")).toBeInTheDocument();
+    expect(screen.getByText("990 RIA")).toBeInTheDocument();
+  });
 });

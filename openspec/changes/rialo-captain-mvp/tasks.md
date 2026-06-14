@@ -57,7 +57,7 @@
 - [x] 9.3 My Hangar 我的保单（三栏机库格）
 - [x] 9.4 Claims Feed 实时赔付时间线
 - [x] 9.5 Hot Routes 热门航线排行榜
-- [ ] 9.6 Rialo Inside 滚动驱动技术揭秘动画页
+- [x] 9.6 Rialo Inside 滚动驱动技术揭秘动画页
 - [x] 9.7 顶部 nav + 底部 StatusBar 全局壳
 
 ## 10. 端到端验证与发布

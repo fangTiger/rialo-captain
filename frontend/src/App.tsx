@@ -6,6 +6,7 @@ import { FlightDetail } from "./routes/FlightDetail";
 import { MyHangar } from "./routes/MyHangar";
 import { ClaimsFeed } from "./routes/ClaimsFeed";
 import { HotRoutes } from "./routes/HotRoutes";
+import { RialoInside } from "./routes/RialoInside";
 import { ProtectedRoute } from "./auth/ProtectedRoute";
 import { TopNav } from "./components/shell/TopNav";
 import { StatusBar } from "./components/shell/StatusBar";
@@ -76,6 +77,16 @@ export default function App() {
             <ProtectedRoute>
               <AppShell>
                 <HotRoutes />
+              </AppShell>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/rialo-inside"
+          element={
+            <ProtectedRoute>
+              <AppShell>
+                <RialoInside />
               </AppShell>
             </ProtectedRoute>
           }
