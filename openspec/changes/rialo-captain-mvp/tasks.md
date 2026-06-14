@@ -52,13 +52,13 @@
 - [ ] 8.4 ESLint rule：禁 `Inter` / `Roboto` / `Arial` / `Fraunces` / `system-ui` 字体引用
 
 ## 9. 前端页面（live-dashboard）
-- [ ] 9.1 The Tower（Mapbox + 飞机光点 + 雷达扫描 + 侧栏事件流）
+- [x] 9.1 The Tower（Mapbox + 飞机光点 + 雷达扫描 + 侧栏事件流）
 - [ ] 9.2 FlightDetail slide-up drawer（购买流程 + 历史延误率柱状图）
 - [ ] 9.3 My Hangar 我的保单（三栏机库格）
 - [ ] 9.4 Claims Feed 实时赔付时间线
 - [ ] 9.5 Hot Routes 热门航线排行榜
 - [ ] 9.6 Rialo Inside 滚动驱动技术揭秘动画页
-- [ ] 9.7 顶部 nav + 底部 StatusBar 全局壳
+- [x] 9.7 顶部 nav + 底部 StatusBar 全局壳
 
 ## 10. 端到端验证与发布
 - [ ] 10.1 Playwright E2E：登录 → 买险 → 注入延误 → 看到赔付到账

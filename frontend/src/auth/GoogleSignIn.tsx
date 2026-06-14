@@ -1,11 +1,15 @@
 import { GoogleLogin, type CredentialResponse } from "@react-oauth/google";
 import { useNavigate } from "react-router-dom";
+import { useSWRConfig } from "swr";
 import { apiFetch } from "../api/client";
-import { useMe } from "../hooks/useMe";
 
 export function GoogleSignIn() {
   const navigate = useNavigate();
-  const { refresh } = useMe();
+  const { mutate } = useSWRConfig();
+  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
+  const hasClientId = Boolean(
+    clientId && !clientId.startsWith("your-google-client-id"),
+  );
 
   async function onSuccess(cred: CredentialResponse) {
     if (!cred.credential) return;
@@ -14,8 +18,22 @@ export function GoogleSignIn() {
       method: "POST",
       body: JSON.stringify({ id_token: cred.credential }),
     });
-    await refresh();
+    await mutate("/me");
     navigate("/", { replace: true });
+  }
+
+  if (!hasClientId) {
+    return (
+      <div
+        style={{
+          color: "var(--warn-amber)",
+          fontFamily: "var(--font-mono)",
+          fontSize: 12,
+        }}
+      >
+        Google OAuth client id missing
+      </div>
+    );
   }
 
   return (

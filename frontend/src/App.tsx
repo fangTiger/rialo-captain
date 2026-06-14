@@ -1,18 +1,38 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import type { ReactNode } from "react";
 import { Login } from "./routes/Login";
 import { TowerShell } from "./routes/TowerShell";
 import { ProtectedRoute } from "./auth/ProtectedRoute";
+import { TopNav } from "./components/shell/TopNav";
+import { StatusBar } from "./components/shell/StatusBar";
+import { useWebSocket } from "./hooks/useWebSocket";
+
+function AppShell({ children }: { children: ReactNode }) {
+  useWebSocket("/ws");
+
+  return (
+    <>
+      <TopNav />
+      {children}
+      <StatusBar />
+    </>
+  );
+}
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter
+      future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+    >
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route
           path="/"
           element={
             <ProtectedRoute>
-              <TowerShell />
+              <AppShell>
+                <TowerShell />
+              </AppShell>
             </ProtectedRoute>
           }
         />
