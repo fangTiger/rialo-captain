@@ -15,6 +15,8 @@ async def app_client(monkeypatch, tmp_path):
     monkeypatch.setenv("GOOGLE_CLIENT_ID", "fake-client-id.apps.googleusercontent.com")
     monkeypatch.setenv("COOKIE_SECURE", "false")
     monkeypatch.setenv("DEV_LOGIN_ENABLED", "false")
+    monkeypatch.setenv("CLAIM_ENGINE_ENABLED", "false")
+    monkeypatch.setenv("FLIGHT_FETCHER_ENABLED", "false")
     from backend.config import get_settings
 
     get_settings.cache_clear()

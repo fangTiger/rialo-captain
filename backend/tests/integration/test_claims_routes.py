@@ -17,6 +17,7 @@ async def app_client(monkeypatch, tmp_path):
     monkeypatch.setenv("GOOGLE_CLIENT_ID", "fake.apps.googleusercontent.com")
     monkeypatch.setenv("RIALO_MODE", "mock")
     monkeypatch.setenv("CLAIM_ENGINE_ENABLED", "false")
+    monkeypatch.setenv("FLIGHT_FETCHER_ENABLED", "false")
     from backend.config import get_settings
 
     get_settings.cache_clear()

@@ -18,6 +18,7 @@ async def app_client(monkeypatch, tmp_path):
     monkeypatch.setenv("ADMIN_TOKEN", "admin-x")
     monkeypatch.setenv("RIALO_MODE", "mock")
     monkeypatch.setenv("CLAIM_ENGINE_ENABLED", "false")  # 手动 run_once
+    monkeypatch.setenv("FLIGHT_FETCHER_ENABLED", "false")
     from backend.config import get_settings
 
     get_settings.cache_clear()

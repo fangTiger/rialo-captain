@@ -12,6 +12,8 @@ async def app_client(monkeypatch, tmp_path):
     monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{db_file}")
     monkeypatch.setenv("JWT_SECRET", "test-secret-32-chars-min-padding-xx")
     monkeypatch.setenv("OPENSKY_BASE_URL", "https://opensky.test")
+    monkeypatch.setenv("CLAIM_ENGINE_ENABLED", "false")
+    monkeypatch.setenv("FLIGHT_FETCHER_ENABLED", "false")
     from backend.config import get_settings
 
     get_settings.cache_clear()

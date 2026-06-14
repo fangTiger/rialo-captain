@@ -13,6 +13,7 @@ async def app_client(monkeypatch, tmp_path):
     monkeypatch.setenv("JWT_SECRET", "test-secret-32-chars-min-padding-xx")
     monkeypatch.setenv("ADMIN_TOKEN", "secret-admin")
     monkeypatch.setenv("CLAIM_ENGINE_ENABLED", "false")
+    monkeypatch.setenv("FLIGHT_FETCHER_ENABLED", "false")
     from backend.config import get_settings
 
     get_settings.cache_clear()

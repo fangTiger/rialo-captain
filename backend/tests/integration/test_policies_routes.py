@@ -15,6 +15,8 @@ async def app_client(monkeypatch, tmp_path):
     monkeypatch.setenv("JWT_SECRET", "test-secret-32-chars-min-padding-xx")
     monkeypatch.setenv("GOOGLE_CLIENT_ID", "fake-id.apps.googleusercontent.com")
     monkeypatch.setenv("RIALO_MODE", "mock")
+    monkeypatch.setenv("CLAIM_ENGINE_ENABLED", "false")
+    monkeypatch.setenv("FLIGHT_FETCHER_ENABLED", "false")
     from backend.config import get_settings
 
     get_settings.cache_clear()

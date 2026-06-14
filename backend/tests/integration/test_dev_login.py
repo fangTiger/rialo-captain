@@ -13,6 +13,7 @@ async def app_client_with_dev_login(monkeypatch, tmp_path):
     monkeypatch.setenv("COOKIE_SECURE", "false")
     monkeypatch.setenv("DEV_LOGIN_ENABLED", "true")
     monkeypatch.setenv("CLAIM_ENGINE_ENABLED", "false")
+    monkeypatch.setenv("FLIGHT_FETCHER_ENABLED", "false")
     from backend.config import get_settings
 
     get_settings.cache_clear()
@@ -38,6 +39,7 @@ async def app_client_dev_login_off(monkeypatch, tmp_path):
     monkeypatch.setenv("COOKIE_SECURE", "false")
     monkeypatch.setenv("DEV_LOGIN_ENABLED", "false")
     monkeypatch.setenv("CLAIM_ENGINE_ENABLED", "false")
+    monkeypatch.setenv("FLIGHT_FETCHER_ENABLED", "false")
     from backend.config import get_settings
 
     get_settings.cache_clear()
