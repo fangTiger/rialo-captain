@@ -22,7 +22,14 @@ cleanup() {
 trap cleanup EXIT
 
 echo "[dev] 启动 backend (uvicorn :8000)"
-uvicorn backend.app:app --reload --port 8000 &
+# 优先用 .venv，避免落到系统 Python 缺依赖
+UVICORN_BIN="uvicorn"
+if [[ -x ".venv/bin/uvicorn" ]]; then
+  UVICORN_BIN=".venv/bin/uvicorn"
+elif [[ -x "venv/bin/uvicorn" ]]; then
+  UVICORN_BIN="venv/bin/uvicorn"
+fi
+"$UVICORN_BIN" backend.app:app --reload --port 8000 &
 
 echo "[dev] 启动 frontend (vite :5173)"
 (cd frontend && pnpm dev) &
