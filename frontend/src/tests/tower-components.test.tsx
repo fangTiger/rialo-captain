@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { useEventStore } from "../store/eventStore";
 import { DataStaleBadge } from "../components/tower/DataStaleBadge";
 import { EventFeedSidebar } from "../components/tower/EventFeedSidebar";
@@ -42,6 +42,9 @@ describe("tower components", () => {
         <KPIBand />
       </>,
     );
+
+    // EventFeedSidebar 默认收起为 chip; 点开展开
+    fireEvent.click(screen.getByRole("button", { name: /EVENT FEED/ }));
 
     expect(screen.getByText("EVENT FEED")).toBeInTheDocument();
     expect(screen.getByText("BA178-20260614")).toBeInTheDocument();

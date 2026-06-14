@@ -1,14 +1,43 @@
+import { useState } from "react";
 import { useEventStore } from "../../store/eventStore";
 
 export function EventFeedSidebar() {
   const allFlares = useEventStore((state) => state.flares);
   const flares = allFlares.slice(0, 20);
+  const [open, setOpen] = useState(false);
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        style={{
+          position: "absolute",
+          top: 16,
+          right: 16,
+          padding: "6px 12px",
+          background: "var(--surface-1)",
+          border: "1px solid var(--border-subtle)",
+          color: "var(--text-secondary)",
+          fontFamily: "var(--font-mono)",
+          fontSize: 11,
+          letterSpacing: "0.18em",
+          textTransform: "uppercase",
+          borderRadius: "var(--radius-sharp)",
+          cursor: "pointer",
+        }}
+      >
+        EVENT FEED{" "}
+        <span style={{ color: "var(--accent-radar)" }}>{allFlares.length}</span>
+      </button>
+    );
+  }
 
   return (
     <aside
       style={{
         position: "absolute",
-        top: 80,
+        top: 16,
         right: 16,
         width: 320,
         maxWidth: "calc(100vw - 32px)",
@@ -25,12 +54,34 @@ export function EventFeedSidebar() {
     >
       <div
         style={{
-          letterSpacing: "0.18em",
-          textTransform: "uppercase",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
           marginBottom: 12,
         }}
       >
-        EVENT FEED
+        <div style={{ letterSpacing: "0.18em", textTransform: "uppercase" }}>
+          EVENT FEED
+        </div>
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          style={{
+            background: "transparent",
+            border: "1px solid var(--border-subtle)",
+            color: "var(--text-secondary)",
+            cursor: "pointer",
+            width: 22,
+            height: 22,
+            lineHeight: "20px",
+            fontSize: 14,
+            padding: 0,
+            borderRadius: "var(--radius-sharp)",
+          }}
+          aria-label="close event feed"
+        >
+          ×
+        </button>
       </div>
       {flares.length === 0 && (
         <div style={{ color: "var(--text-tertiary)" }}>
