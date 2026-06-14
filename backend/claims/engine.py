@@ -4,6 +4,7 @@ import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Protocol
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
@@ -29,6 +30,12 @@ class RunSummary:
     failed: int = 0
 
 
+class ClaimBroadcaster(Protocol):
+    async def broadcast(self, message: dict) -> None: ...
+
+    async def send_to_user(self, user_id: str, message: dict) -> None: ...
+
+
 def default_observe_url(flight_id: str) -> str:
     return f"https://opensky-network.org/api/states/all?icao24=&_q={flight_id}"
 
@@ -42,13 +49,18 @@ class ClaimEngine:
         observe_url: Callable[[str], str] = default_observe_url,
         now: Callable[[], int] | None = None,
         interval_seconds: int = 30,
+        broadcaster: ClaimBroadcaster | None = None,
     ) -> None:
         self._adapter = adapter
         self._session_factory = session_factory
         self._observe_url = observe_url
         self._now = now or (lambda: int(time.time()))
         self._interval = interval_seconds
+        self._broadcaster = broadcaster
         self._stop_event = asyncio.Event()
+
+    def set_broadcaster(self, broadcaster: ClaimBroadcaster | None) -> None:
+        self._broadcaster = broadcaster
 
     async def run_once(self) -> RunSummary:
         summary = RunSummary()
@@ -106,6 +118,27 @@ class ClaimEngine:
                 settle_duration_ms=tx.settle_duration_ms,
             )
             await session.commit()
+            if self._broadcaster is not None:
+                await self._broadcaster.broadcast(
+                    {
+                        "type": "flare",
+                        "payload": {
+                            "flight_id": persistent.flight_id,
+                            "policy_id": persistent.id,
+                            "payout": persistent.payout,
+                            "delay_minutes": payload.delay_minutes,
+                            "signature": signature,
+                            "settle_duration_ms": tx.settle_duration_ms,
+                        },
+                    }
+                )
+                await self._broadcaster.send_to_user(
+                    persistent.user_id,
+                    {
+                        "type": "toast",
+                        "payload": f"+{persistent.payout} RIA settled",
+                    },
+                )
 
     @staticmethod
     def _parse_condition(json_text: str) -> Condition:

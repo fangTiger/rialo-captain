@@ -38,13 +38,18 @@ async def lifespan(app: FastAPI):
     await init_db()
     _opensky_singleton = OpenSkyClient()
     adapter = get_contract_adapter()
-    engine = ClaimEngine(adapter=adapter, session_factory=get_session_factory())
+    broadcaster = Broadcaster()
+    engine = ClaimEngine(
+        adapter=adapter,
+        session_factory=get_session_factory(),
+        broadcaster=broadcaster,
+    )
 
     app.state.flight_cache = _flight_cache_singleton
     app.state.opensky = _opensky_singleton
     app.state.contract_adapter = adapter
     app.state.claim_engine = engine
-    app.state.broadcaster = Broadcaster()
+    app.state.broadcaster = broadcaster
 
     engine_task: asyncio.Task | None = None
     if os.environ.get("CLAIM_ENGINE_ENABLED", "true").lower() != "false":
@@ -76,10 +81,15 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     app.state.flight_cache = _flight_cache_singleton
-    app.state.broadcaster = Broadcaster()
+    broadcaster = Broadcaster()
+    app.state.broadcaster = broadcaster
     adapter = get_contract_adapter()
     app.state.contract_adapter = adapter
-    app.state.claim_engine = ClaimEngine(adapter=adapter, session_factory=get_session_factory())
+    app.state.claim_engine = ClaimEngine(
+        adapter=adapter,
+        session_factory=get_session_factory(),
+        broadcaster=broadcaster,
+    )
 
     @app.get("/health")
     async def health() -> dict[str, str]:

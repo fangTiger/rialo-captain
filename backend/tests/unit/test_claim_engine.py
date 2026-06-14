@@ -135,3 +135,42 @@ async def test_run_once_isolates_single_failure(db_session: AsyncSession):
 
     failed = (await db_session.execute(select(FailedTrigger))).scalars().all()
     assert any("boom" in f.error_text for f in failed)
+
+
+@pytest.mark.asyncio
+async def test_run_once_broadcasts_flare_when_triggered(db_session: AsyncSession):
+    policy = await _seed_policy(db_session)
+    await db_session.commit()
+    adapter = FakeAdapter(observation={"delay_minutes": 45})
+
+    captured: list[dict] = []
+    toasts: list[tuple[str, dict]] = []
+
+    class FakeBroadcaster:
+        async def broadcast(self, message: dict) -> None:
+            captured.append(message)
+
+        async def send_to_user(self, user_id: str, message: dict) -> None:
+            toasts.append((user_id, message))
+
+    engine = ClaimEngine(
+        adapter=adapter,
+        session_factory=_session_factory(db_session),
+        broadcaster=FakeBroadcaster(),
+        observe_url=lambda fid: f"https://opensky.test/state/{fid}",
+        now=_now,
+    )
+    summary = await engine.run_once()
+    assert summary.triggered == 1
+    assert len(captured) == 1
+    flare = captured[0]
+    assert flare["type"] == "flare"
+    assert flare["payload"]["flight_id"] == policy.flight_id
+    assert flare["payload"]["payout"] == policy.payout
+    assert flare["payload"]["signature"].startswith("0x")
+    # 同时给保单持有者发 toast
+    assert len(toasts) == 1
+    user_id, toast = toasts[0]
+    assert user_id == policy.user_id
+    assert toast["type"] == "toast"
+    assert "RIA" in toast["payload"]
