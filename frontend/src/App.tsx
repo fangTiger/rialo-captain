@@ -4,6 +4,7 @@ import { Login } from "./routes/Login";
 import { TowerShell } from "./routes/TowerShell";
 import { FlightDetail } from "./routes/FlightDetail";
 import { MyHangar } from "./routes/MyHangar";
+import { ClaimsFeed } from "./routes/ClaimsFeed";
 import { ProtectedRoute } from "./auth/ProtectedRoute";
 import { TopNav } from "./components/shell/TopNav";
 import { StatusBar } from "./components/shell/StatusBar";
@@ -54,6 +55,16 @@ export default function App() {
             <ProtectedRoute>
               <AppShell>
                 <MyHangar />
+              </AppShell>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/claims"
+          element={
+            <ProtectedRoute>
+              <AppShell>
+                <ClaimsFeed />
               </AppShell>
             </ProtectedRoute>
           }

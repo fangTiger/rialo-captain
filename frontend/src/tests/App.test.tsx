@@ -49,6 +49,25 @@ describe("App routes", () => {
         );
       }
 
+      if (url.includes("/api/claims/recent?limit=50")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([
+              {
+                id: "c1",
+                policy_id: "policy-alpha-123",
+                payout: 80,
+                delay_minutes: 45,
+                signature: "0xabcdef1234567890abcdef",
+                settled_at: 1_800_000_000,
+                settle_duration_ms: 118,
+              },
+            ]),
+            { status: 200 },
+          ),
+        );
+      }
+
       return Promise.resolve(new Response("{}", { status: 200 }));
     }));
   });
@@ -70,6 +89,24 @@ describe("App routes", () => {
       expect(screen.getByText("BA178-20260614")).toBeInTheDocument(),
     );
     expect(screen.getByText("MY HANGAR")).toBeInTheDocument();
+    expect(screen.getByText("990 RIA")).toBeInTheDocument();
+  });
+
+  it("mounts Claims Feed at /claims inside the protected app shell", async () => {
+    window.history.pushState({}, "", "/claims");
+
+    render(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <App />
+      </SWRConfig>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByText("SESSION AUTO-SETTLED")).toBeInTheDocument(),
+    );
+    expect(screen.getByText("1 claims, paid by reactive contract")).toBeInTheDocument();
+    expect(screen.getByText("policy-alp…")).toBeInTheDocument();
+    expect(screen.getByText("+80 RIA")).toBeInTheDocument();
     expect(screen.getByText("990 RIA")).toBeInTheDocument();
   });
 });
