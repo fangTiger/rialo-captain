@@ -65,3 +65,25 @@ async def test_seed_demo_creates_policies_and_triggers_claims(app_client):
     body = res.json()
     assert body["policies_created"] >= 3
     assert body["claims_settled"] >= 1
+
+
+@pytest.mark.asyncio
+async def test_cinema_seed_demo_accepts_protagonist_name_without_admin_token(app_client):
+    client, _ = app_client
+
+    res = await client.post(
+        "/seed-demo",
+        json={
+            "user_email": "captain@local.dev",
+            "protagonist_name": "Alice",
+        },
+    )
+
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["user_email"] == "captain@local.dev"
+    assert body["protagonist_name"] == "Alice"
+    assert body["flight_id"]
+    assert body["policy_ids"]
+    assert body["policies_created"] >= 1
+    assert body["claims_settled"] >= 1

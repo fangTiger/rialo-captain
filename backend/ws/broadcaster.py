@@ -8,6 +8,10 @@ class EventType(str, enum.Enum):
     HELLO = "hello"
     STATE_UPDATE = "state_update"
     FLARE = "flare"
+    POLICY_CREATED = "policy.created"
+    CLAIM_TRIGGERED = "claim.triggered"
+    CLAIM_SETTLED = "claim.settled"
+    FLIGHT_LANDED = "flight.landed"
     TOAST = "toast"
 
 

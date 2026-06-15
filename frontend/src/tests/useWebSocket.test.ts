@@ -28,7 +28,7 @@ class MockWebSocket {
 describe("useWebSocket", () => {
   beforeEach(() => {
     MockWebSocket.instances = [];
-    useEventStore.setState({ flares: [], toasts: [], wsState: "idle" });
+    useEventStore.setState({ flares: [], toasts: [], events: [], wsState: "idle" });
     vi.stubGlobal("WebSocket", MockWebSocket as unknown as typeof WebSocket);
   });
 
@@ -67,6 +67,78 @@ describe("useWebSocket", () => {
       });
     });
     expect(useEventStore.getState().flares).toHaveLength(1);
+  });
+
+  it("records typed cinema events while preserving the legacy flare path", () => {
+    renderHook(() => useWebSocket("/ws"));
+    const ws = MockWebSocket.instances[0];
+    act(() => {
+      ws.onopen?.();
+      ws.onmessage?.({
+        data: JSON.stringify({
+          type: "claim.settled",
+          payload: {
+            flight_id: "BA178-20260614",
+            policy_id: "p1",
+            payout: 80,
+            delay_minutes: 45,
+            signature: "0xabc",
+            settle_duration_ms: 100,
+            tx_hash: "0x1111111111111111111111111111111111111111",
+            block_height: 1,
+            source: "mock",
+          },
+        }),
+      });
+      ws.onmessage?.({
+        data: JSON.stringify({
+          type: "policy.created",
+          payload: {
+            flight_id: "DL101-20260614",
+            policy_id: "p2",
+            source: "real",
+            created_at: 1_700_000_000_000,
+          },
+        }),
+      });
+      ws.onmessage?.({
+        data: JSON.stringify({
+          type: "flight.landed",
+          payload: {
+            flight_id: "UA200-20260614",
+            policy_id: "p3",
+            landed_at: 1_700_000_001,
+            source: "mock",
+          },
+        }),
+      });
+      ws.onmessage?.({
+        data: JSON.stringify({
+          type: "flare",
+          payload: {
+            flight_id: "BA178-20260614",
+            policy_id: "p1",
+            payout: 80,
+            delay_minutes: 45,
+            signature: "0xabc",
+            settle_duration_ms: 100,
+          },
+        }),
+      });
+    });
+
+    const state = useEventStore.getState();
+    expect(state.flares).toHaveLength(1);
+    expect(state.events.map((event) => event.type)).toEqual([
+      "flare",
+      "flight.landed",
+      "policy.created",
+      "claim.settled",
+    ]);
+    expect(state.events[0].payload).toMatchObject({
+      flight_id: "BA178-20260614",
+      policy_id: "p1",
+    });
   });
 
   it("dispatches toast events to store", () => {

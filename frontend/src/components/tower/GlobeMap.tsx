@@ -1,18 +1,29 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { geoEquirectangular, geoPath, type GeoProjection } from "d3-geo";
 import { feature } from "topojson-client";
 import type { FeatureCollection, Geometry } from "geojson";
 import { apiFetch } from "../../api/client";
 import { useFlights, type FlightPublic } from "../../hooks/useFlights";
+import type { CameraTarget } from "../cinema/CinemaContext";
+import { cameraTargetToViewport } from "../cinema/cameraMath";
 
 interface Props {
+  cameraTarget?: CameraTarget | null;
+  onUserGesture?: () => void;
   onSelectFlight?: (callsign: string) => void;
+  onViewportChange?: (viewport: Viewport) => void;
+  protagonistHighlight?: ProtagonistHighlight | null;
 }
 
 type PositionedFlight = FlightPublic & {
   longitude: number;
   latitude: number;
 };
+
+export interface ProtagonistHighlight {
+  flightId: string;
+  callsign: string;
+}
 
 interface Viewport {
   k: number;
@@ -30,7 +41,13 @@ const TICK_INTERVAL_MS = 500;
 // 加速 10× 让飞机以"分钟"为单位被看到, 同时跳变控制在 < 1 像素 (SWR 每 15s 拉新数据).
 const TIME_ACCEL = 10;
 
-export function GlobeMap({ onSelectFlight }: Props) {
+export function GlobeMap({
+  cameraTarget = null,
+  onUserGesture,
+  onSelectFlight,
+  onViewportChange,
+  protagonistHighlight = null,
+}: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [world, setWorld] = useState<FeatureCollection<Geometry> | null>(null);
@@ -38,6 +55,8 @@ export function GlobeMap({ onSelectFlight }: Props) {
   const [size, setSize] = useState({ width: 1200, height: 720 });
   const [hovered, setHovered] = useState<PositionedFlight | null>(null);
   const [viewport, setViewport] = useState<Viewport>({ k: 1, x: 0, y: 0 });
+  const viewportRef = useRef<Viewport>(viewport);
+  const cameraRafRef = useRef<number | null>(null);
   const dragRef = useRef<{
     startX: number;
     startY: number;
@@ -56,6 +75,23 @@ export function GlobeMap({ onSelectFlight }: Props) {
   // Hover 拉 OpenSky 后端 track (备用, 未来如果 OpenSky 重开 tracks endpoint)
   type TrackResult = "loading" | "failed" | [number, number][];
   const [tracks, setTracks] = useState<Record<string, TrackResult>>({});
+
+  useEffect(() => {
+    viewportRef.current = viewport;
+    onViewportChange?.(viewport);
+  }, [viewport, onViewportChange]);
+
+  const cancelCameraAnimation = useCallback(() => {
+    if (cameraRafRef.current !== null) {
+      window.cancelAnimationFrame(cameraRafRef.current);
+      cameraRafRef.current = null;
+    }
+  }, []);
+
+  const notifyUserGesture = useCallback(() => {
+    cancelCameraAnimation();
+    onUserGesture?.();
+  }, [cancelCameraAnimation, onUserGesture]);
 
   useEffect(() => {
     let cancelled = false;
@@ -171,6 +207,44 @@ export function GlobeMap({ onSelectFlight }: Props) {
     [flights],
   );
 
+  useEffect(() => {
+    cancelCameraAnimation();
+    if (!cameraTarget) return;
+
+    const targetViewport = cameraTargetToViewport(cameraTarget, size);
+    const durationMs = Math.max(0, cameraTarget.durationMs);
+    if (durationMs === 0) {
+      setViewport(targetViewport);
+      return;
+    }
+
+    const from = viewportRef.current;
+    let startedAt: number | null = null;
+
+    const step = (timestamp: number) => {
+      if (startedAt === null) startedAt = timestamp;
+      const elapsed = Math.max(0, timestamp - startedAt);
+      const t = Math.min(1, elapsed / durationMs);
+      const eased = easeInOutCubic(t);
+      setViewport(interpolateViewport(from, targetViewport, eased));
+
+      if (t < 1) {
+        cameraRafRef.current = window.requestAnimationFrame(step);
+      } else {
+        cameraRafRef.current = null;
+        setViewport(targetViewport);
+      }
+    };
+
+    cameraRafRef.current = window.requestAnimationFrame(step);
+    return cancelCameraAnimation;
+  }, [
+    cameraTarget,
+    cancelCameraAnimation,
+    size.height,
+    size.width,
+  ]);
+
   // 每次拿到新 flights 数据, 给每个 icao24 累积历史点
   useEffect(() => {
     if (validFlights.length === 0) return;
@@ -204,6 +278,7 @@ export function GlobeMap({ onSelectFlight }: Props) {
   // 缩放：以鼠标位置为中心
   const onWheel = (e: React.WheelEvent<SVGSVGElement>) => {
     if (!svgRef.current) return;
+    notifyUserGesture();
     const rect = svgRef.current.getBoundingClientRect();
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
@@ -236,7 +311,10 @@ export function GlobeMap({ onSelectFlight }: Props) {
     if (!d) return;
     const dx = e.clientX - d.startX;
     const dy = e.clientY - d.startY;
-    if (Math.abs(dx) + Math.abs(dy) > 3) d.moved = true;
+    if (Math.abs(dx) + Math.abs(dy) > 3 && !d.moved) {
+      d.moved = true;
+      notifyUserGesture();
+    }
     setViewport((v) => ({ ...v, x: d.vx + dx, y: d.vy + dy }));
   };
 
@@ -244,11 +322,15 @@ export function GlobeMap({ onSelectFlight }: Props) {
     dragRef.current = null;
   };
 
-  const resetView = () => setViewport({ k: 1, x: 0, y: 0 });
+  const resetView = () => {
+    notifyUserGesture();
+    setViewport({ k: 1, x: 0, y: 0 });
+  };
 
   // 点击 circle 时，如果在拖拽中（已移动），不触发 onSelectFlight
   const handleFlightClick = (callsign: string) => {
     if (dragRef.current?.moved) return;
+    notifyUserGesture();
     onSelectFlight?.(callsign);
   };
 
@@ -288,6 +370,7 @@ export function GlobeMap({ onSelectFlight }: Props) {
         </defs>
 
         <g
+          data-testid="globe-viewport"
           transform={`translate(${viewport.x},${viewport.y}) scale(${viewport.k})`}
         >
           <g
@@ -365,6 +448,10 @@ export function GlobeMap({ onSelectFlight }: Props) {
               if (!proj) return null;
               const [x, y] = proj;
               const isHover = hovered?.callsign === f.callsign;
+              const isProtagonist = matchesProtagonistHighlight(
+                f,
+                protagonistHighlight,
+              );
               const baseR = isHover ? 4 : 2.2;
               const r = baseR / viewport.k;
 
@@ -411,7 +498,38 @@ export function GlobeMap({ onSelectFlight }: Props) {
                       pointerEvents="none"
                     />
                   )}
+                  {isProtagonist && (
+                    <g
+                      data-testid={`protagonist-ring-${f.callsign}`}
+                      pointerEvents="none"
+                      style={{ pointerEvents: "none" }}
+                    >
+                      <circle
+                        className="protagonist-spotlight-ring"
+                        cx={x}
+                        cy={y}
+                        r={12 / viewport.k}
+                        fill="none"
+                        stroke="rgba(255, 68, 128, 0.95)"
+                        strokeWidth={1.4 / viewport.k}
+                        opacity={0.9}
+                        pointerEvents="none"
+                      />
+                      <circle
+                        className="protagonist-spotlight-pulse"
+                        cx={x}
+                        cy={y}
+                        r={18 / viewport.k}
+                        fill="rgba(255, 68, 128, 0.08)"
+                        stroke="rgba(255, 68, 128, 0.35)"
+                        strokeWidth={0.8 / viewport.k}
+                        pointerEvents="none"
+                      />
+                    </g>
+                  )}
                   <circle
+                    data-testid={`flight-dot-${f.callsign}`}
+                    data-protagonist={isProtagonist ? "true" : undefined}
                     cx={x}
                     cy={y}
                     r={r}
@@ -531,24 +649,26 @@ export function GlobeMap({ onSelectFlight }: Props) {
       >
         <button
           type="button"
-          onClick={() =>
+          onClick={() => {
+            notifyUserGesture();
             setViewport((v) => ({
               ...v,
               k: Math.min(MAX_K, v.k * 1.4),
-            }))
-          }
+            }));
+          }}
           style={zoomBtn}
         >
           +
         </button>
         <button
           type="button"
-          onClick={() =>
+          onClick={() => {
+            notifyUserGesture();
             setViewport((v) => ({
               ...v,
               k: Math.max(MIN_K, v.k / 1.4),
-            }))
-          }
+            }));
+          }}
           style={zoomBtn}
         >
           −
@@ -594,6 +714,41 @@ export function GlobeMap({ onSelectFlight }: Props) {
       )}
     </div>
   );
+}
+
+function interpolateViewport(from: Viewport, to: Viewport, t: number): Viewport {
+  return {
+    k: from.k + (to.k - from.k) * t,
+    x: from.x + (to.x - from.x) * t,
+    y: from.y + (to.y - from.y) * t,
+  };
+}
+
+function easeInOutCubic(t: number) {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+function matchesProtagonistHighlight(
+  flight: FlightPublic,
+  protagonist: ProtagonistHighlight | null,
+) {
+  if (!protagonist) return false;
+  const flightCallsign = normalizeFlightKey(flight.callsign);
+  if (!flightCallsign) return false;
+
+  return [protagonist.callsign, protagonist.flightId].some((value) => {
+    const protagonistKey = normalizeFlightKey(value);
+    if (!protagonistKey) return false;
+    return (
+      protagonistKey === flightCallsign ||
+      protagonistKey.startsWith(`${flightCallsign}-`) ||
+      flightCallsign.startsWith(`${protagonistKey}-`)
+    );
+  });
+}
+
+function normalizeFlightKey(value: string | null | undefined) {
+  return value?.trim().toUpperCase().replace(/\s+/g, "") ?? "";
 }
 
 const zoomBtn: React.CSSProperties = {

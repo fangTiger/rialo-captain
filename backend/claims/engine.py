@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import json
 import logging
 import time
@@ -18,7 +19,8 @@ from backend.contracts.base import (
     ContractRef,
     ReactiveContractAdapter,
 )
-from backend.models import FailedTrigger, Policy, PolicyStatus
+from backend.models import FailedTrigger, Flight, Policy, PolicyStatus
+from backend.ws.broadcaster import EventType
 
 logger = logging.getLogger(__name__)
 
@@ -60,9 +62,14 @@ class ClaimEngine:
         self._broadcaster = broadcaster
         self._external_observation_enabled = external_observation_enabled
         self._stop_event = asyncio.Event()
+        self._block_height = 0
 
     def set_broadcaster(self, broadcaster: ClaimBroadcaster | None) -> None:
         self._broadcaster = broadcaster
+
+    def _next_block_height(self) -> int:
+        self._block_height += 1
+        return self._block_height
 
     async def run_once(self) -> RunSummary:
         summary = RunSummary()
@@ -106,6 +113,25 @@ class ClaimEngine:
             delay_minutes=int(observation.get("delay_minutes", 0)),
             observed_at=self._now(),
         )
+
+        async with self._session_factory() as session:
+            persistent = await session.get(Policy, policy.id)
+            if persistent is None or persistent.status != PolicyStatus.ACTIVE:
+                return
+            flight = await session.get(Flight, persistent.flight_id)
+            if self._broadcaster is not None:
+                await self._broadcaster.broadcast(
+                    {
+                        "type": EventType.CLAIM_TRIGGERED.value,
+                        "payload": self._claim_triggered_payload(
+                            policy=persistent,
+                            flight=flight,
+                            delay_minutes=payload.delay_minutes,
+                            observation=observation,
+                        ),
+                    }
+                )
+
         tx = await self._adapter.trigger_claim(contract_ref, payload)
         signature = await self._adapter.get_signature(tx)
         if not signature:
@@ -115,7 +141,7 @@ class ClaimEngine:
             persistent = await session.get(Policy, policy.id)
             if persistent is None or persistent.status != PolicyStatus.ACTIVE:
                 return
-            await ClaimsService(session).create_claim(
+            claim = await ClaimsService(session).create_claim(
                 policy=persistent,
                 payout=persistent.payout,
                 delay_minutes=payload.delay_minutes,
@@ -124,6 +150,12 @@ class ClaimEngine:
             )
             await session.commit()
             if self._broadcaster is not None:
+                block_height = self._next_block_height()
+                tx_hash = self._mock_tx_hash(
+                    claim_id=claim.id,
+                    policy_id=persistent.id,
+                    signature=signature,
+                )
                 await self._broadcaster.broadcast(
                     {
                         "type": "flare",
@@ -137,6 +169,33 @@ class ClaimEngine:
                         },
                     }
                 )
+                await self._broadcaster.broadcast(
+                    {
+                        "type": EventType.CLAIM_SETTLED.value,
+                        "payload": {
+                            "flight_id": persistent.flight_id,
+                            "policy_id": persistent.id,
+                            "payout": persistent.payout,
+                            "delay_minutes": payload.delay_minutes,
+                            "signature": signature,
+                            "settle_duration_ms": tx.settle_duration_ms,
+                            "tx_hash": tx_hash,
+                            "block_height": block_height,
+                            "source": "mock",
+                        },
+                    }
+                )
+                await self._broadcaster.broadcast(
+                    {
+                        "type": EventType.FLIGHT_LANDED.value,
+                        "payload": {
+                            "flight_id": persistent.flight_id,
+                            "policy_id": persistent.id,
+                            "landed_at": self._now(),
+                            "source": "mock",
+                        },
+                    }
+                )
                 await self._broadcaster.send_to_user(
                     persistent.user_id,
                     {
@@ -144,6 +203,31 @@ class ClaimEngine:
                         "payload": f"+{persistent.payout} RIA settled",
                     },
                 )
+
+    @staticmethod
+    def _mock_tx_hash(*, claim_id: str, policy_id: str, signature: str) -> str:
+        material = f"{claim_id}|{policy_id}|{signature}".encode()
+        return "0x" + hashlib.sha256(material).hexdigest()[:40]
+
+    @staticmethod
+    def _claim_triggered_payload(
+        *,
+        policy: Policy,
+        flight: Flight | None,
+        delay_minutes: int,
+        observation: dict,
+    ) -> dict:
+        airport_iata = "UNKNOWN"
+        if flight is not None:
+            airport_iata = flight.destination or flight.origin or airport_iata
+
+        return {
+            "flight_id": policy.flight_id,
+            "policy_id": policy.id,
+            "delay_minutes": delay_minutes,
+            "source": str(observation.get("source", "mock")),
+            "airport_iata": airport_iata,
+        }
 
     @staticmethod
     def _parse_condition(json_text: str) -> Condition:

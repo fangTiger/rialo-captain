@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     google_client_id: str = ""
     rialo_mode: str = "mock"
     admin_token: str = "local-dev-admin-token"
+    cinema_autoseed_enabled: bool = True
     opensky_base_url: str = "https://opensky-network.org/api"
     opensky_enabled: bool = True
     log_level: str = "INFO"

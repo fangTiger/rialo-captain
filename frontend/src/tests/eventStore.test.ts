@@ -3,7 +3,7 @@ import { useEventStore } from "../store/eventStore";
 
 describe("eventStore", () => {
   beforeEach(() => {
-    useEventStore.setState({ flares: [], toasts: [], wsState: "idle" });
+    useEventStore.setState({ flares: [], toasts: [], events: [], wsState: "idle" });
   });
 
   it("addFlare prepends to flares", () => {
@@ -21,6 +21,22 @@ describe("eventStore", () => {
     );
   });
 
+  it("deduplicates repeated flare payloads", () => {
+    const flare = {
+      flight_id: "BA178-20260614",
+      policy_id: "p1",
+      payout: 80,
+      delay_minutes: 45,
+      signature: "0xabc",
+      settle_duration_ms: 100,
+    };
+
+    useEventStore.getState().addFlare(flare);
+    useEventStore.getState().addFlare({ ...flare });
+
+    expect(useEventStore.getState().flares).toHaveLength(1);
+  });
+
   it("flares capped at 100", () => {
     const { addFlare } = useEventStore.getState();
     for (let i = 0; i < 150; i++) {
@@ -34,6 +50,50 @@ describe("eventStore", () => {
       });
     }
     expect(useEventStore.getState().flares).toHaveLength(100);
+  });
+
+  it("addEvent prepends typed cinema events and caps the ring buffer", () => {
+    const { addEvent } = useEventStore.getState();
+    for (let i = 0; i < 250; i++) {
+      addEvent({
+        id: `e-${i}`,
+        type: "policy.created",
+        payload: {
+          flight_id: `F-${i}`,
+          policy_id: `p${i}`,
+          source: "real",
+        },
+        receivedAt: i,
+      });
+    }
+
+    const events = useEventStore.getState().events;
+    expect(events).toHaveLength(200);
+    expect(events[0]).toMatchObject({
+      id: "e-249",
+      type: "policy.created",
+      receivedAt: 249,
+    });
+    expect(events[events.length - 1]).toMatchObject({ id: "e-50" });
+  });
+
+  it("deduplicates repeated typed cinema event payloads", () => {
+    const event = {
+      type: "claim.settled" as const,
+      payload: {
+        flight_id: "BA178-20260614",
+        policy_id: "p1",
+        payout: 80,
+        delay_minutes: 45,
+        tx_hash: "0x1111111111111111111111111111111111111111",
+        source: "mock",
+      },
+    };
+
+    useEventStore.getState().addEvent(event);
+    useEventStore.getState().addEvent({ ...event, payload: { ...event.payload } });
+
+    expect(useEventStore.getState().events).toHaveLength(1);
   });
 
   it("addToast and dismissToast", () => {

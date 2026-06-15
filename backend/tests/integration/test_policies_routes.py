@@ -6,6 +6,38 @@ from backend.auth import google
 from backend.auth.google import GoogleProfile
 from backend.db import Base, get_engine
 from backend.flights.opensky import FlightState
+from backend.models import Flight, Policy
+from backend.policies.routes import _policy_created_payload
+
+
+class RecordingBroadcaster:
+    def __init__(self) -> None:
+        self.messages: list[dict] = []
+
+    async def broadcast(self, message: dict) -> None:
+        self.messages.append(message)
+
+
+def make_policy_for_payload() -> Policy:
+    return Policy(
+        id="policy-1",
+        user_id="user-1",
+        flight_id="BA178-20260614",
+        premium=10,
+        payout=80,
+        condition_json="{}",
+        created_at=1_779_926_400,
+    )
+
+
+def make_flight_for_payload(*, last_state: str = "{}") -> Flight:
+    return Flight(
+        id="BA178-20260614",
+        callsign="BA178",
+        origin="LHR",
+        destination="JFK",
+        last_state=last_state,
+    )
 
 
 @pytest.fixture
@@ -31,6 +63,8 @@ async def app_client(monkeypatch, tmp_path):
     monkeypatch.setattr(google, "verify_id_token", fake_verify)
 
     app = create_app()
+    broadcaster = RecordingBroadcaster()
+    app.state.broadcaster = broadcaster
     engine = get_engine()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -60,6 +94,7 @@ async def app_client(monkeypatch, tmp_path):
     )
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="https://test") as client:
+        client._test_broadcaster = broadcaster
         await client.post("/auth/google", json={"id_token": "v"})
         yield client
 
@@ -80,6 +115,70 @@ async def test_create_policy_returns_policy_with_payout(app_client: AsyncClient)
     assert body["premium"] == 10
     assert body["payout"] > 0
     assert body["status"] == "active"
+
+
+@pytest.mark.asyncio
+async def test_create_policy_broadcasts_policy_created_without_changing_response_schema(
+    app_client: AsyncClient,
+):
+    res = await app_client.post(
+        "/policies",
+        json={
+            "flight_id": "BA178-20260614",
+            "premium": 10,
+        },
+    )
+    assert res.status_code == 201, res.text
+    body = res.json()
+    assert set(body) == {
+        "id",
+        "flight_id",
+        "premium",
+        "payout",
+        "status",
+        "contract_ref",
+        "created_at",
+    }
+
+    broadcaster = app_client._test_broadcaster
+    policy_events = [
+        message for message in broadcaster.messages if message["type"] == "policy.created"
+    ]
+    assert len(policy_events) == 1
+    payload = policy_events[0]["payload"]
+    assert payload["policy_id"] == body["id"]
+    assert payload["flight_id"] == "BA178-20260614"
+    assert payload["source"] == "real"
+    assert payload["created_at"] == body["created_at"]
+    assert payload["callsign"] == "BA178"
+    assert payload["longitude"] == -0.4
+    assert payload["latitude"] == 51.4
+
+
+def test_policy_created_payload_omits_coordinates_when_unavailable():
+    payload = _policy_created_payload(
+        make_policy_for_payload(),
+        make_flight_for_payload(),
+        cached_states=[],
+    )
+
+    assert payload["policy_id"] == "policy-1"
+    assert payload["flight_id"] == "BA178-20260614"
+    assert payload["source"] == "real"
+    assert payload["callsign"] == "BA178"
+    assert "longitude" not in payload
+    assert "latitude" not in payload
+
+
+def test_policy_created_payload_uses_last_state_when_cache_has_no_match():
+    payload = _policy_created_payload(
+        make_policy_for_payload(),
+        make_flight_for_payload(last_state='{"longitude": -73.78, "latitude": 40.64}'),
+        cached_states=[],
+    )
+
+    assert payload["longitude"] == -73.78
+    assert payload["latitude"] == 40.64
 
 
 @pytest.mark.asyncio

@@ -1,0 +1,79 @@
+.cinema-heatmap-bg {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+
+.heatmap-bg-layer {
+  opacity: 0.72;
+  transform-origin: center;
+}
+
+.heatmap-bg-layer-animated {
+  animation-duration: 5.8s;
+  animation-iteration-count: infinite;
+  animation-name: heatmap-breath-opacity;
+  animation-timing-function: ease-in-out;
+}
+
+.heatmap-bg-layer-static {
+  opacity: 0.68;
+}
+
+.heatmap-focus {
+  mix-blend-mode: screen;
+}
+
+@keyframes heatmap-breath-opacity {
+  0%,
+  100% {
+    opacity: 0.52;
+    transform: scale(0.995);
+  }
+  50% {
+    opacity: 0.84;
+    transform: scale(1.015);
+  }
+}
+
+.cinema-traildraw {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+
+.traildraw-path {
+  fill: none;
+  stroke: var(--accent-radar, #00ff9d);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 3;
+  filter: drop-shadow(0 0 9px rgba(0, 255, 157, 0.48));
+}
+
+.traildraw-path-animated {
+  animation-duration: 2.8s;
+  animation-fill-mode: both;
+  animation-name: traildraw-dash-reveal;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+}
+
+.traildraw-path-static {
+  opacity: 0.9;
+}
+
+@keyframes traildraw-dash-reveal {
+  0% {
+    opacity: 0;
+    stroke-dashoffset: 100;
+  }
+  12% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.92;
+    stroke-dashoffset: 0;
+  }
+}

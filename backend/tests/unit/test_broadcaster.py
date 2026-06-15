@@ -41,5 +41,9 @@ async def test_send_to_user_delivers_only_to_target():
 def test_event_type_enum_values():
     assert EventType.STATE_UPDATE.value == "state_update"
     assert EventType.FLARE.value == "flare"
+    assert EventType.POLICY_CREATED.value == "policy.created"
+    assert EventType.CLAIM_TRIGGERED.value == "claim.triggered"
+    assert EventType.CLAIM_SETTLED.value == "claim.settled"
+    assert EventType.FLIGHT_LANDED.value == "flight.landed"
     assert EventType.TOAST.value == "toast"
     assert EventType.HELLO.value == "hello"
