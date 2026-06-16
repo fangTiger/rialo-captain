@@ -1,6 +1,20 @@
 import { useMemo } from "react";
 import { matches } from "../components/search/searchMatch";
-import { useFlights } from "./useFlights";
+import { useFlights, type FlightPublic } from "./useFlights";
+
+export interface SearchFlightResult extends FlightPublic {
+  id: string;
+  flight_id: string;
+}
+
+function todaySuffix(): string {
+  return new Date().toISOString().slice(0, 10).replaceAll("-", "");
+}
+
+function withFlightId(flight: FlightPublic): SearchFlightResult {
+  const id = `${flight.callsign.trim()}-${todaySuffix()}`;
+  return { ...flight, id, flight_id: id };
+}
 
 export function useSearchFlights(query: string) {
   const { flights, isLoading } = useFlights();
@@ -14,7 +28,7 @@ export function useSearchFlights(query: string) {
   }, [flights, normalizedQuery]);
 
   return {
-    results: matchedFlights.slice(0, 10),
+    results: matchedFlights.slice(0, 10).map(withFlightId),
     totalMatches: matchedFlights.length,
     isLoading,
   };

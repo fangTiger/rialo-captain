@@ -12,6 +12,7 @@ export interface FlightPublic {
   on_ground: boolean;
   origin?: string | null;
   destination?: string | null;
+  delay_rate?: number | null;
 }
 
 export interface LiveResponse {

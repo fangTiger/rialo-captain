@@ -29,31 +29,31 @@
 
 ## 4. 前端 · SearchPalette 组件 (静态结构)
 
-- [ ] 4.1 新建 `frontend/src/components/search/SearchPalette.tsx`: props `{ open: boolean; onClose: () => void }`; open=false 时不渲染
-- [ ] 4.2 渲染结构: overlay (rgba(0,0,0,0.5), 全屏, z-index 90) + modal (640px 宽, 距顶 15vh, 居中, surface-1 + border-emphasis)
-- [ ] 4.3 modal 内 3 区: header (title "Search flights" + "esc" 提示), input (48px 高, font-mono 18px, surface-0), results 区, footer hint ("↑↓ navigate   ↵ open   esc close")
-- [ ] 4.4 内部 useState `query` 与 `selectedIndex`; open 变 true 时 query 清空、selectedIndex=0、输入框 autoFocus
-- [ ] 4.5 点击 overlay 调 `onClose`; 点击 modal 内不冒泡到 overlay
+- [x] 4.1 新建 `frontend/src/components/search/SearchPalette.tsx`: props `{ open: boolean; onClose: () => void }`; open=false 时不渲染
+- [x] 4.2 渲染结构: overlay (rgba(0,0,0,0.5), 全屏, z-index 90) + modal (640px 宽, 距顶 15vh, 居中, surface-1 + border-emphasis)
+- [x] 4.3 modal 内 3 区: header (title "Search flights" + "esc" 提示), input (48px 高, font-mono 18px, surface-0), results 区, footer hint ("↑↓ navigate   ↵ open   esc close")
+- [x] 4.4 内部 useState `query` 与 `selectedIndex`; open 变 true 时 query 清空、selectedIndex=0、输入框 autoFocus
+- [x] 4.5 点击 overlay 调 `onClose`; 点击 modal 内不冒泡到 overlay
 
 ## 5. 前端 · SearchPalette 结果渲染
 
-- [ ] 5.1 在 SearchPalette 内调用 `useSearchFlights(query)` 取 `results / totalMatches / isLoading`
-- [ ] 5.2 空 query 时 results 区显示 `Type a callsign or airport code · e.g. SFO, JFK, UAL2351`
-- [ ] 5.3 非空 query 但 results 空时显示 `No flight matches "{query}"`
-- [ ] 5.4 isLoading 时输入框 placeholder 显示 `Loading flights...`, results 区灰显
-- [ ] 5.5 渲染每行 5 列 grid: callsign(120px) / route "{origin} → {destination}" 或 "—" (1fr) / delay_rate% (80px) / status chip (120px) / selected indicator "←" (24px, 仅 selectedIndex 行显示)
-- [ ] 5.6 选中行视觉: surface-2 背景 + 左侧 2px accent-radar 竖条; 鼠标 hover 同步设置 selectedIndex
-- [ ] 5.7 totalMatches > 10 时 results 列表底部追加灰字 `+{totalMatches - 10} more · refine your query`
+- [x] 5.1 在 SearchPalette 内调用 `useSearchFlights(query)` 取 `results / totalMatches / isLoading`
+- [x] 5.2 空 query 时 results 区显示 `Type a callsign or airport code · e.g. SFO, JFK, UAL2351`
+- [x] 5.3 非空 query 但 results 空时显示 `No flight matches "{query}"`
+- [x] 5.4 isLoading 时输入框 placeholder 显示 `Loading flights...`, results 区灰显
+- [x] 5.5 渲染每行 5 列 grid: callsign(120px) / route "{origin} → {destination}" 或 "—" (1fr) / delay_rate% (80px) / status chip (120px) / selected indicator "←" (24px, 仅 selectedIndex 行显示)
+- [x] 5.6 选中行视觉: surface-2 背景 + 左侧 2px accent-radar 竖条; 鼠标 hover 同步设置 selectedIndex
+- [x] 5.7 totalMatches > 10 时 results 列表底部追加灰字 `+{totalMatches - 10} more · refine your query`
 
 ## 6. 前端 · SearchPalette 键盘交互
 
-- [ ] 6.1 SearchPalette 内监听输入框 keydown: ↑ 减 selectedIndex (clamp ≥0), ↓ 加 selectedIndex (clamp ≤ results.length-1)
-- [ ] 6.2 Enter 触发跳转: `navigate('/flight/' + results[selectedIndex].id, { state: { from: location.pathname } })`; 然后调 onClose
-- [ ] 6.3 注意: results 中航班 id 需后端 callsign + date 构造, 但 useFlights 返回的 FlightPublic 当前没 id 字段 (只有 icao24/callsign), 需要确认 navigate 目标 - 用 callsign 作为 id 或要求 hook 额外提供 flight_id
-- [ ] 6.4 (关键) 在 useSearchFlights 中, 对每个 result 追加 `flight_id` 字段: `${callsign}-${YYYYMMDD today}`, 与 RouteRow 原逻辑一致 - 因 P0-3 已修 RouteRow 用真实后端 flight_id, 此处可暂用 today 拼接, 或如有 `/flights/known` 等待补; **默认用 today 拼接, FlightDetail 已能 fail-soft 404**
-- [ ] 6.5 Esc 触发 onClose
-- [ ] 6.6 新建 `frontend/src/tests/search-palette.test.tsx`: 覆盖 open/close / 输入触发结果渲染 / ↑↓ 改 selectedIndex / Enter 触发 navigate (mock useLocation 返回 pathname='/policies' 验证 state.from) / 点击行触发 navigate / Esc 关闭 / overlay 点击关闭 / 空态 / no-match / 溢出 +N more
-- [ ] 6.7 验证: `cd frontend && pnpm test search-palette -- --run`
+- [x] 6.1 SearchPalette 内监听输入框 keydown: ↑ 减 selectedIndex (clamp ≥0), ↓ 加 selectedIndex (clamp ≤ results.length-1)
+- [x] 6.2 Enter 触发跳转: `navigate('/flight/' + results[selectedIndex].id, { state: { from: location.pathname } })`; 然后调 onClose
+- [x] 6.3 注意: results 中航班 id 需后端 callsign + date 构造, 但 useFlights 返回的 FlightPublic 当前没 id 字段 (只有 icao24/callsign), 需要确认 navigate 目标 - 用 callsign 作为 id 或要求 hook 额外提供 flight_id
+- [x] 6.4 (关键) 在 useSearchFlights 中, 对每个 result 追加 `flight_id` 字段: `${callsign}-${YYYYMMDD today}`, 与 RouteRow 原逻辑一致 - 因 P0-3 已修 RouteRow 用真实后端 flight_id, 此处可暂用 today 拼接, 或如有 `/flights/known` 等待补; **默认用 today 拼接, FlightDetail 已能 fail-soft 404**
+- [x] 6.5 Esc 触发 onClose
+- [x] 6.6 新建 `frontend/src/tests/search-palette.test.tsx`: 覆盖 open/close / 输入触发结果渲染 / ↑↓ 改 selectedIndex / Enter 触发 navigate (mock useLocation 返回 pathname='/policies' 验证 state.from) / 点击行触发 navigate / Esc 关闭 / overlay 点击关闭 / 空态 / no-match / 溢出 +N more
+- [x] 6.7 验证: `cd frontend && pnpm test search-palette -- --run`
 
 ## 7. 前端 · SearchHotkey 全局监听
 

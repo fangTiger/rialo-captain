@@ -1,5 +1,5 @@
 import { renderHook } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FlightPublic } from "../hooks/useFlights";
 import { useSearchFlights } from "../hooks/useSearchFlights";
 
@@ -33,8 +33,13 @@ function flight(overrides: Partial<FlightPublic> = {}): FlightPublic {
 
 describe("useSearchFlights", () => {
   beforeEach(() => {
+    vi.useRealTimers();
     flightsState.flights = [];
     flightsState.isLoading = false;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("returns empty results and zero total for blank query", () => {
@@ -76,5 +81,16 @@ describe("useSearchFlights", () => {
 
     expect(result.current.results).toHaveLength(10);
     expect(result.current.totalMatches).toBe(12);
+  });
+
+  it("adds a today flight id fallback to each result", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-16T12:00:00Z"));
+    flightsState.flights = [flight({ callsign: "UAL2351" })];
+
+    const { result } = renderHook(() => useSearchFlights("UAL"));
+
+    expect(result.current.results[0].flight_id).toBe("UAL2351-20260616");
+    expect(result.current.results[0].id).toBe("UAL2351-20260616");
   });
 });
