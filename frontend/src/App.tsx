@@ -11,6 +11,7 @@ import { ProtectedRoute } from "./auth/ProtectedRoute";
 import { TopNav } from "./components/shell/TopNav";
 import { StatusBar } from "./components/shell/StatusBar";
 import { SearchHotkey } from "./components/search/SearchHotkey";
+import { ToastRenderer } from "./components/shell/ToastRenderer";
 import { useWebSocket } from "./hooks/useWebSocket";
 
 function AppShell({ children }: { children: ReactNode }) {
@@ -95,6 +96,7 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <SearchHotkey />
+      <ToastRenderer />
     </BrowserRouter>
   );
 }

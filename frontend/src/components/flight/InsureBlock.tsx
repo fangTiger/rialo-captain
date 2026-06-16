@@ -1,13 +1,15 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { apiFetch } from "../../api/client";
 import { PremiumPicker } from "../drawer/PremiumPicker";
 import { useMe } from "../../hooks/useMe";
 import { usePolicies } from "../../hooks/usePolicies";
+import { useEventStore } from "../../store/eventStore";
 import { multiplierFor } from "./multiplier";
 
 interface Props {
   flightId: string;
+  callsign: string;
   delayRate: number;
   hasActivePolicy: boolean;
   activePolicyCount: number;
@@ -15,10 +17,14 @@ interface Props {
 
 export function InsureBlock({
   flightId,
+  callsign,
   delayRate,
   hasActivePolicy,
   activePolicyCount,
 }: Props) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const addToast = useEventStore((state) => state.addToast);
   const { refresh: refreshPolicies } = usePolicies();
   const { refresh: refreshMe } = useMe();
   const [premium, setPremium] = useState(10);
@@ -35,9 +41,20 @@ export function InsureBlock({
         body: JSON.stringify({ flight_id: flightId, premium }),
       });
       await Promise.all([refreshPolicies(), refreshMe()]);
+      setBusy(false);
+      addToast({
+        id: `insure-${Date.now()}`,
+        message: `✓ Insured · ${callsign} · ${premium} RIA`,
+      });
+      const target =
+        typeof location.state === "object" &&
+        location.state !== null &&
+        "from" in location.state
+          ? String((location.state as { from: unknown }).from)
+          : "/";
+      navigate(target);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
-    } finally {
       setBusy(false);
     }
   }

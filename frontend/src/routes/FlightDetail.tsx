@@ -92,6 +92,7 @@ export function FlightDetail() {
       <DelayHistogram delayRate={delayRate ?? 0} samples={samples ?? 0} />
       <InsureBlock
         flightId={flightId}
+        callsign={callsign}
         delayRate={delayRate ?? 0}
         hasActivePolicy={activePolicyCount > 0}
         activePolicyCount={activePolicyCount}
