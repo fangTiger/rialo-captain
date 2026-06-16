@@ -38,7 +38,11 @@ class FlightService:
 
     async def hot_routes(self, *, limit: int = 20):
         stmt = (
-            select(Flight.callsign, func.count(Policy.id).label("policy_count"))
+            select(
+                Flight.callsign,
+                func.max(Flight.id).label("flight_id"),
+                func.count(Policy.id).label("policy_count"),
+            )
             .select_from(Policy)
             .join(Flight, Flight.id == Policy.flight_id)
             .group_by(Flight.callsign)
@@ -47,11 +51,12 @@ class FlightService:
         )
         rows = (await self._session.execute(stmt)).all()
         results = []
-        for callsign, count in rows:
+        for callsign, flight_id, count in rows:
             stats = await self.delay_stats(callsign=callsign)
             results.append(
                 {
                     "callsign": callsign,
+                    "flight_id": flight_id,
                     "policy_count": int(count),
                     "delay_rate": stats.delay_rate,
                     "samples": stats.samples,

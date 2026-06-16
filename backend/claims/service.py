@@ -36,6 +36,13 @@ class ClaimsService:
         await self._session.flush()
         return claim
 
-    async def recent(self, limit: int = 50) -> Sequence[Claim]:
-        stmt = select(Claim).order_by(Claim.settled_at.desc(), Claim.id.desc()).limit(limit)
-        return (await self._session.execute(stmt)).scalars().all()
+    async def recent(self, limit: int = 50, flight_id: str | None = None) -> Sequence[tuple[Claim, str]]:
+        stmt = (
+            select(Claim, Policy.flight_id)
+            .join(Policy, Policy.id == Claim.policy_id)
+            .order_by(Claim.settled_at.desc(), Claim.id.desc())
+            .limit(limit)
+        )
+        if flight_id is not None:
+            stmt = stmt.where(Policy.flight_id == flight_id)
+        return (await self._session.execute(stmt)).all()

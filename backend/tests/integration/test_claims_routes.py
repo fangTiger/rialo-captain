@@ -79,3 +79,42 @@ async def test_claims_recent_returns_paid_claims(app_client: AsyncClient):
     assert item["delay_minutes"] == 45
     assert item["signature"].startswith("0x")
     assert item["settle_duration_ms"] == 900
+
+
+@pytest.mark.asyncio
+async def test_claims_recent_filters_by_flight_id(app_client: AsyncClient):
+    async with get_session_factory()() as s:
+        user = await make_user(s, email="second@y.com")
+        flight = await make_flight(s, callsign="UA900", date="20260615")
+        policy = Policy(
+            user_id=user.id,
+            flight_id=flight.id,
+            premium=10,
+            payout=60,
+            condition_json="{}",
+            status=PolicyStatus.PAID,
+        )
+        s.add(policy)
+        await s.flush()
+        s.add(
+            Claim(
+                policy_id=policy.id,
+                payout=60,
+                delay_minutes=31,
+                signature="0x" + "b" * 64,
+                settle_duration_ms=700,
+            )
+        )
+        await s.commit()
+
+    all_res = await app_client.get("/claims/recent")
+    assert all_res.status_code == 200
+    all_items = all_res.json()
+    assert len(all_items) == 2
+    assert {item["flight_id"] for item in all_items} == {"BA178-20260614", "UA900-20260615"}
+
+    filtered_res = await app_client.get("/claims/recent", params={"flight_id": "UA900-20260615"})
+    assert filtered_res.status_code == 200
+    filtered_items = filtered_res.json()
+    assert len(filtered_items) == 1
+    assert filtered_items[0]["flight_id"] == "UA900-20260615"

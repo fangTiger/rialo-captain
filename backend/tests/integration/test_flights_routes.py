@@ -2,8 +2,9 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from backend.app import create_app, get_flight_cache
-from backend.db import Base, get_engine
+from backend.db import Base, get_engine, get_session_factory
 from backend.flights.opensky import FlightState
+from backend.tests.factories import make_flight
 
 
 @pytest.fixture
@@ -63,3 +64,20 @@ async def test_live_returns_cached_states(app_client: AsyncClient):
 async def test_flight_detail_returns_404_when_unknown(app_client: AsyncClient):
     res = await app_client.get("/flights/UNKNOWN-20260613")
     assert res.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_flight_detail_returns_live_delay_minutes(app_client: AsyncClient):
+    async with get_session_factory()() as s:
+        delayed = await make_flight(s, callsign="BA178", date="20260614")
+        delayed.last_state = '{"delay_minutes": 12}'
+        missing = await make_flight(s, callsign="UA900", date="20260615")
+        await s.commit()
+
+    delayed_res = await app_client.get(f"/flights/{delayed.id}")
+    assert delayed_res.status_code == 200
+    assert delayed_res.json()["live_delay_minutes"] == 12
+
+    missing_res = await app_client.get(f"/flights/{missing.id}")
+    assert missing_res.status_code == 200
+    assert missing_res.json()["live_delay_minutes"] is None

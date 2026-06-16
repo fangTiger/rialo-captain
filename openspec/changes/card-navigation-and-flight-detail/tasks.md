@@ -4,24 +4,24 @@
 
 ## 1. 后端 · ClaimsService 加 flight_id 过滤
 
-- [ ] 1.1 修改 `backend/claims/service.py` 的 `ClaimsService.recent`，签名加 `flight_id: str | None = None`；为 None 时行为不变，非 None 时 join `Policy` 过滤 `Policy.flight_id == flight_id`；返回结果同时 select `Policy.flight_id`
-- [ ] 1.2 修改 `backend/claims/routes.py` 的 `claims_recent` 接受 `flight_id: str | None = Query(None)`，转发给 service；`ClaimPublic` 响应模型新增 `flight_id: str` 字段
-- [ ] 1.3 在 `backend/tests/integration/test_admin_routes.py` 或新建 `test_claims_routes.py` 加测试：seed 2 flight 各 1 claim，`GET /claims/recent` 全量返回 2 条，`GET /claims/recent?flight_id=X` 仅返回 1 条且 `flight_id` 字段正确
-- [ ] 1.4 验证：`pytest backend/tests/integration/test_claims_routes.py -v`
+- [x] 1.1 修改 `backend/claims/service.py` 的 `ClaimsService.recent`，签名加 `flight_id: str | None = None`；为 None 时行为不变，非 None 时 join `Policy` 过滤 `Policy.flight_id == flight_id`；返回结果同时 select `Policy.flight_id`
+- [x] 1.2 修改 `backend/claims/routes.py` 的 `claims_recent` 接受 `flight_id: str | None = Query(None)`，转发给 service；`ClaimPublic` 响应模型新增 `flight_id: str` 字段
+- [x] 1.3 在 `backend/tests/integration/test_admin_routes.py` 或新建 `test_claims_routes.py` 加测试：seed 2 flight 各 1 claim，`GET /claims/recent` 全量返回 2 条，`GET /claims/recent?flight_id=X` 仅返回 1 条且 `flight_id` 字段正确
+- [x] 1.4 验证：`pytest backend/tests/integration/test_claims_routes.py -v`
 
 ## 2. 后端 · hot_routes 返回真实 flight_id
 
-- [ ] 2.1 修改 `backend/flights/service.py:39-60` 的 `hot_routes`，SELECT 中加入对应 callsign 下最新 Flight.id（用 `func.max(Flight.id)` 配合 GROUP BY callsign，或 subquery 取 max created_at 的 id）；返回 dict 加 `flight_id` 字段
-- [ ] 2.2 修改 `backend/flights/routes.py` 的 `hot_routes` endpoint 响应模型（如有 pydantic 模型则补字段）
-- [ ] 2.3 在 `backend/tests/unit/test_flight_service.py` 或新建测试：seed 同 callsign 多 Flight，验证 `hot_routes` 返回的 `flight_id` 是最新那条；额外验证返回的 `flight_id` 一定能用 `service.get_flight()` 查到
-- [ ] 2.4 验证：`pytest backend/tests/integration/test_seed_demo.py backend/tests -k hot_routes -v`
+- [x] 2.1 修改 `backend/flights/service.py:39-60` 的 `hot_routes`，SELECT 中加入对应 callsign 下最新 Flight.id（用 `func.max(Flight.id)` 配合 GROUP BY callsign，或 subquery 取 max created_at 的 id）；返回 dict 加 `flight_id` 字段
+- [x] 2.2 修改 `backend/flights/routes.py` 的 `hot_routes` endpoint 响应模型（如有 pydantic 模型则补字段）
+- [x] 2.3 在 `backend/tests/unit/test_flight_service.py` 或新建测试：seed 同 callsign 多 Flight，验证 `hot_routes` 返回的 `flight_id` 是最新那条；额外验证返回的 `flight_id` 一定能用 `service.get_flight()` 查到
+- [x] 2.4 验证：`pytest backend/tests/integration/test_seed_demo.py backend/tests -k hot_routes -v`
 
 ## 3. 后端 · flights/:id 加 live_delay_minutes
 
-- [ ] 3.1 修改 `backend/flights/routes.py:44-50` 的 `FlightDetail` pydantic 模型新增 `live_delay_minutes: int | None = None`
-- [ ] 3.2 在 `flight_detail` endpoint 解析 `flight.last_state` JSON 取 `delay_minutes` 字段（fail-soft：解析失败或字段缺失返回 None）
-- [ ] 3.3 在 `backend/tests/integration` 加测试：seed 一个 Flight 带 `last_state={"delay_minutes": 12}`，验证响应 `live_delay_minutes === 12`；seed 另一个无该字段的，验证 `live_delay_minutes === None`
-- [ ] 3.4 验证：`pytest backend/tests -k flight_detail -v`
+- [x] 3.1 修改 `backend/flights/routes.py:44-50` 的 `FlightDetail` pydantic 模型新增 `live_delay_minutes: int | None = None`
+- [x] 3.2 在 `flight_detail` endpoint 解析 `flight.last_state` JSON 取 `delay_minutes` 字段（fail-soft：解析失败或字段缺失返回 None）
+- [x] 3.3 在 `backend/tests/integration` 加测试：seed 一个 Flight 带 `last_state={"delay_minutes": 12}`，验证响应 `live_delay_minutes === 12`；seed 另一个无该字段的，验证 `live_delay_minutes === None`
+- [x] 3.4 验证：`pytest backend/tests -k flight_detail -v`
 
 ## 4. 前端 · 类型与 hooks 同步
 

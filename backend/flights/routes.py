@@ -1,3 +1,4 @@
+import json
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -48,10 +49,36 @@ class FlightDetail(BaseModel):
     destination: str
     delay_rate: float
     samples: int
+    live_delay_minutes: int | None = None
+
+
+class HotRoutePublic(BaseModel):
+    callsign: str
+    flight_id: str
+    policy_count: int
+    delay_rate: float
+    samples: int
 
 
 def _cache_from(request: Request) -> FlightCache:
     return request.app.state.flight_cache
+
+
+def _live_delay_minutes_from_last_state(last_state: str) -> int | None:
+    """从航班快照中读取当前延误分钟数，缺失或格式异常时降级为空。"""
+    try:
+        state = json.loads(last_state or "{}")
+    except (TypeError, json.JSONDecodeError):
+        return None
+
+    value = state.get("delay_minutes") if isinstance(state, dict) else None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    return None
 
 
 @router.get("/flights/live", response_model=LiveResponse)
@@ -120,12 +147,13 @@ async def flight_detail(
         destination=flight.destination,
         delay_rate=stats.delay_rate,
         samples=stats.samples,
+        live_delay_minutes=_live_delay_minutes_from_last_state(flight.last_state),
     )
 
 
-@router.get("/routes/hot")
+@router.get("/routes/hot", response_model=list[HotRoutePublic])
 async def hot_routes(
     session: Annotated[AsyncSession, Depends(get_session)],
     limit: int = Query(20, ge=1, le=100),
-):
+) -> list[HotRoutePublic]:
     return await FlightService(session).hot_routes(limit=limit)
