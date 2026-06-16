@@ -10,6 +10,8 @@ export interface FlightPublic {
   velocity: number | null;
   heading: number | null;
   on_ground: boolean;
+  origin?: string | null;
+  destination?: string | null;
 }
 
 export interface LiveResponse {

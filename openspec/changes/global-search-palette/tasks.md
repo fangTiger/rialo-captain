@@ -15,17 +15,17 @@
 
 ## 2. 前端 · FlightPublic 类型同步 + searchMatch 工具
 
-- [ ] 2.1 修改 `frontend/src/hooks/useFlights.ts`: `FlightPublic` interface 加 `origin?: string; destination?: string;`
-- [ ] 2.2 新建 `frontend/src/components/search/searchMatch.ts`: 导出 `matches(flight: FlightPublic, query: string): boolean` 函数 (实现见设计文档 §5), 大小写不敏感子串匹配 callsign + origin + destination + 组合字符串
-- [ ] 2.3 新建 `frontend/src/tests/search-match.test.ts`: 覆盖 callsign 命中 / origin 命中 / destination 命中 / "SFO->JFK" 组合 / "SFO→JFK" 箭头 / 大小写不敏感 / 空 query 返回 false / origin null callsign 仍可命中
-- [ ] 2.4 验证: `cd frontend && pnpm test search-match -- --run`
+- [x] 2.1 修改 `frontend/src/hooks/useFlights.ts`: `FlightPublic` interface 加 `origin?: string; destination?: string;`
+- [x] 2.2 新建 `frontend/src/components/search/searchMatch.ts`: 导出 `matches(flight: FlightPublic, query: string): boolean` 函数 (实现见设计文档 §5), 大小写不敏感子串匹配 callsign + origin + destination + 组合字符串
+- [x] 2.3 新建 `frontend/src/tests/search-match.test.ts`: 覆盖 callsign 命中 / origin 命中 / destination 命中 / "SFO->JFK" 组合 / "SFO→JFK" 箭头 / 大小写不敏感 / 空 query 返回 false / origin null callsign 仍可命中
+- [x] 2.4 验证: `cd frontend && pnpm test search-match -- --run`
 
 ## 3. 前端 · useSearchFlights hook
 
-- [ ] 3.1 新建 `frontend/src/hooks/useSearchFlights.ts`: 包装 `useFlights()`, 用 `useMemo` 计算 `results` (filter + sort by callsign + slice 10) 与 `totalMatches` (filter 后的长度)
-- [ ] 3.2 hook 返回 `{ results, totalMatches, isLoading }`; 空 query 时 results 和 totalMatches 都为 0/空数组
-- [ ] 3.3 新建 `frontend/src/tests/use-search-flights.test.ts`: 覆盖空 query / 命中排序 / 截 10 / totalMatches 反映真实总数
-- [ ] 3.4 验证: `cd frontend && pnpm test use-search-flights -- --run`
+- [x] 3.1 新建 `frontend/src/hooks/useSearchFlights.ts`: 包装 `useFlights()`, 用 `useMemo` 计算 `results` (filter + sort by callsign + slice 10) 与 `totalMatches` (filter 后的长度)
+- [x] 3.2 hook 返回 `{ results, totalMatches, isLoading }`; 空 query 时 results 和 totalMatches 都为 0/空数组
+- [x] 3.3 新建 `frontend/src/tests/use-search-flights.test.ts`: 覆盖空 query / 命中排序 / 截 10 / totalMatches 反映真实总数
+- [x] 3.4 验证: `cd frontend && pnpm test use-search-flights -- --run`
 
 ## 4. 前端 · SearchPalette 组件 (静态结构)
 
