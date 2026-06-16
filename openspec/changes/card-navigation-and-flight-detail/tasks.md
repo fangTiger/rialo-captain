@@ -54,41 +54,41 @@
 
 ## 8. 前端 · FlightDetail 子组件 (FlightHero)
 
-- [ ] 8.1 新建 `frontend/src/components/flight/FlightHero.tsx`：props `{ callsign, origin, destination, status }`；callsign 72px，origin→destination 用虚线箭头分隔，右侧渲染状态 chip
-- [ ] 8.2 4 种状态 chip 样式：IN-FLIGHT (accent-radar) / SCHEDULED (text-secondary) / LANDED (text-tertiary) / DELAYED (warn-amber)
-- [ ] 8.3 视觉规则：Hero 容器高 240px，padding 24px，font-mono
+- [x] 8.1 新建 `frontend/src/components/flight/FlightHero.tsx`：props `{ callsign, origin, destination, status }`；callsign 72px，origin→destination 用虚线箭头分隔，右侧渲染状态 chip
+- [x] 8.2 4 种状态 chip 样式：IN-FLIGHT (accent-radar) / SCHEDULED (text-secondary) / LANDED (text-tertiary) / DELAYED (warn-amber)
+- [x] 8.3 视觉规则：Hero 容器高 240px，padding 24px，font-mono
 
 ## 9. 前端 · FlightDetail 子组件 (FlightKPIBand)
 
-- [ ] 9.1 新建 `frontend/src/components/flight/FlightKPIBand.tsx`：props `{ delayRate, samples, multiplier, liveDelayMinutes }`；4 列等分 grid
-- [ ] 9.2 列定义：DELAY RATE (百分比)、SAMPLES (整数)、MULTIPLIER (`{n}×` 一位小数)、LIVE STATUS (有值显示 `+{n} min`，null 显示 `—`)
-- [ ] 9.3 复用 `<KPIBand>` 的视觉 token（border / font-mono / letterSpacing）
+- [x] 9.1 新建 `frontend/src/components/flight/FlightKPIBand.tsx`：props `{ delayRate, samples, multiplier, liveDelayMinutes }`；4 列等分 grid
+- [x] 9.2 列定义：DELAY RATE (百分比)、SAMPLES (整数)、MULTIPLIER (`{n}×` 一位小数)、LIVE STATUS (有值显示 `+{n} min`，null 显示 `—`)
+- [x] 9.3 复用 `<KPIBand>` 的视觉 token（border / font-mono / letterSpacing）
 
 ## 10. 前端 · FlightDetail 子组件 (InsureBlock)
 
-- [ ] 10.1 新建 `frontend/src/components/flight/InsureBlock.tsx`：props `{ flightId, delayRate, hasActivePolicy, activePolicyCount }`
-- [ ] 10.2 默认渲染：复用 `PremiumPicker` + 计算 estimated payout（用 `BuyDrawer.tsx` 的 `multiplierFor` 函数，抽到 `frontend/src/components/flight/multiplier.ts` 共享）+ Confirm 按钮调 `POST /policies`
-- [ ] 10.3 已有 active policy 时整体替换为提示卡："You hold {N} active polic(y|ies) on this flight · view in HANGAR →"（Link 到 `/policies`）
-- [ ] 10.4 成功创建保单后刷新 `usePolicies()` 与 `useMe()`
+- [x] 10.1 新建 `frontend/src/components/flight/InsureBlock.tsx`：props `{ flightId, delayRate, hasActivePolicy, activePolicyCount }`
+- [x] 10.2 默认渲染：复用 `PremiumPicker` + 计算 estimated payout（用 `BuyDrawer.tsx` 的 `multiplierFor` 函数，抽到 `frontend/src/components/flight/multiplier.ts` 共享）+ Confirm 按钮调 `POST /policies`
+- [x] 10.3 已有 active policy 时整体替换为提示卡："You hold {N} active polic(y|ies) on this flight · view in HANGAR →"（Link 到 `/policies`）
+- [x] 10.4 成功创建保单后刷新 `usePolicies()` 与 `useMe()`
 
 ## 11. 前端 · FlightDetail 子组件 (RelatedPolicies / RelatedClaims)
 
-- [ ] 11.1 新建 `frontend/src/components/flight/RelatedPolicies.tsx`：props `{ flightId }`；用 `usePolicies()` + client-side filter `flight_id === flightId`；为空显示空态文案 "No policies on this flight"
-- [ ] 11.2 新建 `frontend/src/components/flight/RelatedClaims.tsx`：props `{ flightId }`；用 `useClaimsForFlight(flightId)`；为空显示 "No claim yet · auto-settled when delayed ≥ 30 min"
-- [ ] 11.3 两组件内部复用现有 `HangarSlot` / `ClaimRow` 渲染（注意：避免再次点击进 FlightDetail 自己造成循环 —— from 仍 push `/flight/:id`，但 navigate 同 path 是 no-op 行为）
+- [x] 11.1 新建 `frontend/src/components/flight/RelatedPolicies.tsx`：props `{ flightId }`；用 `usePolicies()` + client-side filter `flight_id === flightId`；为空显示空态文案 "No policies on this flight"
+- [x] 11.2 新建 `frontend/src/components/flight/RelatedClaims.tsx`：props `{ flightId }`；用 `useClaimsForFlight(flightId)`；为空显示 "No claim yet · auto-settled when delayed ≥ 30 min"
+- [x] 11.3 两组件内部复用现有 `HangarSlot` / `ClaimRow` 渲染（注意：避免再次点击进 FlightDetail 自己造成循环 —— from 仍 push `/flight/:id`，但 navigate 同 path 是 no-op 行为）
 
 ## 12. 前端 · FlightDetail 子组件 (Breadcrumb)
 
-- [ ] 12.1 新建 `frontend/src/components/flight/Breadcrumb.tsx`：用 `useLocation()` 读 `state?.from`
-- [ ] 12.2 映射表：`/claims → CLAIMS FEED` / `/policies → MY HANGAR` / `/routes → HOT ROUTES` / 其它 → `TOWER`
-- [ ] 12.3 渲染 `← {label}` 字样，点击 `navigate(targetPath)`；font-mono + text-secondary
+- [x] 12.1 新建 `frontend/src/components/flight/Breadcrumb.tsx`：用 `useLocation()` 读 `state?.from`
+- [x] 12.2 映射表：`/claims → CLAIMS FEED` / `/policies → MY HANGAR` / `/routes → HOT ROUTES` / 其它 → `TOWER`
+- [x] 12.3 渲染 `← {label}` 字样，点击 `navigate(targetPath)`；font-mono + text-secondary
 
 ## 13. 前端 · FlightDetail 主页面组装
 
-- [ ] 13.1 完全重写 `frontend/src/routes/FlightDetail.tsx`：不再 `<TowerShell />`，改为独立 `<main>` 容器 maxWidth 960px
-- [ ] 13.2 组装顺序：`<Breadcrumb />` → `<FlightHero />` → `<FlightKPIBand />` → `<DelayHistogram />` → `<InsureBlock />` → grid(50/50) `<RelatedPolicies /> <RelatedClaims />`
-- [ ] 13.3 用 `useFlight(id)` 拉取详情数据；loading 显示 "loading..."；404 时顶部红 banner "Flight no longer tracked · ID: {id}"，下方块仍渲染（用 flight_id 查询，不依赖 flight 存在）
-- [ ] 13.4 新建 `frontend/src/tests/flight-detail.test.tsx`：覆盖正常渲染 / 已有 active policy / 404 / 空态 4 种场景
+- [x] 13.1 完全重写 `frontend/src/routes/FlightDetail.tsx`：不再 `<TowerShell />`，改为独立 `<main>` 容器 maxWidth 960px
+- [x] 13.2 组装顺序：`<Breadcrumb />` → `<FlightHero />` → `<FlightKPIBand />` → `<DelayHistogram />` → `<InsureBlock />` → grid(50/50) `<RelatedPolicies /> <RelatedClaims />`
+- [x] 13.3 用 `useFlight(id)` 拉取详情数据；loading 显示 "loading..."；404 时顶部红 banner "Flight no longer tracked · ID: {id}"，下方块仍渲染（用 flight_id 查询，不依赖 flight 存在）
+- [x] 13.4 新建 `frontend/src/tests/flight-detail.test.tsx`：覆盖正常渲染 / 已有 active policy / 404 / 空态 4 种场景
 
 ## 14. 前端 · Tower 大屏点击行为修正
 

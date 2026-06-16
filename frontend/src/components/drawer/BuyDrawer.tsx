@@ -3,6 +3,7 @@ import { useState } from "react";
 import useSWR from "swr";
 import { apiFetch } from "../../api/client";
 import { useMe } from "../../hooks/useMe";
+import { multiplierFor } from "../flight/multiplier";
 import { DelayHistogram } from "./DelayHistogram";
 import { PremiumPicker } from "./PremiumPicker";
 
@@ -18,12 +19,6 @@ interface FlightDetailDto {
 interface Props {
   flightId: string;
   onClose: () => void;
-}
-
-function multiplierFor(rate: number): number {
-  if (rate <= 0.05) return 8;
-  if (rate >= 0.4) return 2.5;
-  return 8 - ((rate - 0.05) / 0.35) * 5.5;
 }
 
 export function BuyDrawer({ flightId, onClose }: Props) {

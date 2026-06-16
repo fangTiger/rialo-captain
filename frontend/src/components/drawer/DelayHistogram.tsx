@@ -5,6 +5,7 @@ interface Props {
 
 export function DelayHistogram({ delayRate, samples }: Props) {
   const pct = Math.round(delayRate * 100);
+  const hasSamples = samples > 0;
   return (
     <div style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>
       <div
@@ -24,17 +25,19 @@ export function DelayHistogram({ delayRate, samples }: Props) {
           border: "1px solid var(--border-subtle)",
         }}
       >
-        <div
-          style={{
-            width: `${pct}%`,
-            height: "100%",
-            background:
-              pct > 30 ? "var(--warn-amber)" : "var(--accent-radar)",
-          }}
-        />
+        {hasSamples && (
+          <div
+            style={{
+              width: `${pct}%`,
+              height: "100%",
+              background:
+                pct > 30 ? "var(--warn-amber)" : "var(--accent-radar)",
+            }}
+          />
+        )}
       </div>
       <div style={{ marginTop: 6, color: "var(--text-tertiary)" }}>
-        {pct}% historical
+        {hasSamples ? `${pct}% historical` : "Not enough samples"}
       </div>
     </div>
   );
