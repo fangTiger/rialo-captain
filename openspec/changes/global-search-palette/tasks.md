@@ -57,21 +57,21 @@
 
 ## 7. 前端 · SearchHotkey 全局监听
 
-- [ ] 7.1 新建 `frontend/src/components/search/SearchHotkey.tsx`: 无 props; 内部 useState `open`; useEffect 注册全局 window keydown 监听
-- [ ] 7.2 keydown handler 逻辑:
+- [x] 7.1 新建 `frontend/src/components/search/SearchHotkey.tsx`: 无 props; 内部 useState `open`; useEffect 注册全局 window keydown 监听
+- [x] 7.2 keydown handler 逻辑:
   - 若 `useLocation().pathname === '/login'` 不处理 (return)
   - 若 `document.activeElement.tagName === 'INPUT' || 'TEXTAREA'`, 不响应 `/` (允许字面输入); `Cmd+K`/`Ctrl+K` 仍响应
   - 按 `/` (e.key === '/') 或 `(e.metaKey || e.ctrlKey) && e.key === 'k'`: `e.preventDefault()` + `setOpen(true)`
-- [ ] 7.3 渲染 `<SearchPalette open={open} onClose={() => setOpen(false)} />`
-- [ ] 7.4 新建 `frontend/src/tests/search-hotkey.test.tsx`: 覆盖 / 触发 / Cmd+K 触发 / Ctrl+K 触发 / 输入框聚焦时 / 不响应但 Cmd+K 仍响应 / /login pathname 不响应任何 hotkey
-- [ ] 7.5 验证: `cd frontend && pnpm test search-hotkey -- --run`
+- [x] 7.3 渲染 `<SearchPalette open={open} onClose={() => setOpen(false)} />`
+- [x] 7.4 新建 `frontend/src/tests/search-hotkey.test.tsx`: 覆盖 / 触发 / Cmd+K 触发 / Ctrl+K 触发 / 输入框聚焦时 / 不响应但 Cmd+K 仍响应 / /login pathname 不响应任何 hotkey
+- [x] 7.5 验证: `cd frontend && pnpm test search-hotkey -- --run`
 
 ## 8. 前端 · App 集成 + TopNav hint
 
-- [ ] 8.1 修改 `frontend/src/App.tsx`: 在 `<BrowserRouter>` 内、`<Routes>` 之后挂载 `<SearchHotkey />` (确保它能用 useLocation, 且在 Routes 同级渲染)
-- [ ] 8.2 修改 `frontend/src/components/shell/TopNav.tsx`: 在右侧 `BAL` 之前插入 `<span>` 显示 `PRESS /`, 样式 `var(--text-tertiary)` + font-mono 11px + letterSpacing 0.18em + marginRight 12px
-- [ ] 8.3 现有 `tower-shell.test.tsx` 等如挂载 App, 可能需要兼容 SearchHotkey 的存在 (不应破坏现有测试; 如有 break 调整 mock 或 test setup)
-- [ ] 8.4 验证: `cd frontend && pnpm tsc --noEmit && pnpm test -- --run`
+- [x] 8.1 修改 `frontend/src/App.tsx`: 在 `<BrowserRouter>` 内、`<Routes>` 之后挂载 `<SearchHotkey />` (确保它能用 useLocation, 且在 Routes 同级渲染)
+- [x] 8.2 修改 `frontend/src/components/shell/TopNav.tsx`: 在右侧 `BAL` 之前插入 `<span>` 显示 `PRESS /`, 样式 `var(--text-tertiary)` + font-mono 11px + letterSpacing 0.18em + marginRight 12px
+- [x] 8.3 现有 `tower-shell.test.tsx` 等如挂载 App, 可能需要兼容 SearchHotkey 的存在 (不应破坏现有测试; 如有 break 调整 mock 或 test setup)
+- [x] 8.4 验证: `cd frontend && pnpm tsc --noEmit && pnpm test -- --run`
 
 ## 9. 整体验证
 

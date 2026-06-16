@@ -8,6 +8,10 @@ vi.mock("../hooks/useWebSocket", () => ({
   useWebSocket: () => {},
 }));
 
+vi.mock("../components/search/SearchHotkey", () => ({
+  SearchHotkey: () => <div data-testid="search-hotkey" />,
+}));
+
 describe("App routes", () => {
   beforeEach(() => {
     window.history.pushState({}, "", "/");
@@ -112,6 +116,7 @@ describe("App routes", () => {
     );
     expect(screen.getByText("MY HANGAR")).toBeInTheDocument();
     expect(screen.getByText("990 RIA")).toBeInTheDocument();
+    expect(screen.getByTestId("search-hotkey")).toBeInTheDocument();
   });
 
   it("mounts Claims Feed at /claims inside the protected app shell", async () => {

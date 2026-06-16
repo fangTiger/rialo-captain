@@ -54,6 +54,17 @@ export function TopNav() {
         ))}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <span
+          style={{
+            color: "var(--text-tertiary)",
+            fontFamily: "var(--font-mono)",
+            fontSize: 11,
+            letterSpacing: "0.18em",
+            marginRight: 12,
+          }}
+        >
+          PRESS /
+        </span>
         <span style={{ color: "var(--text-tertiary)" }}>BAL</span>
         <span style={{ color: "var(--text-primary)" }}>
           {user?.balance ?? "—"} RIA
