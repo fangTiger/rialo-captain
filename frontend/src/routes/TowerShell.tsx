@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
 import { AutoSeeder } from "../components/cinema/AutoSeeder";
 import { CameraDirector } from "../components/cinema/CameraDirector";
 import { CinemaController } from "../components/cinema/CinemaController";
@@ -27,6 +26,7 @@ import { RadarSweep } from "../components/tower/RadarSweep";
 import { EventFeedSidebar } from "../components/tower/EventFeedSidebar";
 import { KPIBand } from "../components/tower/KPIBand";
 import { DataStaleBadge } from "../components/tower/DataStaleBadge";
+import { BuyDrawer } from "../components/drawer/BuyDrawer";
 import { useFlights, type FlightPublic } from "../hooks/useFlights";
 import {
   hangarAnchorForSize,
@@ -38,34 +38,63 @@ import type { ActiveKeyMoment } from "../components/cinema/keyMomentTimeline";
 import type { CoordinateLocator, MomentLocator } from "../components/cinema/keyMoments";
 
 export function TowerShell() {
-  const navigate = useNavigate();
   const { flights } = useFlights();
-  const protagonist = useMemo(() => chooseDemoProtagonist(flights), [flights]);
+  const [selectedFlightId, setSelectedFlightId] = useState<string | null>(null);
+  const demoSelectionOffsetRef = useRef<number | null>(null);
+  if (demoSelectionOffsetRef.current === null) {
+    demoSelectionOffsetRef.current = Math.floor(Math.random() * 1_000_000_000);
+  }
+  const demoSelectionOffset = demoSelectionOffsetRef.current;
+  const protagonist = useMemo(
+    () => chooseDemoProtagonist(flights, demoSelectionOffset),
+    [demoSelectionOffset, flights],
+  );
+  const electedFlight = useMemo(() => {
+    if (!selectedFlightId) return null;
+    const callsign = selectedFlightId.split("-")[0]?.trim().toUpperCase();
+    if (!callsign) return null;
+    return (
+      flights.find((flight) => flight.callsign.trim().toUpperCase() === callsign) ??
+      null
+    );
+  }, [selectedFlightId, flights]);
 
   return (
     <div style={{ position: "absolute", inset: 0, top: 50, bottom: 32 }}>
       <CinemaProvider
-        key={protagonist?.flightId ?? "waiting"}
         initialProtagonist={protagonist}
       >
         <CinemaController />
-        <AutoSeeder flights={flights} />
+        <AutoSeeder
+          demoSelectionOffset={demoSelectionOffset}
+          flights={flights}
+        />
         <TowerCinemaLayers
+          electedFlight={electedFlight}
           flights={flights}
           onSelectFlight={(callsign) => {
+            const normalized = callsign.trim();
+            if (!normalized) return;
             const date = new Date()
               .toISOString()
               .slice(0, 10)
               .replaceAll("-", "");
-            navigate(`/flight/${callsign}-${date}`);
+            setSelectedFlightId(`${normalized}-${date}`);
           }}
         />
       </CinemaProvider>
+      {selectedFlightId && (
+        <BuyDrawer
+          flightId={selectedFlightId}
+          onClose={() => setSelectedFlightId(null)}
+        />
+      )}
     </div>
   );
 }
 
 interface TowerCinemaLayersProps {
+  electedFlight: FlightPublic | null;
   flights: FlightPublic[];
   onSelectFlight: (callsign: string) => void;
 }
@@ -73,11 +102,13 @@ interface TowerCinemaLayersProps {
 const DEFAULT_OVERLAY_SIZE: ViewportSize = { width: 1200, height: 720 };
 
 function TowerCinemaLayers({
+  electedFlight,
   flights,
   onSelectFlight,
 }: TowerCinemaLayersProps) {
   const cinema = useCinema();
   const [mapViewport, setMapViewport] = useState<MapViewport>({ k: 1, x: 0, y: 0 });
+  const [mapSize, setMapSize] = useState<ViewportSize>(DEFAULT_OVERLAY_SIZE);
   const ambientHeatmap = useAmbientHeatmap();
   const keyMomentQueue = useKeyMomentQueue({
     cycleStartedAt: cinema.cycleStartedAt,
@@ -91,11 +122,12 @@ function TowerCinemaLayers({
     cycleStartedAt: cinema.cycleStartedAt,
     protagonist: cinema.protagonist,
     flights,
+    userElectedFlight: electedFlight,
     resetToken: cinema.storyResetId,
   });
   const trailPoints = projectTrailPoints(
     activeTrail?.points ?? null,
-    DEFAULT_OVERLAY_SIZE,
+    mapSize,
     mapViewport,
   );
   const atRisk =
@@ -106,8 +138,16 @@ function TowerCinemaLayers({
   useEffect(() => {
     if (previousStoryResetIdRef.current === cinema.storyResetId) return;
     previousStoryResetIdRef.current = cinema.storyResetId;
-    keyMomentQueue.clearAllMoments();
-  }, [cinema.storyResetId, keyMomentQueue]);
+    keyMomentQueue.resetForProtagonist({
+      flightId: cinema.protagonist?.flightId ?? null,
+      policyId: cinema.protagonist?.policyId,
+    });
+  }, [
+    cinema.protagonist?.flightId,
+    cinema.protagonist?.policyId,
+    cinema.storyResetId,
+    keyMomentQueue,
+  ]);
 
   return (
     <>
@@ -120,7 +160,7 @@ function TowerCinemaLayers({
       <MapAtmosphereLayer>
         <HeatmapBg
           points={ambientHeatmap.points}
-          size={DEFAULT_OVERLAY_SIZE}
+          size={mapSize}
           viewport={mapViewport}
         />
       </MapAtmosphereLayer>
@@ -128,7 +168,20 @@ function TowerCinemaLayers({
         {(cameraTarget) => (
           <GlobeMap
             cameraTarget={cameraTarget}
-            onViewportChange={setMapViewport}
+            onViewportChange={(viewport, size = DEFAULT_OVERLAY_SIZE) => {
+              setMapViewport((current) =>
+                current.k === viewport.k &&
+                current.x === viewport.x &&
+                current.y === viewport.y
+                  ? current
+                  : viewport,
+              );
+              setMapSize((current) =>
+                current.width === size.width && current.height === size.height
+                  ? current
+                  : size,
+              );
+            }}
             onUserGesture={cinema.interrupt}
             onSelectFlight={onSelectFlight}
             protagonistHighlight={cinema.protagonist}
@@ -167,7 +220,7 @@ function TowerCinemaLayers({
             activeMoments={keyMomentQueue.activeMoments}
             mapViewport={mapViewport}
             protagonist={cinema.protagonist}
-            size={DEFAULT_OVERLAY_SIZE}
+            size={mapSize}
           />
         </div>
         <ProtagonistBadge />

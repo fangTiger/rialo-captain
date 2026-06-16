@@ -9,9 +9,15 @@ import {
   buildTrailPoints,
   type TrailCoordinate,
 } from "./trailGeometry";
+import {
+  estimateLivePosition,
+  matchesFlightIdentity,
+} from "./flightMotion";
 import type { FlightPublic } from "../../hooks/useFlights";
 
 export const TRAIL_DRAW_TTL_MS = 3_000;
+export const TRAIL_DRAW_START_MS = 3_000;
+const TRAIL_DRAW_END_MS = TRAIL_DRAW_START_MS + TRAIL_DRAW_TTL_MS;
 
 export interface ActiveTrailDraw {
   id: string;
@@ -21,12 +27,18 @@ export interface ActiveTrailDraw {
   points: TrailCoordinate[];
 }
 
+type TrailFlight = Pick<
+  FlightPublic,
+  "callsign" | "heading" | "latitude" | "longitude" | "velocity"
+>;
+
 interface UseTrailDrawOptions {
   mode: CinemaMode;
   phase: CinemaPhase;
   cycleStartedAt: number;
   protagonist: CinemaProtagonist | null;
-  flights?: Pick<FlightPublic, "callsign" | "heading" | "velocity">[];
+  flights?: TrailFlight[];
+  userElectedFlight?: TrailFlight | null;
   resetToken?: number;
   ttlMs?: number;
 }
@@ -37,17 +49,33 @@ function callsignKey(value: string) {
 
 function findMatchingFlight(
   protagonist: CinemaProtagonist,
-  flights: Pick<FlightPublic, "callsign" | "heading" | "velocity">[],
+  flights: TrailFlight[],
 ) {
   const protagonistCallsign = callsignKey(protagonist.callsign);
   const protagonistFlightId = callsignKey(protagonist.flightId);
   return flights.find((flight) => {
-    const flightCallsign = callsignKey(flight.callsign);
     return (
-      flightCallsign === protagonistCallsign ||
-      flightCallsign === protagonistFlightId
+      matchesFlightIdentity(flight.callsign, protagonistCallsign) ||
+      matchesFlightIdentity(flight.callsign, protagonistFlightId)
     );
   });
+}
+
+function hasValidProtagonistPosition(protagonist: CinemaProtagonist) {
+  return (
+    Number.isFinite(protagonist.longitude) &&
+    Number.isFinite(protagonist.latitude)
+  );
+}
+
+function trailFlightSignature(flight: TrailFlight) {
+  return [
+    callsignKey(flight.callsign),
+    flight.longitude,
+    flight.latitude,
+    flight.heading ?? "none",
+    flight.velocity ?? "none",
+  ].join("|");
 }
 
 export function useTrailDraw({
@@ -56,18 +84,31 @@ export function useTrailDraw({
   cycleStartedAt,
   protagonist,
   flights = [],
+  userElectedFlight = null,
   resetToken = 0,
   ttlMs = TRAIL_DRAW_TTL_MS,
 }: UseTrailDrawOptions) {
   const [activeTrail, setActiveTrail] = useState<ActiveTrailDraw | null>(null);
   const triggeredKeysRef = useRef<Set<string>>(new Set());
   const timeoutRef = useRef<number | null>(null);
+  const startTimeoutRef = useRef<number | null>(null);
+  const flightSnapshotAtRef = useRef(Date.now());
+  const electedSignatureRef = useRef<string | null>(null);
+  const electedVersionRef = useRef(0);
+
+  useEffect(() => {
+    flightSnapshotAtRef.current = Date.now();
+  }, [flights]);
 
   useEffect(() => {
     return () => {
       if (timeoutRef.current !== null) {
         window.clearTimeout(timeoutRef.current);
         timeoutRef.current = null;
+      }
+      if (startTimeoutRef.current !== null) {
+        window.clearTimeout(startTimeoutRef.current);
+        startTimeoutRef.current = null;
       }
     };
   }, []);
@@ -78,43 +119,149 @@ export function useTrailDraw({
       window.clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
     }
+    if (startTimeoutRef.current !== null) {
+      window.clearTimeout(startTimeoutRef.current);
+      startTimeoutRef.current = null;
+    }
   }, [resetToken]);
 
   useEffect(() => {
-    if (mode !== "cinema" || phase !== "story" || !protagonist) return;
+    if (startTimeoutRef.current !== null) {
+      window.clearTimeout(startTimeoutRef.current);
+      startTimeoutRef.current = null;
+    }
+
+    if (userElectedFlight) {
+      const signature = trailFlightSignature(userElectedFlight);
+      if (electedSignatureRef.current !== signature) {
+        electedSignatureRef.current = signature;
+        electedVersionRef.current += 1;
+        setActiveTrail(null);
+        if (timeoutRef.current !== null) {
+          window.clearTimeout(timeoutRef.current);
+          timeoutRef.current = null;
+        }
+      }
+
+      const triggerKey = `elected:${callsignKey(userElectedFlight.callsign)}:${electedVersionRef.current}`;
+      if (triggeredKeysRef.current.has(triggerKey)) return;
+
+      const livePosition = estimateLivePosition(
+        userElectedFlight,
+        (Date.now() - flightSnapshotAtRef.current) / 1000,
+      );
+      const points = buildTrailPoints({
+        longitude: livePosition?.longitude ?? userElectedFlight.longitude,
+        latitude: livePosition?.latitude ?? userElectedFlight.latitude,
+        heading: userElectedFlight.heading,
+        velocity: userElectedFlight.velocity,
+      });
+      if (!points) return;
+
+      triggeredKeysRef.current.add(triggerKey);
+
+      const now = Date.now();
+      const trail: ActiveTrailDraw = {
+        id: `${triggerKey}:traildraw`,
+        flightId: userElectedFlight.callsign,
+        startedAt: now,
+        expiresAt: now + ttlMs,
+        points,
+      };
+
+      setActiveTrail(trail);
+
+      if (timeoutRef.current !== null) {
+        window.clearTimeout(timeoutRef.current);
+      }
+      timeoutRef.current = window.setTimeout(() => {
+        setActiveTrail((current) => (current?.id === trail.id ? null : current));
+        timeoutRef.current = null;
+      }, ttlMs);
+      return;
+    }
+
+    if (electedSignatureRef.current !== null) {
+      electedSignatureRef.current = null;
+      setActiveTrail((current) =>
+        current?.id.startsWith("elected:") ? null : current,
+      );
+      if (timeoutRef.current !== null) {
+        window.clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    }
+
+    if (
+      mode !== "cinema" ||
+      (phase !== "establish" && phase !== "zoom-in" && phase !== "story") ||
+      !protagonist ||
+      !hasValidProtagonistPosition(protagonist)
+    ) {
+      return;
+    }
 
     const triggerKey = `${cycleStartedAt}:${protagonist.flightId}`;
     if (triggeredKeysRef.current.has(triggerKey)) return;
 
-    const matchingFlight = findMatchingFlight(protagonist, flights);
-    const points = buildTrailPoints({
-      longitude: protagonist.longitude,
-      latitude: protagonist.latitude,
-      heading: matchingFlight?.heading,
-      velocity: matchingFlight?.velocity,
-    });
-    if (!points) return;
+    const activateTrail = () => {
+      const elapsedMs = Date.now() - cycleStartedAt;
+      if (elapsedMs < TRAIL_DRAW_START_MS || elapsedMs >= TRAIL_DRAW_END_MS) {
+        return;
+      }
 
-    triggeredKeysRef.current.add(triggerKey);
+      const matchingFlight = findMatchingFlight(protagonist, flights);
+      const livePosition = matchingFlight
+        ? estimateLivePosition(
+            matchingFlight,
+            (Date.now() - flightSnapshotAtRef.current) / 1000,
+          )
+        : null;
+      const trailEndpoint = livePosition ?? {
+        longitude: protagonist.longitude,
+        latitude: protagonist.latitude,
+      };
+      const points = buildTrailPoints({
+        longitude: trailEndpoint.longitude,
+        latitude: trailEndpoint.latitude,
+        heading: matchingFlight?.heading,
+        velocity: matchingFlight?.velocity,
+      });
+      if (!points) return;
 
-    const now = Date.now();
-    const trail: ActiveTrailDraw = {
-      id: `${triggerKey}:traildraw`,
-      flightId: protagonist.flightId,
-      startedAt: now,
-      expiresAt: now + ttlMs,
-      points,
+      triggeredKeysRef.current.add(triggerKey);
+
+      const now = Date.now();
+      const trail: ActiveTrailDraw = {
+        id: `${triggerKey}:traildraw`,
+        flightId: protagonist.flightId,
+        startedAt: now,
+        expiresAt: now + ttlMs,
+        points,
+      };
+
+      setActiveTrail(trail);
+
+      if (timeoutRef.current !== null) {
+        window.clearTimeout(timeoutRef.current);
+      }
+      timeoutRef.current = window.setTimeout(() => {
+        setActiveTrail((current) => (current?.id === trail.id ? null : current));
+        timeoutRef.current = null;
+      }, ttlMs);
     };
 
-    setActiveTrail(trail);
-
-    if (timeoutRef.current !== null) {
-      window.clearTimeout(timeoutRef.current);
+    const elapsedMs = Date.now() - cycleStartedAt;
+    if (elapsedMs >= TRAIL_DRAW_END_MS) return;
+    if (elapsedMs >= TRAIL_DRAW_START_MS) {
+      activateTrail();
+      return;
     }
-    timeoutRef.current = window.setTimeout(() => {
-      setActiveTrail((current) => (current?.id === trail.id ? null : current));
-      timeoutRef.current = null;
-    }, ttlMs);
+
+    startTimeoutRef.current = window.setTimeout(() => {
+      startTimeoutRef.current = null;
+      activateTrail();
+    }, TRAIL_DRAW_START_MS - elapsedMs);
   }, [
     cycleStartedAt,
     flights,
@@ -125,6 +272,11 @@ export function useTrailDraw({
     protagonist?.latitude,
     protagonist?.longitude,
     ttlMs,
+    userElectedFlight?.callsign,
+    userElectedFlight?.heading,
+    userElectedFlight?.latitude,
+    userElectedFlight?.longitude,
+    userElectedFlight?.velocity,
   ]);
 
   return { activeTrail };

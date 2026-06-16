@@ -5,13 +5,21 @@ import type { FeatureCollection, Geometry } from "geojson";
 import { apiFetch } from "../../api/client";
 import { useFlights, type FlightPublic } from "../../hooks/useFlights";
 import type { CameraTarget } from "../cinema/CinemaContext";
-import { cameraTargetToViewport } from "../cinema/cameraMath";
+import {
+  cameraTargetToViewport,
+  type ViewportSize,
+} from "../cinema/cameraMath";
+import {
+  estimateLivePosition,
+  FLIGHT_TIME_ACCEL,
+  matchesFlightIdentity,
+} from "../cinema/flightMotion";
 
 interface Props {
   cameraTarget?: CameraTarget | null;
   onUserGesture?: () => void;
   onSelectFlight?: (callsign: string) => void;
-  onViewportChange?: (viewport: Viewport) => void;
+  onViewportChange?: (viewport: Viewport, size: ViewportSize) => void;
   protagonistHighlight?: ProtagonistHighlight | null;
 }
 
@@ -37,10 +45,6 @@ const WORLD_TOPOJSON_URL =
 const MIN_K = 0.6;
 const MAX_K = 12;
 const TICK_INTERVAL_MS = 500;
-// Demo 时间加速 - 真实飞机 240 m/s 在全球 zoom 下每秒只动 0.007 像素, 肉眼不可见.
-// 加速 10× 让飞机以"分钟"为单位被看到, 同时跳变控制在 < 1 像素 (SWR 每 15s 拉新数据).
-const TIME_ACCEL = 10;
-
 export function GlobeMap({
   cameraTarget = null,
   onUserGesture,
@@ -78,8 +82,8 @@ export function GlobeMap({
 
   useEffect(() => {
     viewportRef.current = viewport;
-    onViewportChange?.(viewport);
-  }, [viewport, onViewportChange]);
+    onViewportChange?.(viewport, size);
+  }, [size, viewport, onViewportChange]);
 
   const cancelCameraAnimation = useCallback(() => {
     if (cameraRafRef.current !== null) {
@@ -261,18 +265,14 @@ export function GlobeMap({
 
   // 飞机当前应处位置 (OpenSky 数据 + velocity × 已过秒数 × TIME_ACCEL 沿 heading 方向外推)
   const livePosition = (f: PositionedFlight): [number, number] => {
-    const dtSec = Math.max(0, tick - lastFetchTickRef.current) * TIME_ACCEL;
-    if (!f.velocity || f.heading === null || f.heading === undefined) {
-      return [f.longitude, f.latitude];
-    }
-    const v = f.velocity; // m/s
-    const headingRad = ((f.heading) * Math.PI) / 180;
-    const dxM = v * Math.sin(headingRad) * dtSec;
-    const dyM = v * Math.cos(headingRad) * dtSec;
-    const dLat = dyM / 111_000;
-    const cosLat = Math.cos((f.latitude * Math.PI) / 180);
-    const dLon = dxM / (111_000 * Math.max(0.1, cosLat));
-    return [f.longitude + dLon, f.latitude + dLat];
+    const position = estimateLivePosition(
+      f,
+      Math.max(0, tick - lastFetchTickRef.current),
+      FLIGHT_TIME_ACCEL,
+    );
+    return position
+      ? [position.longitude, position.latitude]
+      : [f.longitude, f.latitude];
   };
 
   // 缩放：以鼠标位置为中心
@@ -733,22 +733,10 @@ function matchesProtagonistHighlight(
   protagonist: ProtagonistHighlight | null,
 ) {
   if (!protagonist) return false;
-  const flightCallsign = normalizeFlightKey(flight.callsign);
-  if (!flightCallsign) return false;
-
-  return [protagonist.callsign, protagonist.flightId].some((value) => {
-    const protagonistKey = normalizeFlightKey(value);
-    if (!protagonistKey) return false;
-    return (
-      protagonistKey === flightCallsign ||
-      protagonistKey.startsWith(`${flightCallsign}-`) ||
-      flightCallsign.startsWith(`${protagonistKey}-`)
-    );
-  });
-}
-
-function normalizeFlightKey(value: string | null | undefined) {
-  return value?.trim().toUpperCase().replace(/\s+/g, "") ?? "";
+  return (
+    matchesFlightIdentity(flight.callsign, protagonist.callsign) ||
+    matchesFlightIdentity(flight.callsign, protagonist.flightId)
+  );
 }
 
 const zoomBtn: React.CSSProperties = {

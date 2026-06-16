@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { MemoryRouter, Route, Routes, useParams } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { TowerShell } from "../routes/TowerShell";
 
 const cinemaState = vi.hoisted(() => ({
@@ -19,20 +19,29 @@ const cinemaState = vi.hoisted(() => ({
   },
 }));
 
+const towerHarness = vi.hoisted(() => ({
+  providerMounts: 0,
+  flights: [
+    {
+      icao24: "a1b2c3",
+      callsign: "BA178",
+      origin_country: "United Kingdom",
+      longitude: -73.78,
+      latitude: 40.64,
+      velocity: 240,
+      heading: 90,
+      on_ground: false,
+    },
+  ],
+}));
+
+const trailHarness = vi.hoisted(() => ({
+  useTrailDraw: vi.fn(() => ({ activeTrail: null })),
+}));
+
 vi.mock("../hooks/useFlights", () => ({
   useFlights: () => ({
-    flights: [
-      {
-        icao24: "a1b2c3",
-        callsign: "BA178",
-        origin_country: "United Kingdom",
-        longitude: -73.78,
-        latitude: 40.64,
-        velocity: 240,
-        heading: 90,
-        on_ground: false,
-      },
-    ],
+    flights: towerHarness.flights,
     stale: false,
     staleSeconds: 0,
     error: undefined,
@@ -40,7 +49,12 @@ vi.mock("../hooks/useFlights", () => ({
   }),
 }));
 
+vi.mock("../components/cinema/useTrailDraw", () => ({
+  useTrailDraw: trailHarness.useTrailDraw,
+}));
+
 vi.mock("../components/cinema/CinemaContext", async () => {
+  const React = await vi.importActual<typeof import("react")>("react");
   const actual = await vi.importActual<
     typeof import("../components/cinema/CinemaContext")
   >("../components/cinema/CinemaContext");
@@ -52,14 +66,20 @@ vi.mock("../components/cinema/CinemaContext", async () => {
     }: {
       children: React.ReactNode;
       initialProtagonist?: { callsign: string } | null;
-    }) => (
-      <div
-        data-testid="cinema-provider"
-        data-protagonist={initialProtagonist?.callsign ?? "none"}
-      >
-        {children}
-      </div>
-    ),
+    }) => {
+      React.useEffect(() => {
+        towerHarness.providerMounts += 1;
+      }, []);
+
+      return (
+        <div
+          data-testid="cinema-provider"
+          data-protagonist={initialProtagonist?.callsign ?? "none"}
+        >
+          {children}
+        </div>
+      );
+    },
     useCinema: () => cinemaState,
   };
 });
@@ -69,8 +89,18 @@ vi.mock("../components/cinema/CinemaController", () => ({
 }));
 
 vi.mock("../components/cinema/AutoSeeder", () => ({
-  AutoSeeder: ({ flights }: { flights: unknown[] }) => (
-    <div data-testid="auto-seeder" data-flights={flights.length} />
+  AutoSeeder: ({
+    demoSelectionOffset,
+    flights,
+  }: {
+    demoSelectionOffset?: number;
+    flights: unknown[];
+  }) => (
+    <div
+      data-testid="auto-seeder"
+      data-demo-selection-offset={demoSelectionOffset ?? "none"}
+      data-flights={flights.length}
+    />
   ),
 }));
 
@@ -124,6 +154,23 @@ vi.mock("../components/cinema/HeatmapBg", () => ({
 vi.mock("../components/cinema/TrailDraw", () => ({
   TrailDraw: ({ points }: { points: unknown[] }) => (
     <div data-testid="trail-draw" data-points={points.length} />
+  ),
+}));
+
+vi.mock("../components/drawer/BuyDrawer", () => ({
+  BuyDrawer: ({
+    flightId,
+    onClose,
+  }: {
+    flightId: string;
+    onClose: () => void;
+  }) => (
+    <div data-testid="buy-drawer" data-flight-id={flightId}>
+      buy drawer
+      <button type="button" onClick={onClose}>
+        close drawer
+      </button>
+    </div>
   ),
 }));
 
@@ -205,13 +252,33 @@ function FlightDetailProbe() {
   return <div>flight detail {id}</div>;
 }
 
+function LocationProbe() {
+  const location = useLocation();
+  return <div data-testid="location-probe">{location.pathname}</div>;
+}
+
 describe("TowerShell", () => {
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
     cinemaState.interrupt.mockReset();
+    trailHarness.useTrailDraw.mockClear();
+    towerHarness.providerMounts = 0;
+    towerHarness.flights = [
+      {
+        icao24: "a1b2c3",
+        callsign: "BA178",
+        origin_country: "United Kingdom",
+        longitude: -73.78,
+        latitude: 40.64,
+        velocity: 240,
+        heading: 90,
+        on_ground: false,
+      },
+    ];
   });
 
-  it("composes the live tower layers and navigates when a flight is selected", () => {
+  it("composes the live tower layers and opens BuyDrawer without leaving the tower", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-14T08:00:00.000Z"));
 
@@ -220,6 +287,7 @@ describe("TowerShell", () => {
         initialEntries={["/"]}
         future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
       >
+        <LocationProbe />
         <Routes>
           <Route path="/" element={<TowerShell />} />
           <Route path="/flight/:id" element={<FlightDetailProbe />} />
@@ -286,7 +354,218 @@ describe("TowerShell", () => {
 
     fireEvent.click(screen.getByText("mock globe"));
 
-    expect(screen.getByText("flight detail BA178-20260614")).toBeInTheDocument();
+    expect(screen.getByTestId("buy-drawer")).toHaveAttribute(
+      "data-flight-id",
+      "BA178-20260614",
+    );
+    expect(screen.getByTestId("location-probe")).toHaveTextContent("/");
+    expect(
+      screen.queryByText("flight detail BA178-20260614"),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("close drawer"));
+
+    expect(screen.queryByTestId("buy-drawer")).not.toBeInTheDocument();
+    expect(screen.getByTestId("location-probe")).toHaveTextContent("/");
+  });
+
+  it("passes the selected flight as the user-elected trail protagonist", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-14T08:00:00.000Z"));
+
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(trailHarness.useTrailDraw).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        userElectedFlight: null,
+      }),
+    );
+
+    fireEvent.click(screen.getByText("mock globe"));
+
+    expect(trailHarness.useTrailDraw).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        userElectedFlight: expect.objectContaining({
+          callsign: "BA178",
+          latitude: 40.64,
+          longitude: -73.78,
+        }),
+      }),
+    );
+  });
+
+  it("uses the session seed to choose a rotating initial demo protagonist", () => {
+    vi.spyOn(Math, "random").mockReturnValue(0.000000001);
+    towerHarness.flights = [
+      {
+        icao24: "a1b2c3",
+        callsign: "BA178",
+        origin_country: "United Kingdom",
+        longitude: -73.78,
+        latitude: 40.64,
+        velocity: 240,
+        heading: 90,
+        on_ground: false,
+      },
+      {
+        icao24: "d4e5f6",
+        callsign: "DL101",
+        origin_country: "United States",
+        longitude: -118.41,
+        latitude: 33.94,
+        velocity: 230,
+        heading: 80,
+        on_ground: false,
+      },
+      {
+        icao24: "abcdef",
+        callsign: "UA200",
+        origin_country: "United States",
+        longitude: -0.46,
+        latitude: 51.47,
+        velocity: 220,
+        heading: 270,
+        on_ground: false,
+      },
+    ];
+
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId("cinema-provider")).toHaveAttribute(
+      "data-protagonist",
+      "DL101",
+    );
+    expect(screen.getByTestId("auto-seeder")).toHaveAttribute(
+      "data-demo-selection-offset",
+      "1",
+    );
+  });
+
+  it("keeps the session seed in memory and avoids provider remounts during live flight updates", () => {
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.000000001);
+    const storageGetSpy = vi.spyOn(Storage.prototype, "getItem");
+    const storageSetSpy = vi.spyOn(Storage.prototype, "setItem");
+    const cookieGetSpy = vi.spyOn(Document.prototype, "cookie", "get");
+    const cookieSetSpy = vi.spyOn(Document.prototype, "cookie", "set");
+    towerHarness.flights = [
+      {
+        icao24: "a1b2c3",
+        callsign: "BA178",
+        origin_country: "United Kingdom",
+        longitude: -73.78,
+        latitude: 40.64,
+        velocity: 240,
+        heading: 90,
+        on_ground: false,
+      },
+      {
+        icao24: "d4e5f6",
+        callsign: "DL101",
+        origin_country: "United States",
+        longitude: -118.41,
+        latitude: 33.94,
+        velocity: 230,
+        heading: 80,
+        on_ground: false,
+      },
+      {
+        icao24: "abcdef",
+        callsign: "UA200",
+        origin_country: "United States",
+        longitude: -0.46,
+        latitude: 51.47,
+        velocity: 220,
+        heading: 270,
+        on_ground: false,
+      },
+    ];
+
+    const renderTree = () => (
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    const { rerender } = render(renderTree());
+
+    expect(screen.getByTestId("cinema-provider")).toHaveAttribute(
+      "data-protagonist",
+      "DL101",
+    );
+    expect(towerHarness.providerMounts).toBe(1);
+
+    towerHarness.flights = [
+      {
+        icao24: "fff000",
+        callsign: "QF009",
+        origin_country: "Australia",
+        longitude: 151.17,
+        latitude: -33.94,
+        velocity: 235,
+        heading: 30,
+        on_ground: false,
+      },
+      {
+        icao24: "a1b2c3",
+        callsign: "BA178",
+        origin_country: "United Kingdom",
+        longitude: -73.78,
+        latitude: 40.64,
+        velocity: 240,
+        heading: 90,
+        on_ground: false,
+      },
+      {
+        icao24: "d4e5f6",
+        callsign: "DL101",
+        origin_country: "United States",
+        longitude: -118.41,
+        latitude: 33.94,
+        velocity: 230,
+        heading: 80,
+        on_ground: false,
+      },
+      {
+        icao24: "abcdef",
+        callsign: "UA200",
+        origin_country: "United States",
+        longitude: -0.46,
+        latitude: 51.47,
+        velocity: 220,
+        heading: 270,
+        on_ground: false,
+      },
+    ];
+    rerender(renderTree());
+
+    expect(randomSpy).toHaveBeenCalledTimes(1);
+    expect(storageGetSpy).not.toHaveBeenCalled();
+    expect(storageSetSpy).not.toHaveBeenCalled();
+    expect(cookieGetSpy).not.toHaveBeenCalled();
+    expect(cookieSetSpy).not.toHaveBeenCalled();
+    expect(towerHarness.providerMounts).toBe(1);
   });
 
   it("keeps user gesture wiring for manual takeover", () => {
