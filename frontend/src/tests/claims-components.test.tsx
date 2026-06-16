@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import { ClaimRow } from "../components/claims/ClaimRow";
 import { ClaimsHeroCounter } from "../components/claims/ClaimsHeroCounter";
@@ -8,6 +9,7 @@ const claims: Claim[] = [
   {
     id: "c1",
     policy_id: "policy-alpha-123",
+    flight_id: "BA178-20260614",
     payout: 80,
     delay_minutes: 45,
     signature: "0xabcdef1234567890abcdef",
@@ -17,6 +19,7 @@ const claims: Claim[] = [
   {
     id: "c2",
     policy_id: "policy-beta-456",
+    flight_id: "DL101-20260614",
     payout: 20,
     delay_minutes: 30,
     signature: "0x9876543210abcdef9876",
@@ -38,7 +41,11 @@ describe("claims components", () => {
   });
 
   it("renders a claim row with policy, settlement time, delay, payout, and signature", () => {
-    render(<ClaimRow c={claims[0]} />);
+    render(
+      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <ClaimRow c={claims[0]} />
+      </MemoryRouter>,
+    );
 
     expect(screen.getByText("policy-alp…")).toBeInTheDocument();
     expect(

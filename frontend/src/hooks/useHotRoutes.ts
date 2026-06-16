@@ -3,6 +3,7 @@ import { apiFetch } from "../api/client";
 
 export interface HotRoute {
   callsign: string;
+  flight_id: string;
   policy_count: number;
   delay_rate: number;
   samples: number;

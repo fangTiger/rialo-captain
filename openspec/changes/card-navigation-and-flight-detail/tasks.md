@@ -25,32 +25,32 @@
 
 ## 4. 前端 · 类型与 hooks 同步
 
-- [ ] 4.1 修改 `frontend/src/hooks/useClaims.ts` 的 `Claim` 类型加 `flight_id: string`
-- [ ] 4.2 修改 `frontend/src/hooks/useHotRoutes.ts` 的 `HotRoute` 类型加 `flight_id: string`
-- [ ] 4.3 新建 `frontend/src/hooks/useFlight.ts`：`useSWR<FlightDetailDto>('/flights/' + id, apiFetch)`，`FlightDetailDto` 类型含 `id/callsign/origin/destination/delay_rate/samples/live_delay_minutes`
-- [ ] 4.4 新建 `frontend/src/hooks/useClaimsForFlight.ts`：`useSWR<Claim[]>('/claims/recent?flight_id=' + flightId, apiFetch)`；空 flightId 不发请求
-- [ ] 4.5 验证 TypeScript 编译：`cd frontend && pnpm tsc --noEmit`
+- [x] 4.1 修改 `frontend/src/hooks/useClaims.ts` 的 `Claim` 类型加 `flight_id: string`
+- [x] 4.2 修改 `frontend/src/hooks/useHotRoutes.ts` 的 `HotRoute` 类型加 `flight_id: string`
+- [x] 4.3 新建 `frontend/src/hooks/useFlight.ts`：`useSWR<FlightDetailDto>('/flights/' + id, apiFetch)`，`FlightDetailDto` 类型含 `id/callsign/origin/destination/delay_rate/samples/live_delay_minutes`
+- [x] 4.4 新建 `frontend/src/hooks/useClaimsForFlight.ts`：`useSWR<Claim[]>('/claims/recent?flight_id=' + flightId, apiFetch)`；空 flightId 不发请求
+- [x] 4.5 验证 TypeScript 编译：`cd frontend && pnpm tsc --noEmit`
 
 ## 5. 前端 · 卡片可点改造 (ClaimRow)
 
-- [ ] 5.1 修改 `frontend/src/components/claims/ClaimRow.tsx`：外层包一个 `<button type="button">`，无边框背景；onClick 调 `useNavigate()` 跳 `/flight/${c.flight_id}` 并传 `state: { from: '/claims' }`
-- [ ] 5.2 加 hover 样式：`--surface-1 → --surface-2` + 左侧 2px `--accent-radar` 竖条；focus-visible 同样视觉
-- [ ] 5.3 新建 `frontend/src/tests/claim-row.test.tsx`：用 `MemoryRouter` + mock navigate，验证点击触发正确 path + state；验证 Enter/Space 触发同样导航
-- [ ] 5.4 验证：`cd frontend && pnpm test claim-row -- --run`
+- [x] 5.1 修改 `frontend/src/components/claims/ClaimRow.tsx`：外层包一个 `<button type="button">`，无边框背景；onClick 调 `useNavigate()` 跳 `/flight/${c.flight_id}` 并传 `state: { from: '/claims' }`
+- [x] 5.2 加 hover 样式：`--surface-1 → --surface-2` + 左侧 2px `--accent-radar` 竖条；focus-visible 同样视觉
+- [x] 5.3 新建 `frontend/src/tests/claim-row.test.tsx`：用 `MemoryRouter` + mock navigate，验证点击触发正确 path + state；验证 Enter/Space 触发同样导航
+- [x] 5.4 验证：`cd frontend && pnpm test claim-row -- --run`
 
 ## 6. 前端 · 卡片可点改造 (HangarSlot)
 
-- [ ] 6.1 修改 `frontend/src/components/hangar/HangarSlot.tsx`：外层 `<button>` 包裹；onClick 跳 `/flight/${p.flight_id}` 传 `state: { from: '/policies' }`
-- [ ] 6.2 加同 5.2 的 hover/focus 样式
-- [ ] 6.3 新建 `frontend/src/tests/hangar-slot.test.tsx`：同 5.3 模式，验证 from: '/policies'
-- [ ] 6.4 验证：`cd frontend && pnpm test hangar-slot -- --run`
+- [x] 6.1 修改 `frontend/src/components/hangar/HangarSlot.tsx`：外层 `<button>` 包裹；onClick 跳 `/flight/${p.flight_id}` 传 `state: { from: '/policies' }`
+- [x] 6.2 加同 5.2 的 hover/focus 样式
+- [x] 6.3 新建 `frontend/src/tests/hangar-slot.test.tsx`：同 5.3 模式，验证 from: '/policies'
+- [x] 6.4 验证：`cd frontend && pnpm test hangar-slot -- --run`
 
 ## 7. 前端 · 卡片可点改造 (RouteRow)
 
-- [ ] 7.1 修改 `frontend/src/components/routes/RouteRow.tsx`：外层 `<button>` 包裹；onClick 跳 `/flight/${r.flight_id}` 传 `state: { from: '/routes' }`（用后端返回的 flight_id，不再拼接 today）
-- [ ] 7.2 加同 5.2 的 hover/focus 样式
-- [ ] 7.3 新建 `frontend/src/tests/route-row.test.tsx`：验证使用后端 flight_id + from: '/routes'
-- [ ] 7.4 验证：`cd frontend && pnpm test route-row -- --run`
+- [x] 7.1 修改 `frontend/src/components/routes/RouteRow.tsx`：外层 `<button>` 包裹；onClick 跳 `/flight/${r.flight_id}` 传 `state: { from: '/routes' }`（用后端返回的 flight_id，不再拼接 today）
+- [x] 7.2 加同 5.2 的 hover/focus 样式
+- [x] 7.3 新建 `frontend/src/tests/route-row.test.tsx`：验证使用后端 flight_id + from: '/routes'
+- [x] 7.4 验证：`cd frontend && pnpm test route-row -- --run`
 
 ## 8. 前端 · FlightDetail 子组件 (FlightHero)
 

@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import type { Policy } from "../../hooks/usePolicies";
 
 const STATUS_COLOR: Record<Policy["status"], string> = {
@@ -7,15 +9,39 @@ const STATUS_COLOR: Record<Policy["status"], string> = {
 };
 
 export function HangarSlot({ p }: { p: Policy }) {
+  const navigate = useNavigate();
+  const [isActive, setIsActive] = useState(false);
+
+  const goToFlight = () => {
+    navigate(`/flight/${p.flight_id}`, { state: { from: "/policies" } });
+  };
+
   return (
-    <div
+    <button
+      type="button"
+      aria-label={`Open flight ${p.flight_id}`}
+      onClick={goToFlight}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        goToFlight();
+      }}
+      onMouseEnter={() => setIsActive(true)}
+      onMouseLeave={() => setIsActive(false)}
+      onFocus={() => setIsActive(true)}
+      onBlur={() => setIsActive(false)}
       style={{
         padding: 16,
+        width: "100%",
         border: "1px solid var(--border-subtle)",
+        borderLeft: `2px solid ${isActive ? "var(--accent-radar)" : "transparent"}`,
         borderRadius: "var(--radius-soft)",
-        background: "var(--surface-1)",
+        background: isActive ? "var(--surface-2)" : "var(--surface-1)",
         display: "grid",
         gap: 10,
+        color: "var(--text-primary)",
+        textAlign: "left",
+        cursor: "pointer",
       }}
     >
       <div
@@ -99,6 +125,6 @@ export function HangarSlot({ p }: { p: Policy }) {
           </div>
         </div>
       </div>
-    </div>
+    </button>
   );
 }

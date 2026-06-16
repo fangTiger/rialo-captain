@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { SWRConfig } from "swr";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MyHangar } from "../routes/MyHangar";
@@ -52,9 +53,11 @@ describe("MyHangar", () => {
 
   it("groups policies into active, paid, and expired hangar lanes", async () => {
     render(
-      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
-        <MyHangar />
-      </SWRConfig>,
+      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+          <MyHangar />
+        </SWRConfig>
+      </MemoryRouter>,
     );
 
     await waitFor(() =>

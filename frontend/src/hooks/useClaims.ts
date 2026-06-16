@@ -6,6 +6,7 @@ import { useEventStore } from "../store/eventStore";
 export interface Claim {
   id: string;
   policy_id: string;
+  flight_id: string;
   payout: number;
   delay_minutes: number;
   signature: string;
@@ -33,6 +34,7 @@ export function useClaims() {
       .map((flare) => ({
         id: `optimistic-${flare.signature.slice(0, 16)}`,
         policy_id: flare.policy_id,
+        flight_id: flare.flight_id,
         payout: flare.payout,
         delay_minutes: flare.delay_minutes,
         signature: flare.signature,
