@@ -92,18 +92,18 @@
 
 ## 14. 前端 · Tower 大屏点击行为修正
 
-- [ ] 14.1 修改 `frontend/src/components/tower/GlobeMap.tsx` 或 `frontend/src/routes/TowerShell.tsx`：飞机点击不再 `navigate('/flight/:id')`，改为在大屏内本地 state 控制弹出 `<BuyDrawer flightId={...} onClose={...} />`，URL 保持 `/`
-- [ ] 14.2 修改 `frontend/src/tests/tower-shell.test.tsx`：原本验证 navigate 的 case 改为验证 BuyDrawer 在大屏内挂载 + URL 不变
-- [ ] 14.3 验证：`cd frontend && pnpm test tower-shell -- --run`
+- [x] 14.1 修改 `frontend/src/components/tower/GlobeMap.tsx` 或 `frontend/src/routes/TowerShell.tsx`：飞机点击不再 `navigate('/flight/:id')`，改为在大屏内本地 state 控制弹出 `<BuyDrawer flightId={...} onClose={...} />`，URL 保持 `/`
+- [x] 14.2 修改 `frontend/src/tests/tower-shell.test.tsx`：原本验证 navigate 的 case 改为验证 BuyDrawer 在大屏内挂载 + URL 不变
+- [x] 14.3 验证：`cd frontend && pnpm test tower-shell -- --run`
 
 ## 15. 整体验证
 
-- [ ] 15.1 后端全量测试：`pytest backend/tests -v`
-- [ ] 15.2 前端全量测试 + 类型检查：`cd frontend && pnpm tsc --noEmit && pnpm test -- --run`
-- [ ] 15.3 本地启动 `./scripts/dev.sh` 手工冒烟：登录 → 点 Claims 一行进详情 → 面包屑回 Claims；点 Hangar 一行进详情；点 HotRoutes 一行进详情（验证 flight_id 真存在）；回到大屏点飞机弹 drawer 不离开 `/`
-- [ ] 15.4 桌面 Chrome console 检查无 error/warning
+- [x] 15.1 后端全量测试：`pytest backend/tests -v`
+- [x] 15.2 前端全量测试 + 类型检查：`cd frontend && pnpm tsc --noEmit && pnpm test -- --run`
+- [x] 15.3 本地启动 `./scripts/dev.sh` 手工冒烟：登录 → 点 Claims 一行进详情 → 面包屑回 Claims；点 Hangar 一行进详情；点 HotRoutes 一行进详情（验证 flight_id 真存在）；回到大屏点飞机弹 drawer 不离开 `/`
+- [x] 15.4 桌面 Chrome console 检查无 error/warning
 
 ## 16. OpenSpec 归档前置
 
-- [ ] 16.1 `openspec validate card-navigation-and-flight-detail --strict --no-interactive` 全绿
-- [ ] 16.2 等用户确认演示效果后，由 Claude 执行归档流程（合并 delta 到 `openspec/specs/live-dashboard/spec.md`）
+- [x] 16.1 `openspec validate card-navigation-and-flight-detail --strict --no-interactive` 全绿
+- [x] 16.2 等用户确认演示效果后，由 Claude 执行归档流程（合并 delta 到 `openspec/specs/live-dashboard/spec.md`）

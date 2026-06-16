@@ -1,8 +1,8 @@
-## MODIFIED Requirements
+## ADDED Requirements
 
-### Requirement: 6 页 SPA 信息架构
+### Requirement: SPA 路由架构与详情页导航行为
 
-系统 SHALL 提供 6 个路由（`/` `/flight/:id` `/policies` `/claims` `/routes` `/rialo-inside`），桌面端 1280px+ 全部可达，浏览器 console 无 error、无 warning。
+系统 SHALL 提供 6 个路由（`/` `/flight/:id` `/policies` `/claims` `/routes` `/rialo-inside`），桌面端 1280px+ 全部可达，浏览器 console 无 error、无 warning；`/flight/:id` SHALL 渲染为独立静态详情页，不挂载 `<TowerShell />`；大屏点击飞机 SHALL 在大屏内本地弹出 BuyDrawer 而不触发路由跳转；列表页点击卡片 SHALL 跳转到 FlightDetail 并携带来源信息。
 
 #### Scenario: 直接访问受保护路由
 - **GIVEN** 用户直接打开 `/policies` 但未登录
@@ -12,7 +12,7 @@
 #### Scenario: 大屏点击飞机弹出 BuyDrawer 不离开大屏
 - **GIVEN** 用户在 `/` 大屏上
 - **WHEN** 用户点击一个飞机光点
-- **THEN** `URL 保持 /`，不触发 `navigate('/flight/:id')`
+- **THEN** URL 保持 `/`，不触发 `navigate('/flight/:id')`
 - **AND** BuyDrawer 以 slide-up 形式从底部弹出，覆盖在大屏之上
 - **AND** cinema 状态机继续运行，AutoSeeder 不被重启
 - **AND** 关闭 drawer 后大屏交互无副作用
@@ -30,7 +30,7 @@
 - **WHEN** 向下滚动
 - **THEN** "传统多角色架构 vs Rialo 单合约架构" 对比动画按 5 个分段触发，每段 viewport 占比 100vh
 
-## ADDED Requirements
+
 
 ### Requirement: 列表卡片整行可点导航
 
