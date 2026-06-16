@@ -45,6 +45,42 @@ describe("BuyDrawer", () => {
     expect(screen.getByText(/JFK/)).toBeInTheDocument();
   });
 
+  it("closes when the explicit close button is clicked", async () => {
+    const onClose = vi.fn();
+    render(
+      <SWRConfig value={{ provider: () => new Map() }}>
+        <MemoryRouter
+          future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+        >
+          <BuyDrawer flightId="BA178-20260614" onClose={onClose} />
+        </MemoryRouter>
+      </SWRConfig>,
+    );
+
+    await waitFor(() => expect(screen.getByText("BA178")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: /close/i }));
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("closes when Escape is pressed", async () => {
+    const onClose = vi.fn();
+    render(
+      <SWRConfig value={{ provider: () => new Map() }}>
+        <MemoryRouter
+          future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+        >
+          <BuyDrawer flightId="BA178-20260614" onClose={onClose} />
+        </MemoryRouter>
+      </SWRConfig>,
+    );
+
+    await waitFor(() => expect(screen.getByText("BA178")).toBeInTheDocument());
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it("calls POST /policies on Confirm", async () => {
     const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
     fetchMock.mockResolvedValueOnce(

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { apiFetch } from "../../api/client";
 import { useMe } from "../../hooks/useMe";
@@ -30,6 +30,15 @@ export function BuyDrawer({ flightId, onClose }: Props) {
   const [premium, setPremium] = useState(10);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
 
   if (!flight) {
     return (
@@ -162,6 +171,8 @@ function Shell({
   children: ReactNode;
   onClose: () => void;
 }) {
+  const [closeHovered, setCloseHovered] = useState(false);
+
   return (
     <>
       <div
@@ -188,6 +199,31 @@ function Shell({
           animation: "slideup 280ms cubic-bezier(0.22, 1, 0.36, 1)",
         }}
       >
+        <button
+          type="button"
+          aria-label="Close buy drawer"
+          onClick={onClose}
+          onMouseEnter={() => setCloseHovered(true)}
+          onMouseLeave={() => setCloseHovered(false)}
+          style={{
+            position: "absolute",
+            top: 12,
+            right: 16,
+            width: 24,
+            height: 24,
+            border: "none",
+            background: "transparent",
+            color: closeHovered
+              ? "var(--text-primary)"
+              : "var(--text-secondary)",
+            cursor: "pointer",
+            fontSize: 18,
+            lineHeight: 1,
+            padding: 0,
+          }}
+        >
+          ✕
+        </button>
         {children}
       </aside>
       <style>
