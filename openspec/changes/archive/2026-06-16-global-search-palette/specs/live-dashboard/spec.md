@@ -1,4 +1,4 @@
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: WebSocket 实时事件总线
 
@@ -18,8 +18,6 @@
 - **GIVEN** 后端航班 state 高频更新
 - **WHEN** 广播给前端
 - **THEN** 同一 flight_id 的 state_update 最少 1 秒一次（避免淹没大屏）
-
-## ADDED Requirements
 
 ### Requirement: 全局搜索快捷键触发
 
