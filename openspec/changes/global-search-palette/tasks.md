@@ -75,8 +75,8 @@
 
 ## 9. 整体验证
 
-- [ ] 9.1 后端全量测试: `pytest backend/tests -v`
-- [ ] 9.2 前端全量测试 + 类型检查: `cd frontend && pnpm tsc --noEmit && pnpm test -- --run`
+- [x] 9.1 后端全量测试: `pytest backend/tests -v`
+- [x] 9.2 前端全量测试 + 类型检查: `cd frontend && pnpm tsc --noEmit && pnpm test -- --run`
 - [ ] 9.3 本地启动 `./scripts/dev.sh` 手工冒烟: 登录 → 在 Tower 按 / 弹出 → 输 'UAL' 看结果 → ↓ 选第 2 个 → Enter 跳转 → 面包屑回 Tower → 按 / 再次打开 → 输 'SFO' → 点击鼠标某行 → 跳转 → Esc 测试关闭 → 在 BuyDrawer 输入框中按 / 应作字面输入 → /login 页按 / 不响应
 - [ ] 9.4 桌面 Chrome console 检查无 error/warning
 
