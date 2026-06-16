@@ -3,12 +3,14 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db import get_session
 from backend.flights.cache import FlightCache
 from backend.flights.opensky import OpenSkyClient, OpenSkyError
 from backend.flights.service import FlightService
+from backend.models import Flight
 
 router = APIRouter()
 
@@ -22,6 +24,8 @@ class FlightPublic(BaseModel):
     velocity: float | None
     heading: float | None
     on_ground: bool
+    origin: str | None = None
+    destination: str | None = None
 
 
 class TrackPointPublic(BaseModel):
@@ -82,9 +86,24 @@ def _live_delay_minutes_from_last_state(last_state: str) -> int | None:
 
 
 @router.get("/flights/live", response_model=LiveResponse)
-async def flights_live(request: Request) -> LiveResponse:
+async def flights_live(
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> LiveResponse:
     cache = _cache_from(request)
     entry = cache.get()
+    callsigns = {state.callsign for state in entry.states if state.callsign}
+    route_by_callsign: dict[str, tuple[str | None, str | None]] = {}
+    if callsigns:
+        rows = await session.execute(
+            select(Flight.callsign, Flight.origin, Flight.destination).where(
+                Flight.callsign.in_(callsigns)
+            )
+        )
+        route_by_callsign = {
+            callsign: (origin or None, destination or None)
+            for callsign, origin, destination in rows.all()
+        }
     return LiveResponse(
         data_stale=entry.stale,
         stale_seconds=entry.stale_seconds,
@@ -98,6 +117,8 @@ async def flights_live(request: Request) -> LiveResponse:
                 velocity=s.velocity,
                 heading=s.heading,
                 on_ground=s.on_ground,
+                origin=route_by_callsign.get(s.callsign, (None, None))[0],
+                destination=route_by_callsign.get(s.callsign, (None, None))[1],
             )
             for s in entry.states
         ],

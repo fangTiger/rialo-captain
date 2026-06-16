@@ -4,14 +4,14 @@
 
 ## 1. 后端 · FlightPublic 加 origin/destination 字段
 
-- [ ] 1.1 修改 `backend/flights/routes.py` 的 `FlightPublic` pydantic 模型新增 `origin: str | None = None` 与 `destination: str | None = None` 字段
-- [ ] 1.2 修改 `/flights/live` handler: 取出 cache 中所有 callsign, 一次性 `SELECT callsign, origin, destination FROM flights WHERE callsign IN (...)` 构造 dict, 然后在构造 FlightPublic 时按 callsign 查 dict 填充 origin/destination; 未命中保持 None
-- [ ] 1.3 实现路径有两个选项, Codex 选最低改动者:
+- [x] 1.1 修改 `backend/flights/routes.py` 的 `FlightPublic` pydantic 模型新增 `origin: str | None = None` 与 `destination: str | None = None` 字段
+- [x] 1.2 修改 `/flights/live` handler: 取出 cache 中所有 callsign, 一次性 `SELECT callsign, origin, destination FROM flights WHERE callsign IN (...)` 构造 dict, 然后在构造 FlightPublic 时按 callsign 查 dict 填充 origin/destination; 未命中保持 None
+- [x] 1.3 实现路径有两个选项, Codex 选最低改动者:
   - 选项 A: 直接在 `/flights/live` route handler 内做 batch join (依赖注入 session)
   - 选项 B: 扩展 `FlightCache` 在出口时做 enrichment, 注入 sessionmaker
-- [ ] 1.4 新建 `backend/tests/integration/test_flights_live_search.py`: seed 2 flight 各 1 live state, 验证 `GET /flights/live` 响应每项含 origin/destination; 一个已知 callsign 字段有值, 一个未知 callsign 字段为 null
-- [ ] 1.5 同测试文件加 N+1 验证: 用 SQLAlchemy `before_cursor_execute` event listener 记 SQL 次数, 调 `/flights/live` 后断言 Flight 表 SELECT 计数 ≤ 1
-- [ ] 1.6 验证: `pytest backend/tests/integration/test_flights_live_search.py -v`
+- [x] 1.4 新建 `backend/tests/integration/test_flights_live_search.py`: seed 2 flight 各 1 live state, 验证 `GET /flights/live` 响应每项含 origin/destination; 一个已知 callsign 字段有值, 一个未知 callsign 字段为 null
+- [x] 1.5 同测试文件加 N+1 验证: 用 SQLAlchemy `before_cursor_execute` event listener 记 SQL 次数, 调 `/flights/live` 后断言 Flight 表 SELECT 计数 ≤ 1
+- [x] 1.6 验证: `pytest backend/tests/integration/test_flights_live_search.py -v`
 
 ## 2. 前端 · FlightPublic 类型同步 + searchMatch 工具
 
