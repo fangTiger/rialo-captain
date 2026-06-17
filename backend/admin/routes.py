@@ -99,6 +99,7 @@ async def _seed_demo_impl(
     from sqlalchemy import select
 
     from backend.contracts.base import Condition, ConditionType
+    from backend.auth.service import UserService
     from backend.models import Flight, User
     from backend.policies.service import PolicyService
 
@@ -106,7 +107,12 @@ async def _seed_demo_impl(
         await session.execute(select(User).where(User.email == body.user_email))
     ).scalar_one_or_none()
     if user is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user unknown")
+        if not get_settings().dev_login_enabled:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user unknown")
+        user = await UserService(session).create_or_get_dev(
+            email=body.user_email,
+            name=body.protagonist_name or "Dev Captain",
+        )
 
     if body.protagonist_name:
         user.name = body.protagonist_name

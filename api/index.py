@@ -22,13 +22,22 @@ def configure_vercel_defaults() -> None:
 
 configure_vercel_defaults()
 
+from sqlalchemy import func, select  # noqa: E402
+
 from backend.app import create_app  # noqa: E402
-from backend.db import init_db  # noqa: E402
+from backend.db import get_session_factory, init_db  # noqa: E402
+from backend.models import Flight  # noqa: E402
 
 backend_app = create_app()
 _init_lock = asyncio.Lock()
 _init_done = False
 _flight_seed_lock = asyncio.Lock()
+
+
+async def persisted_flight_count() -> int:
+    async with get_session_factory()() as session:
+        result = await session.execute(select(func.count()).select_from(Flight))
+        return int(result.scalar_one())
 
 
 async def ensure_live_flights_ready(app) -> None:
@@ -40,13 +49,29 @@ async def ensure_live_flights_ready(app) -> None:
         return
     min_flights = 20 if os.environ.get("OPENSKY_ENABLED", "").lower() == "false" else 1
     entry = cache.get()
-    if len(entry.states) >= min_flights and not entry.stale:
+    if (
+        len(entry.states) >= min_flights
+        and not entry.stale
+        and await persisted_flight_count() >= min_flights
+    ):
         return
     async with _flight_seed_lock:
         entry = cache.get()
-        if len(entry.states) >= min_flights and not entry.stale:
+        if (
+            len(entry.states) >= min_flights
+            and not entry.stale
+            and await persisted_flight_count() >= min_flights
+        ):
             return
         await fetcher.run_once()
+
+
+def should_prepare_live_flights(path: str) -> bool:
+    return (
+        path == "/flights/live"
+        or path.startswith("/flights/")
+        or path in {"/seed-demo", "/inject-delay"}
+    )
 
 
 @backend_app.middleware("http")
@@ -57,7 +82,7 @@ async def ensure_database_ready(request, call_next):
             if not _init_done:
                 await init_db()
                 _init_done = True
-    if request.url.path == "/flights/live":
+    if should_prepare_live_flights(request.url.path):
         await ensure_live_flights_ready(request.app)
     return await call_next(request)
 

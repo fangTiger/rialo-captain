@@ -9,7 +9,12 @@ class JWTError(Exception):
     pass
 
 
-def encode_session(*, user_id: str, ttl_hours: int | None = None) -> str:
+def encode_session(
+    *,
+    user_id: str,
+    ttl_hours: int | None = None,
+    extra_claims: dict[str, str] | None = None,
+) -> str:
     settings = get_settings()
     hours = ttl_hours if ttl_hours is not None else settings.jwt_ttl_hours
     payload = {
@@ -17,6 +22,8 @@ def encode_session(*, user_id: str, ttl_hours: int | None = None) -> str:
         "iat": int(time.time()),
         "exp": int(time.time()) + hours * 3600,
     }
+    if extra_claims:
+        payload.update(extra_claims)
     return pyjwt.encode(payload, settings.jwt_secret, algorithm="HS256")
 
 

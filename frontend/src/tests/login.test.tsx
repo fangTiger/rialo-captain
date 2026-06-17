@@ -26,7 +26,44 @@ describe("Login", () => {
     vi.unstubAllGlobals();
   });
 
-  it("shows dev login only when enabled and posts credentials", async () => {
+  it("renders the Tower landing shell with semantic motion layers", () => {
+    vi.stubEnv("VITE_DEV_LOGIN_ENABLED", "true");
+    vi.stubEnv("VITE_GOOGLE_CLIENT_ID", "");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(new Response("", { status: 401 }))),
+    );
+
+    renderLogin();
+
+    expect(screen.getByTestId("login-radar-field")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+    expect(screen.getByTestId("login-flight-trails")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+    expect(screen.getByTestId("login-pulse-layer")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+    expect(
+      screen.getByRole("heading", { name: /latch tower/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/live tower access for flight cover and claims/i),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Latch APP" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(
+      screen.queryByRole("dialog", { name: "DEV access" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens dev login from the Latch APP entry and posts credentials", async () => {
     vi.stubEnv("VITE_DEV_LOGIN_ENABLED", "true");
     vi.stubEnv("VITE_GOOGLE_CLIENT_ID", "");
     vi.stubGlobal(
@@ -55,7 +92,16 @@ describe("Login", () => {
 
     renderLogin();
 
-    expect(screen.getByText("DEV ONLY · BYPASS GOOGLE OAUTH")).toBeInTheDocument();
+    const launcher = screen.getByRole("button", { name: "Latch APP" });
+    expect(launcher).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByLabelText("Dev login email")).not.toBeInTheDocument();
+
+    fireEvent.click(launcher);
+
+    expect(launcher).toHaveAttribute("aria-expanded", "true");
+    expect(
+      screen.getByRole("dialog", { name: "DEV access" }),
+    ).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Dev login email"), {
       target: { value: "pilot@local.dev" },
     });

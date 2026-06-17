@@ -72,6 +72,7 @@ function setVisibilityState(value: DocumentVisibilityState) {
 describe("CinemaProvider cycle state", () => {
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllEnvs();
   });
 
   it("advances the exact 30s spotlight cycle without viewport camera targets", () => {
@@ -224,6 +225,7 @@ describe("CinemaProvider cycle state", () => {
   });
 
   it("degrades during websocket retry and resumes cinema after reconnect", () => {
+    vi.stubEnv("VITE_WS_BASE_URL", "wss://events.example.test");
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-15T00:00:00.000Z"));
     renderCinema();
@@ -238,6 +240,21 @@ describe("CinemaProvider cycle state", () => {
 
     act(() => {
       useEventStore.setState({ wsState: "open" });
+    });
+
+    expect(screen.getByTestId("mode")).toHaveTextContent("cinema");
+    expect(screen.getByTestId("phase")).toHaveTextContent("establish");
+  });
+
+  it("keeps demo cinema active when deployed without websocket support", () => {
+    vi.stubEnv("VITE_DEV_LOGIN_ENABLED", "true");
+    vi.stubEnv("VITE_WS_BASE_URL", "");
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-15T00:00:00.000Z"));
+    renderCinema();
+
+    act(() => {
+      useEventStore.setState({ wsState: "retrying" });
     });
 
     expect(screen.getByTestId("mode")).toHaveTextContent("cinema");

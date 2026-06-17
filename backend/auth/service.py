@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth.google import GoogleProfile
@@ -30,6 +30,42 @@ class UserService:
             name=profile.name,
             avatar_url=profile.avatar_url,
         )
+        self._session.add(user)
+        await self._session.flush()
+        return user
+
+    async def create_or_get_dev(
+        self,
+        *,
+        email: str,
+        name: str,
+        user_id: str | None = None,
+    ) -> User:
+        """创建或恢复 DEV 登录用户，支持 Vercel 冷实例用 JWT 自愈。"""
+        google_sub = f"dev-{email}"
+        clauses = [User.google_sub == google_sub, User.email == email]
+        if user_id:
+            clauses.append(User.id == user_id)
+        existing = (
+            await self._session.execute(select(User).where(or_(*clauses)).limit(1))
+        ).scalar_one_or_none()
+        if existing is not None:
+            existing.email = email
+            existing.name = name
+            if existing.google_sub.startswith("dev-") or existing.id == user_id:
+                existing.google_sub = google_sub
+            await self._session.flush()
+            return existing
+
+        values = {
+            "google_sub": google_sub,
+            "email": email,
+            "name": name,
+            "avatar_url": "",
+        }
+        if user_id:
+            values["id"] = user_id
+        user = User(**values)
         self._session.add(user)
         await self._session.flush()
         return user

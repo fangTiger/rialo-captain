@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useCinema } from "./CinemaContext";
 import { useEventStore } from "../../store/eventStore";
+import { resolvePublicDeployConfig } from "../../config/deployment";
 
 export function CinemaController() {
   const {
@@ -11,17 +12,22 @@ export function CinemaController() {
     resumeCinema,
   } = useCinema();
   const wsState = useEventStore((state) => state.wsState);
+  const deployConfig = resolvePublicDeployConfig();
+  const allowOfflineDemo =
+    deployConfig.devLoginEnabled && deployConfig.wsBaseUrl === "";
 
   useEffect(() => {
     if (wsState === "retrying" || wsState === "closed") {
-      degradeDataLink();
+      if (!allowOfflineDemo) {
+        degradeDataLink();
+      }
       return;
     }
 
     if (wsState === "open") {
       recoverDataLink();
     }
-  }, [degradeDataLink, recoverDataLink, wsState]);
+  }, [allowOfflineDemo, degradeDataLink, recoverDataLink, wsState]);
 
   useEffect(() => {
     const onInput = () => interrupt();

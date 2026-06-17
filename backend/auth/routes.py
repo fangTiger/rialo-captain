@@ -6,7 +6,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth import google
 from backend.auth.deps import CurrentUser
-from backend.auth.google import GoogleProfile
 from backend.auth.jwt import encode_session
 from backend.auth.service import UserService
 from backend.config import get_settings
@@ -93,15 +92,18 @@ async def auth_dev_login(
     if not settings.dev_login_enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="not found")
 
-    fake_profile = GoogleProfile(
-        sub=f"dev-{body.email}",
+    user = await UserService(session).create_or_get_dev(
         email=body.email,
         name=body.name,
-        avatar_url="",
     )
-    user = await UserService(session).create_or_get(fake_profile)
     await session.commit()
-    token = encode_session(user_id=user.id)
+    token = encode_session(
+        user_id=user.id,
+        extra_claims={
+            "dev_email": user.email,
+            "dev_name": user.name,
+        },
+    )
     response.set_cookie(
         settings.jwt_cookie_name,
         token,
