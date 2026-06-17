@@ -2,7 +2,7 @@
 
 `/` 当前由 `frontend/src/routes/TowerShell.tsx` 组合 `GlobeMap`、`RadarSweep`、`EventFeedSidebar`、`KPIBand`。`GlobeMap` 使用 SVG + d3-geo 投影和本地 `viewport { k, x, y }` 状态完成缩放/拖拽，点击飞机后导航到 `/flight/:id`。WebSocket 客户端 `useWebSocket` 目前只消费 `flare` 与 `toast`，`eventStore` 只保存 flares/toasts/wsState。后端已有 `/admin/seed-demo`、`/admin/inject-delay`、`ClaimEngine.run_once()` 与 `flare` 广播。
 
-C1 不重做地图、不引入新框架、不实现 C2/C3 动效。CinemaOverlay 只作为挂载点存在；EventChoreographer 在 C1 仅路由 KPI tick 和 REAL 主角抢占信号。
+Cinema 引擎不重做地图、不引入新框架；C2/C3 动效由 `cinema-key-moments` 与 `cinema-ambient` 能力定义。CinemaOverlay 作为挂载点存在；EventChoreographer 负责把 KPI tick、REAL 主角抢占信号以及 C2/C3 回调接入 TowerShell。
 
 ## Goals / Non-Goals
 
@@ -17,7 +17,7 @@ C1 不重做地图、不引入新框架、不实现 C2/C3 动效。CinemaOverlay
 
 **Non-Goals:**
 
-- 不实现 ShockWave、ChainBeam、FlareLand、HeatmapBg、TrailDraw 的视觉效果。
+- 不在 cinema-engine 内重新定义 ShockWave、ChainBeam、FlareLand、HeatmapBg、TrailDraw 的视觉细节。
 - 不接真实 Rialo testnet，不引入真实链交易。
 - 不持久化 cinema 偏好；刷新后默认 cinema。
 - 不重构整个 Tower 或 WebSocket store，只做 C1 必需扩展。
@@ -67,26 +67,37 @@ Controller 使用 `Date.now()` / fake timers 推进 phase；`GlobeMap` 内已有
 AutoSeeder 监听 `mode === "cinema"` 且页面 visible：
 
 - cycle 进入 `establish` 时选择下一条 DEMO 主角，调用 `/api/seed-demo`，body 包含 `user_email`、`flight_id`（可选）和 `protagonist_name`。
-- cycle 到第 12s 且 seed 成功时调用 `/api/inject-delay`，body 包含 seed 返回的 `flight_id` 与固定 demo delay。
+- cycle 到第 3s 且 seed 成功时调用 `/api/inject-delay`，body 包含 seed 返回的 `flight_id` 与固定 demo delay，让 DEMO 闭环在约 8 秒内完成。
+- 当前 protagonist 为 REAL 时跳过 `/api/seed-demo`，并在 REAL 成为当前主角后立即调用 `/api/inject-delay`，让后端 ClaimEngine 有时间在 STORY 视觉窗口前广播 `claim.triggered`、`claim.settled` 与 `flight.landed`。
+- `/api/inject-delay` 与 `/api/admin/inject-delay` 写入 delay override 后会立即调用 `ClaimEngine.run_for_flight(flight_id)`，只扫描目标航班 ACTIVE policy；后台 30 秒 `run_once()` 仍作为自然延误兜底保留。
 - 每个 `cycleId` 最多 seed 一次、inject 一次，失败不会在同 cycle 重试刷屏。
+- REAL inject 使用独立 dedup key：`cycleId + flight_id + policy_id`，缺少 `policy_id` 时 fallback 到稳定 flight key；DEMO 的 seed/inject 节流集合与 REAL inject 集合分离。
+- 1 秒内 REAL burst 中只有当前 protagonist 触发 inject；queued REAL 在后续 cycle 成为当前 protagonist 时再触发自己的 inject。
 - interactive、paused-hidden、degraded 时清理 timer，不发请求。
 
 浏览器端不得携带 `ADMIN_TOKEN`。实现时新增前端可调用的 demo endpoints（经 Vite 代理为 `/api/seed-demo`、`/api/inject-delay`），受 `CINEMA_AUTOSEED_ENABLED` 或现有 dev/demo 配置限制，且只允许安全的固定 demo 操作；现有 `/admin/*` token 路径继续保留。
+
+REAL inject 成功后，前端不伪造 C2 事件；ShockWave、ChainBeam、FlareLand 仍只能由 WebSocket / eventStore 中的后端事件驱动。REAL inject 失败属于短暂演示链路错误，`ModeIndicator` 显示 `REAL · INJECT FAILED` 约 3 秒，优先级低于 manual 和 data-link-lost，且不会清除 dedup key 或自动重试同一 REAL protagonist。
 
 ### 5. 主角机制采用优先队列，C1 只实现最小可见行为
 
 主角类型：
 
 - `REAL`: 60s 内到达的真实 `policy.created` 或可映射到航班的真实事件。
-- `DEMO`: AutoSeeder 从 live flights 中选出的可定位且 `on_ground=false` 的航班，名字池循环。
+- `DEMO`: AutoSeeder 从 live flights 中选出的可定位且 `on_ground=false` 且 ETA 可用的航班，候选列表轮转，名字池循环。
 - `DEMO_OFFLINE`: seed API 失败时的前端 mock 主角，不改变 KPI。
 
 抢占规则：
 
+- DEMO 选择先过滤候选，再按 `demoSelectionOffset + cycleId - 1` 对候选数取模；候选耗尽后循环，不固定第一架。
+- `TowerShell` 在页面挂载时用 `useRef` 生成 session-only `demoSelectionOffset`，不写入 localStorage、sessionStorage 或 cookie；初始 protagonist 与 AutoSeeder 使用同一 offset。
+- AutoSeeder 在 establish 阶段选择 DEMO 后先写回 `CinemaState.protagonist`，再调用 `/api/seed-demo`，保证 ProtagonistBadge、GlobeMap 高亮与 seed-demo body 使用同一个主角。
+- AutoSeeder 不覆盖当前 REAL 主角或待播 REAL queue，避免真实下单后被下一次 DEMO cycle 抢回。
 - REAL `policy.created` 在任意 phase 到达时立即成为当前主角，`cycleStartedAt` 重置为当前墙钟时间，phase 回到 `establish`，`cameraTarget` 保持 `null`。
 - REAL 抢占会清空 C2/C3 transient visual moments（ShockWave、ChainBeam、FlareLand、TrailDraw），但不删除 `eventStore.events` 中的业务事件记录。
 - 1 秒内连续到达的 REAL burst 只切换第一条；后续事件按 FIFO 入队。
 - 队列最多保留 3 条；超出丢弃最旧或最低优先级项，并让 ProtagonistBadge 显示 `+N more`。
+- `CinemaProvider` 不使用 protagonist flight id 作为 React key；live flights 轮询不得导致 Provider remount 或重置 cinema state。
 
 C1 不做历史回放，也不为真实事件强行补全所有 C2/C3 动效。
 
@@ -96,9 +107,11 @@ C1 不做历史回放，也不为真实事件强行补全所有 C2/C3 动效。
 
 - `claim.settled` 或兼容 `flare` → 调用 cinema action `markKpiTick(payload)`，`KPIBand` 根据 tick id 运行动画。
 - `policy.created` 且 `source === "real"` → 触发 REAL protagonist 抢占或按 1 秒 burst 规则入队。
-- `flight.landed` → 仅记录事件，不渲染 FlareLand。
+- `flight.landed` → 由 C2 callback 路由到 FlareLand，并保留业务事件记录。
 
-ShockWave、ChainBeam、FlareLand 等 C2 组件不出现在 C1 代码中；`CinemaOverlay` 只渲染空容器与 C1 的 ProtagonistBadge。
+`policy.created.created_at` 在 EventChoreographer 内归一为毫秒：非 finite number 使用 `event.receivedAt`；小于 `10_000_000_000` 的 number 视为 Unix 秒并乘以 1000；其它 number 视为毫秒。这样后端秒级 `Policy.created_at` 与前端毫秒级测试/客户端事件都能走同一 60 秒 lookback。
+
+ShockWave、ChainBeam、FlareLand、HeatmapBg、TrailDraw 的视觉细节仍由各自 capability 维护；cinema-engine 只保证事件路由、主角状态、overlay 挂载点和不阻塞用户交互。
 
 ### 7. 后端事件扩展保持向后兼容
 
@@ -114,7 +127,8 @@ ClaimEngine 结算时继续广播：
 
 - 无可定位 live flights：保持 establish，ModeIndicator 显示 `CINEMA · WAITING FOR AIRCRAFT`，10s 后重试。
 - seed-demo 失败：当前 cycle 降级为 `DEMO · OFFLINE`，不改变 KPI；下一 cycle 退避后重试。
-- inject-delay 失败：保留镜头和 DEMO 标牌，ModeIndicator 显示 `DEMO LINK DEGRADED`，不重复注入。
+- DEMO inject-delay 失败：保留当前镜头和 DEMO 标牌，不重复注入。
+- REAL inject-delay 失败：保留 REAL protagonist，ModeIndicator 短暂显示 `REAL · INJECT FAILED`，不阻塞 manual takeover 或 Esc 恢复，且同一 dedup key 不重复刷请求。
 - WS `wsState !== "open"`：进入 degraded 展示 `DATA LINK LOST · retry`，重连后恢复 cinema。
 
 ## Risks / Trade-offs

@@ -48,7 +48,17 @@ const demoProtagonist: CinemaProtagonist = {
 
 function Probe() {
   const cinema = useCinema();
-  return <div data-testid="kpi-tick-id">{cinema.kpiTickId}</div>;
+  const protagonist = cinema.protagonist as
+    | (CinemaProtagonist & { policyId?: string })
+    | null;
+  return (
+    <>
+      <div data-testid="kpi-tick-id">{cinema.kpiTickId}</div>
+      <div data-testid="protagonist-policy-id">
+        {protagonist?.policyId ?? ""}
+      </div>
+    </>
+  );
 }
 
 interface EventChoreographerCallbacks {
@@ -235,7 +245,15 @@ describe("EventChoreographer", () => {
 
   it("routes policy.created to the ambient callback without a KPI tick", () => {
     const onPolicyCreated = vi.fn();
-    renderChoreographer({ onPolicyCreated });
+    const onClaimTriggered = vi.fn();
+    const onClaimSettled = vi.fn();
+    const onFlightLanded = vi.fn();
+    renderChoreographer({
+      onClaimSettled,
+      onClaimTriggered,
+      onFlightLanded,
+      onPolicyCreated,
+    });
 
     pushEvent({
       id: "policy-created-ambient-1",
@@ -264,6 +282,9 @@ describe("EventChoreographer", () => {
         }),
       }),
     );
+    expect(onClaimTriggered).not.toHaveBeenCalled();
+    expect(onClaimSettled).not.toHaveBeenCalled();
+    expect(onFlightLanded).not.toHaveBeenCalled();
   });
 
   it("routes coordinate-less policy.created once for ambient handling", () => {
@@ -371,6 +392,150 @@ describe("EventChoreographer", () => {
       "REAL · LIVE",
     );
     expect(screen.getByTestId("protagonist-badge")).toHaveTextContent("UA200");
+  });
+
+  it("preserves policy_id from real policy.created on the active protagonist", () => {
+    render(
+      <CinemaProvider initialProtagonist={demoProtagonist}>
+        <WsConsumer />
+        <EventChoreographer />
+        <ProtagonistBadge />
+        <Probe />
+      </CinemaProvider>,
+    );
+
+    act(() => {
+      MockWebSocket.instances[0].onmessage?.({
+        data: JSON.stringify({
+          type: "policy.created",
+          payload: {
+            source: "real",
+            policy_id: "policy-real-123",
+            flight_id: "UA200",
+            callsign: "UA200",
+            longitude: -0.45,
+            latitude: 51.47,
+            created_at: Date.now(),
+          },
+        }),
+      });
+    });
+
+    expect(screen.getByTestId("protagonist-badge")).toHaveTextContent(
+      "REAL · LIVE",
+    );
+    expect(screen.getByTestId("protagonist-policy-id")).toHaveTextContent(
+      "policy-real-123",
+    );
+  });
+
+  it("promotes real policy.created when backend sends created_at in seconds", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-15T00:00:00.000Z"));
+
+    render(
+      <CinemaProvider initialProtagonist={demoProtagonist}>
+        <WsConsumer />
+        <EventChoreographer />
+        <ProtagonistBadge />
+      </CinemaProvider>,
+    );
+
+    const backendCreatedAtSeconds = Math.floor(Date.now() / 1000);
+
+    act(() => {
+      MockWebSocket.instances[0].onmessage?.({
+        data: JSON.stringify({
+          type: "policy.created",
+          payload: {
+            source: "real",
+            flight_id: "UA200",
+            callsign: "UA200",
+            longitude: -0.45,
+            latitude: 51.47,
+            created_at: backendCreatedAtSeconds,
+          },
+        }),
+      });
+    });
+
+    expect(screen.getByTestId("protagonist-badge")).toHaveTextContent(
+      "REAL · LIVE",
+    );
+    expect(screen.getByTestId("protagonist-badge")).toHaveTextContent("UA200");
+  });
+
+  it("keeps millisecond real policy.created eligible for takeover", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-15T00:00:00.000Z"));
+    renderChoreographer({}, demoProtagonist);
+
+    pushEvent({
+      id: "policy-created-ms-fresh",
+      type: "policy.created",
+      payload: {
+        source: "real",
+        flight_id: "UA200",
+        callsign: "UA200",
+        longitude: -0.45,
+        latitude: 51.47,
+        created_at: Date.now(),
+      },
+      receivedAt: Date.now(),
+    });
+
+    expect(screen.getByTestId("protagonist-badge")).toHaveTextContent(
+      "REAL · LIVE",
+    );
+    expect(screen.getByTestId("protagonist-badge")).toHaveTextContent("UA200");
+  });
+
+  it("falls back to receivedAt when real policy.created has a non-numeric created_at", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-15T00:00:00.000Z"));
+    renderChoreographer({}, demoProtagonist);
+
+    pushEvent({
+      id: "policy-created-created-at-string",
+      type: "policy.created",
+      payload: {
+        source: "real",
+        flight_id: "UA200",
+        callsign: "UA200",
+        longitude: -0.45,
+        latitude: 51.47,
+        created_at: "1779235200",
+      },
+      receivedAt: Date.now(),
+    });
+
+    expect(screen.getByTestId("protagonist-badge")).toHaveTextContent(
+      "REAL · LIVE",
+    );
+    expect(screen.getByTestId("protagonist-badge")).toHaveTextContent("UA200");
+  });
+
+  it("drops stale real policy.created when an old created_at arrives in seconds", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-15T00:00:00.000Z"));
+    renderChoreographer({}, demoProtagonist);
+
+    pushEvent({
+      id: "policy-created-old-seconds",
+      type: "policy.created",
+      payload: {
+        source: "real",
+        flight_id: "UA200",
+        callsign: "UA200",
+        longitude: -0.45,
+        latitude: 51.47,
+        created_at: Math.floor((Date.now() - 61_000) / 1000),
+      },
+      receivedAt: Date.now(),
+    });
+
+    expect(screen.getByTestId("protagonist-badge")).toHaveTextContent("DEMO");
+    expect(screen.getByTestId("protagonist-badge")).toHaveTextContent("BA178");
   });
 
   it("immediately promotes real policy.created during story and resets the demo", () => {

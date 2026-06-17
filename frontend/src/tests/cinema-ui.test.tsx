@@ -20,6 +20,15 @@ const protagonist: CinemaProtagonist = {
   name: "Alice",
 };
 
+const realProtagonist: CinemaProtagonist = {
+  kind: "REAL",
+  flightId: "UA200-20260615",
+  callsign: "UA200",
+  longitude: -118.4,
+  latitude: 33.94,
+  policyId: "policy-real-1",
+};
+
 const realEvent = {
   id: "policy-real-1",
   flightId: "UA200-20260615",
@@ -28,6 +37,15 @@ const realEvent = {
   latitude: 33.94,
   createdAt: new Date("2026-06-15T00:00:00.000Z").getTime(),
   source: "real" as const,
+};
+
+const nextDemoProtagonist: CinemaProtagonist = {
+  kind: "DEMO",
+  flightId: "DL101",
+  callsign: "DL101",
+  longitude: -0.4,
+  latitude: 51.4,
+  name: "Bob",
 };
 
 function renderModeIndicator() {
@@ -58,6 +76,27 @@ function RealTakeoverButton() {
       onClick={() => cinema.routeRealProtagonist(realEvent)}
     >
       route real
+    </button>
+  );
+}
+
+function DemoProtagonistButton() {
+  const cinema = useCinema();
+  return (
+    <button
+      type="button"
+      onClick={() => cinema.setDemoProtagonist(nextDemoProtagonist)}
+    >
+      set demo
+    </button>
+  );
+}
+
+function RealInjectFailedButton() {
+  const cinema = useCinema();
+  return (
+    <button type="button" onClick={cinema.markRealInjectFailed}>
+      mark inject failed
     </button>
   );
 }
@@ -125,6 +164,73 @@ describe("cinema UI", () => {
     );
   });
 
+  it("clears the REAL inject failure warning after 3 seconds", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-15T00:00:00.000Z"));
+
+    render(
+      <CinemaProvider initialProtagonist={realProtagonist}>
+        <ModeIndicator />
+        <RealInjectFailedButton />
+      </CinemaProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /mark inject failed/i }));
+
+    expect(screen.getByTestId("mode-indicator-label")).toHaveTextContent(
+      "REAL · INJECT FAILED",
+    );
+
+    act(() => vi.advanceTimersByTime(2_999));
+
+    expect(screen.getByTestId("mode-indicator-label")).toHaveTextContent(
+      "REAL · INJECT FAILED",
+    );
+
+    act(() => vi.advanceTimersByTime(1));
+
+    expect(screen.getByTestId("mode-indicator-label")).toHaveTextContent(
+      "CINEMA",
+    );
+    expect(screen.getByTestId("mode-indicator-state")).toHaveTextContent(
+      "cinema",
+    );
+  });
+
+  it("keeps manual and data-link-lost indicators above REAL inject failure", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-15T00:00:00.000Z"));
+
+    render(
+      <CinemaProvider initialProtagonist={realProtagonist}>
+        <CinemaController />
+        <ModeIndicator />
+        <RealInjectFailedButton />
+      </CinemaProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /mark inject failed/i }));
+    fireEvent.click(window);
+
+    expect(screen.getByTestId("mode-indicator-label")).toHaveTextContent(
+      "MANUAL · 30s",
+    );
+    expect(screen.getByTestId("mode-indicator-state")).toHaveTextContent(
+      "manual",
+    );
+
+    act(() => {
+      useEventStore.setState({ wsState: "retrying" });
+    });
+
+    expect(screen.getByTestId("mode-indicator-label")).toHaveTextContent(
+      "DATA LINK LOST · retry",
+    );
+    expect(screen.getByTestId("mode-indicator-state")).toHaveTextContent(
+      "data-link-lost",
+    );
+  });
+
   it.each([
     [{ ...protagonist, kind: "DEMO" as const }, "DEMO"],
     [{ ...protagonist, kind: "DEMO_OFFLINE" as const }, "DEMO · OFFLINE"],
@@ -167,6 +273,21 @@ describe("cinema UI", () => {
       "REAL · LIVE",
     );
     expect(screen.getByTestId("protagonist-badge")).toHaveTextContent("UA200");
+  });
+
+  it("updates the visible demo protagonist through cinema state", () => {
+    render(
+      <CinemaProvider initialProtagonist={protagonist}>
+        <ProtagonistBadge />
+        <DemoProtagonistButton />
+      </CinemaProvider>,
+    );
+
+    expect(screen.getByTestId("protagonist-badge")).toHaveTextContent("BA178");
+
+    fireEvent.click(screen.getByRole("button", { name: /set demo/i }));
+
+    expect(screen.getByTestId("protagonist-badge")).toHaveTextContent("DL101");
   });
 
   it("keeps CinemaOverlay non-interactive so map clicks remain available", () => {

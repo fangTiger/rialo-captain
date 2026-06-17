@@ -13,6 +13,11 @@ function shouldTriggerKpiTick(event: CinemaEvent) {
   return event.type === "claim.settled" || event.type === "flare";
 }
 
+export function normalizeCreatedAtMs(value: unknown, fallback: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+  return value < 10_000_000_000 ? value * 1000 : value;
+}
+
 function realPolicyCreatedFromEvent(
   event: CinemaEvent,
 ): RealProtagonistEvent | null {
@@ -26,8 +31,9 @@ function realPolicyCreatedFromEvent(
 
   const callsign =
     typeof payload.callsign === "string" ? payload.callsign : payload.flight_id;
-  const createdAt =
-    typeof payload.created_at === "number" ? payload.created_at : event.receivedAt;
+  const createdAt = normalizeCreatedAtMs(payload.created_at, event.receivedAt);
+  const policyId =
+    typeof payload.policy_id === "string" ? payload.policy_id : undefined;
 
   return {
     id: event.id,
@@ -36,6 +42,7 @@ function realPolicyCreatedFromEvent(
     longitude: payload.longitude,
     latitude: payload.latitude,
     createdAt,
+    policyId,
     source: "real",
   };
 }

@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
+  advanceCinemaState,
   createInitialCinemaState,
   routeRealProtagonistState,
   type CinemaPhase,
 } from "../components/cinema/cinemaMachine";
 import {
+  chooseDemoProtagonist,
   createRealQueueState,
   queuedMoreCount,
   routeRealProtagonistEvent,
+  type DemoFlightCandidate,
   type RealProtagonistEvent,
 } from "../components/cinema/protagonist";
 
@@ -24,6 +27,63 @@ function event(id: string, createdAt = now): RealProtagonistEvent {
     source: "real",
   };
 }
+
+function eventWithPolicy(
+  id: string,
+  policyId: string,
+  createdAt = now,
+): RealProtagonistEvent {
+  return {
+    ...event(id, createdAt),
+    policyId,
+  };
+}
+
+function demoFlight(
+  callsign: string,
+  overrides: Partial<DemoFlightCandidate> = {},
+): DemoFlightCandidate {
+  return {
+    callsign,
+    longitude: -73.78,
+    latitude: 40.64,
+    on_ground: false,
+    ...overrides,
+  };
+}
+
+describe("DEMO protagonist rotation", () => {
+  it("rotates across available demo candidates by index and loops after the last candidate", () => {
+    const flights = [
+      demoFlight("DEMO-A"),
+      demoFlight("DEMO-B", { longitude: -0.4, latitude: 51.4 }),
+      demoFlight("DEMO-C", { longitude: 139.8, latitude: 35.5 }),
+    ];
+
+    expect(chooseDemoProtagonist(flights, 0)?.callsign).toBe("DEMO-A");
+    expect(chooseDemoProtagonist(flights, 1)?.callsign).toBe("DEMO-B");
+    expect(chooseDemoProtagonist(flights, 2)?.callsign).toBe("DEMO-C");
+    expect(chooseDemoProtagonist(flights, 3)?.callsign).toBe("DEMO-A");
+  });
+
+  it("rotates only through positioned airborne candidates with usable ETA", () => {
+    const flights = [
+      demoFlight("ON-GROUND", { on_ground: true }),
+      demoFlight("DEMO-A"),
+      demoFlight("NO-LON", { longitude: null }),
+      demoFlight("NO-LAT", { latitude: null }),
+      demoFlight("ETA-TOO-SOON", { etaMinutes: 4 }),
+      demoFlight("ETA-TOO-LATE", { etaMinutes: 16 }),
+      demoFlight("DEMO-B", { longitude: -0.4, latitude: 51.4, etaMinutes: 5 }),
+      demoFlight("DEMO-C", { longitude: 139.8, latitude: 35.5, etaMinutes: 15 }),
+    ];
+
+    expect(chooseDemoProtagonist(flights, 0)?.callsign).toBe("DEMO-A");
+    expect(chooseDemoProtagonist(flights, 1)?.callsign).toBe("DEMO-B");
+    expect(chooseDemoProtagonist(flights, 2)?.callsign).toBe("DEMO-C");
+    expect(chooseDemoProtagonist(flights, 3)?.callsign).toBe("DEMO-A");
+  });
+});
 
 describe("REAL protagonist queue", () => {
   it.each(["establish", "rest", "story", "zoom-in", "zoom-out"] as const)(
@@ -126,6 +186,29 @@ describe("REAL protagonist queue", () => {
     expect(second.realQueue.map((queued) => queued.id)).toEqual(["REAL999"]);
   });
 
+  it("preserves policyId when a queued real event becomes protagonist on the next cycle", () => {
+    const first = routeRealProtagonistState(
+      createInitialCinemaState(now - 5_000),
+      eventWithPolicy("REAL0", "policy-real-0"),
+      now,
+    );
+    const queued = routeRealProtagonistState(
+      first,
+      eventWithPolicy("REAL999", "policy-real-999", now + 999),
+      now + 999,
+    );
+
+    const promoted = advanceCinemaState(queued, now + 30_000);
+
+    expect(promoted.protagonist).toMatchObject({
+      kind: "REAL",
+      flightId: "REAL999-20260615",
+      callsign: "REAL999",
+      policyId: "policy-real-999",
+    });
+    expect(promoted.realQueue).toHaveLength(0);
+  });
+
   it.each([1_000, 1_001])(
     "allows a new immediate real takeover at %sms after the previous takeover",
     (offsetMs) => {
@@ -154,6 +237,23 @@ describe("REAL protagonist queue", () => {
       expect(result.realQueue).toHaveLength(0);
     },
   );
+
+  it("does not treat replayed real events as a burst when their creation times are apart", () => {
+    const replayedFirst = routeRealProtagonistState(
+      createInitialCinemaState(now - 5_000),
+      event("OLDREAL", now - 30_000),
+      now,
+    );
+
+    const replayedSecond = routeRealProtagonistState(
+      replayedFirst,
+      event("NEWREAL", now - 2_000),
+      now + 1,
+    );
+
+    expect(replayedSecond.protagonist?.callsign).toBe("NEWREAL");
+    expect(replayedSecond.realQueue).toHaveLength(0);
+  });
 
   it("keeps at most three queued events and discards the oldest FIFO entry", () => {
     const queueState = createRealQueueState(

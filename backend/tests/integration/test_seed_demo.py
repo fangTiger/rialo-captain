@@ -1,8 +1,11 @@
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 
 from backend.app import create_app
+from backend.claims.engine import ClaimEngine
 from backend.db import Base, get_engine, get_session_factory
+from backend.models import Policy, PolicyStatus
 from backend.tests.factories import make_flight, make_user
 
 
@@ -54,7 +57,7 @@ async def test_seed_demo_requires_admin_token(app_client):
 
 
 @pytest.mark.asyncio
-async def test_seed_demo_creates_policies_and_triggers_claims(app_client):
+async def test_seed_demo_creates_policies_without_triggering_claims(app_client):
     client, _ = app_client
     res = await client.post(
         "/admin/seed-demo",
@@ -64,7 +67,7 @@ async def test_seed_demo_creates_policies_and_triggers_claims(app_client):
     assert res.status_code == 200, res.text
     body = res.json()
     assert body["policies_created"] >= 3
-    assert body["claims_settled"] >= 1
+    assert body["claims_settled"] == 0
 
 
 @pytest.mark.asyncio
@@ -86,4 +89,42 @@ async def test_cinema_seed_demo_accepts_protagonist_name_without_admin_token(app
     assert body["flight_id"]
     assert body["policy_ids"]
     assert body["policies_created"] >= 1
-    assert body["claims_settled"] >= 1
+    assert body["claims_settled"] == 0
+
+
+@pytest.mark.asyncio
+async def test_cinema_seed_demo_uses_requested_callsign_and_leaves_policy_active(
+    app_client,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    client, _ = app_client
+
+    async def fail_run_once(self: ClaimEngine):
+        raise AssertionError("seed-demo should not settle claims before inject-delay")
+
+    monkeypatch.setattr(ClaimEngine, "run_once", fail_run_once)
+
+    res = await client.post(
+        "/seed-demo",
+        json={
+            "user_email": "captain@local.dev",
+            "protagonist_name": "Carol",
+            "flight_id": "UA200",
+        },
+    )
+
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["flight_id"] == "UA200-20260614"
+    assert body["policies_created"] == 1
+    assert body["claims_settled"] == 0
+
+    async with get_session_factory()() as session:
+        policies = (
+            await session.execute(
+                select(Policy).where(Policy.id.in_(body["policy_ids"]))
+            )
+        ).scalars().all()
+
+    assert [policy.flight_id for policy in policies] == ["UA200-20260614"]
+    assert [policy.status for policy in policies] == [PolicyStatus.ACTIVE]

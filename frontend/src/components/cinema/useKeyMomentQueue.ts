@@ -3,6 +3,8 @@ import {
   advanceKeyMomentTimeline,
   createKeyMomentTimelineState,
   enqueueKeyMoment,
+  resetKeyMomentTimelineForProtagonist,
+  type KeyMomentResetTarget,
   type KeyMomentTimelineState,
 } from "./keyMomentTimeline";
 import type { CinemaPhase } from "./cinemaMachine";
@@ -49,6 +51,12 @@ export function useKeyMomentQueue(context: UseKeyMomentQueueContext) {
     setTimelineState(createKeyMomentTimelineState());
   }, []);
 
+  const resetForProtagonist = useCallback((target: KeyMomentResetTarget) => {
+    setTimelineState((current) =>
+      resetKeyMomentTimelineForProtagonist(current, target),
+    );
+  }, []);
+
   useEffect(() => {
     setTimelineState((current) => advance(current));
   }, [
@@ -75,5 +83,6 @@ export function useKeyMomentQueue(context: UseKeyMomentQueueContext) {
     activeMoments: timelineState.active,
     clearAllMoments,
     enqueue,
+    resetForProtagonist,
   };
 }

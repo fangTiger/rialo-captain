@@ -78,7 +78,7 @@ async def app_client(monkeypatch, tmp_path):
 
 @pytest.mark.asyncio
 async def test_reactive_pipeline_buy_inject_settle(app_client):
-    client, app = app_client
+    client, _app = app_client
 
     # 1. 登录
     me = await client.post("/auth/google", json={"id_token": "v"})
@@ -105,16 +105,11 @@ async def test_reactive_pipeline_buy_inject_settle(app_client):
     )
     assert inject.status_code == 200
 
-    # 4. 手动跑一次 ClaimEngine
-    engine = app.state.claim_engine
-    summary = await engine.run_once()
-    assert summary.triggered == 1
-
-    # 5. 余额已加回 payout
+    # 4. 余额已加回 payout，admin inject-delay 已同步触发 ClaimEngine。
     me3 = await client.get("/me")
     assert me3.json()["balance"] == 990 + policy["payout"]
 
-    # 6. /claims/recent 看到这条赔付
+    # 5. /claims/recent 看到这条赔付
     claims = await client.get("/claims/recent")
     items = claims.json()
     assert len(items) >= 1
@@ -123,6 +118,34 @@ async def test_reactive_pipeline_buy_inject_settle(app_client):
     assert settled["delay_minutes"] == 45
     assert settled["signature"].startswith("0x")
 
-    # 7. 我的保单已 paid
+    # 6. 我的保单已 paid
+    mine = await client.get("/policies")
+    assert mine.json()[0]["status"] == "paid"
+
+
+@pytest.mark.asyncio
+async def test_cinema_inject_delay_triggers_real_policy_without_admin_token(app_client):
+    client, _app = app_client
+
+    me = await client.post("/auth/google", json={"id_token": "v"})
+    assert me.status_code == 200
+
+    buy = await client.post("/policies", json={"flight_id": "BA178-20260614", "premium": 10})
+    assert buy.status_code == 201, buy.text
+    policy = buy.json()
+
+    inject = await client.post(
+        "/inject-delay",
+        json={"flight_id": "BA178-20260614", "delay_minutes": 45},
+    )
+    assert inject.status_code == 200, inject.text
+
+    claims = await client.get("/claims/recent")
+    items = claims.json()
+    assert len(items) >= 1
+    settled = items[0]
+    assert settled["payout"] == policy["payout"]
+    assert settled["delay_minutes"] == 45
+
     mine = await client.get("/policies")
     assert mine.json()[0]["status"] == "paid"

@@ -70,6 +70,27 @@ cd frontend && pnpm exec playwright install --with-deps chromium
 cd frontend && pnpm exec playwright test
 ```
 
+## Deploy: Vercel 前端
+
+Vercel 负责部署 `frontend/` Vite SPA；FastAPI 后端建议部署到支持常驻进程与 WebSocket 的平台（Railway / Fly / Render 等），再把后端域名填入 Vercel 环境变量。
+
+Vercel 可以直接导入仓库根目录，也可以把 Root Directory 设置为 `frontend`：
+
+- 仓库根目录导入：使用根目录 `vercel.json`，自动进入 `frontend` 安装并构建。
+- Root Directory = `frontend`：使用 `frontend/vercel.json`。
+
+Vercel Production 环境变量：
+
+```bash
+VITE_GOOGLE_CLIENT_ID=your-real-google-client-id.apps.googleusercontent.com
+VITE_MAPBOX_TOKEN=pk.your-real-mapbox-public-token
+VITE_DEV_LOGIN_ENABLED=false
+VITE_API_BASE_URL=https://your-backend.example.com
+VITE_WS_BASE_URL=wss://your-backend.example.com
+```
+
+构建命令会先运行 `node scripts/ensure-production-env.mjs`。如果仍使用占位值、缺少外部后端地址，或生产环境未关闭 dev login，Vercel 构建会直接失败。
+
 ## Demo: 反应式赔付
 
 ```bash

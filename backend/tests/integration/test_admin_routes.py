@@ -2,6 +2,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from backend.app import create_app
+from backend.claims.engine import ClaimEngine
 from backend.db import Base, get_engine, get_session_factory
 from backend.tests.factories import make_flight
 
@@ -101,7 +102,15 @@ async def test_inject_delay_with_token_succeeds(app_client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_inject_delay_unknown_flight_returns_404(app_client: AsyncClient):
+async def test_inject_delay_unknown_flight_returns_404(
+    app_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    async def fail_run_for_flight(self: ClaimEngine, flight_id: str):
+        raise AssertionError(f"run_for_flight should not run for unknown flight {flight_id}")
+
+    monkeypatch.setattr(ClaimEngine, "run_for_flight", fail_run_for_flight)
+
     res = await app_client.post(
         "/admin/inject-delay",
         json={"flight_id": "ZZ999-20260614", "delay_minutes": 45},
@@ -124,7 +133,15 @@ async def test_cinema_inject_delay_without_admin_token_succeeds(app_client: Asyn
 
 
 @pytest.mark.asyncio
-async def test_cinema_inject_delay_unknown_flight_returns_404(app_client: AsyncClient):
+async def test_cinema_inject_delay_unknown_flight_returns_404(
+    app_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    async def fail_run_for_flight(self: ClaimEngine, flight_id: str):
+        raise AssertionError(f"run_for_flight should not run for unknown flight {flight_id}")
+
+    monkeypatch.setattr(ClaimEngine, "run_for_flight", fail_run_for_flight)
+
     res = await app_client.post(
         "/inject-delay",
         json={"flight_id": "ZZ999-20260614", "delay_minutes": 45},
@@ -136,7 +153,13 @@ async def test_cinema_inject_delay_unknown_flight_returns_404(app_client: AsyncC
 @pytest.mark.asyncio
 async def test_cinema_inject_delay_returns_403_when_disabled(
     cinema_disabled_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
 ):
+    async def fail_run_for_flight(self: ClaimEngine, flight_id: str):
+        raise AssertionError(f"run_for_flight should not run when cinema is disabled {flight_id}")
+
+    monkeypatch.setattr(ClaimEngine, "run_for_flight", fail_run_for_flight)
+
     res = await cinema_disabled_client.post(
         "/inject-delay",
         json={"flight_id": "BA178-20260614", "delay_minutes": 45},

@@ -1,10 +1,22 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter, Route, Routes, useParams } from "react-router-dom";
+import {
+  MemoryRouter,
+  Route,
+  Routes,
+  useLocation,
+  useParams,
+} from "react-router-dom";
 
 import { TowerShell } from "../routes/TowerShell";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { useEventStore } from "../store/eventStore";
+import { projectLonLat } from "../components/cinema/cameraMath";
+import { estimateLivePosition } from "../components/cinema/flightMotion";
+
+const globeHarness = vi.hoisted(() => ({
+  size: { width: 1200, height: 720 },
+}));
 
 class MockWebSocket {
   static instances: MockWebSocket[] = [];
@@ -33,6 +45,11 @@ function FlightDetailProbe() {
   return <div>flight detail {id}</div>;
 }
 
+function LocationProbe() {
+  const location = useLocation();
+  return <div data-testid="location-probe">{location.pathname}</div>;
+}
+
 function renderTowerWithWs() {
   render(
     <MemoryRouter
@@ -40,6 +57,7 @@ function renderTowerWithWs() {
       future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
     >
       <WsConsumer />
+      <LocationProbe />
       <Routes>
         <Route path="/" element={<TowerShell />} />
         <Route path="/flight/:id" element={<FlightDetailProbe />} />
@@ -93,12 +111,15 @@ vi.mock("../components/tower/GlobeMap", async () => {
       onUserGesture,
       onSelectFlight,
     }: {
-      onViewportChange?: (viewport: { k: number; x: number; y: number }) => void;
+      onViewportChange?: (
+        viewport: { k: number; x: number; y: number },
+        size: { width: number; height: number },
+      ) => void;
       onUserGesture?: () => void;
       onSelectFlight?: (callsign: string) => void;
     }) => {
       React.useEffect(() => {
-        onViewportChange?.({ k: 1, x: 0, y: 0 });
+        onViewportChange?.({ k: 1, x: 0, y: 0 }, globeHarness.size);
       }, [onViewportChange]);
 
       return (
@@ -123,6 +144,23 @@ vi.mock("../components/tower/GlobeMap", async () => {
   };
 });
 
+vi.mock("../components/drawer/BuyDrawer", () => ({
+  BuyDrawer: ({
+    flightId,
+    onClose,
+  }: {
+    flightId: string;
+    onClose: () => void;
+  }) => (
+    <div data-testid="buy-drawer" data-flight-id={flightId}>
+      buy drawer
+      <button type="button" onClick={onClose}>
+        close drawer
+      </button>
+    </div>
+  ),
+}));
+
 vi.mock("../components/tower/RadarSweep", () => ({
   RadarSweep: () => <div data-testid="radar-sweep" />,
 }));
@@ -145,6 +183,7 @@ describe("TowerShell C3 ambient integration", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-15T00:00:00.000Z"));
+    globeHarness.size = { width: 1200, height: 720 };
     MockWebSocket.instances = [];
     useEventStore.setState({ flares: [], toasts: [], events: [], wsState: "idle" });
     vi.stubGlobal("WebSocket", MockWebSocket as unknown as typeof WebSocket);
@@ -178,7 +217,7 @@ describe("TowerShell C3 ambient integration", () => {
     renderTowerWithWs();
 
     act(() => {
-      vi.advanceTimersByTime(7_000);
+      vi.advanceTimersByTime(3_000);
     });
     expect(screen.getByTestId("trail-draw")).toBeInTheDocument();
     expect(screen.getByTestId("map-atmosphere-layer")).toHaveStyle({
@@ -192,14 +231,21 @@ describe("TowerShell C3 ambient integration", () => {
     expect(screen.getByTestId("mode-indicator")).toHaveTextContent("MANUAL");
 
     fireEvent.click(screen.getByTestId("mock-globe"));
-    expect(screen.getByText("flight detail BA178-20260615")).toBeInTheDocument();
+    expect(screen.getByTestId("buy-drawer")).toHaveAttribute(
+      "data-flight-id",
+      "BA178-20260615",
+    );
+    expect(screen.getByTestId("location-probe")).toHaveTextContent("/");
+    expect(
+      screen.queryByText("flight detail BA178-20260615"),
+    ).not.toBeInTheDocument();
   });
 
-  it("renders TrailDraw at STORY start and cleans it up at the 10 second mark", () => {
+  it("renders TrailDraw at the 3 second gate and cleans it up at the 6 second mark", () => {
     renderTowerWithWs();
 
     act(() => {
-      vi.advanceTimersByTime(6_999);
+      vi.advanceTimersByTime(2_999);
     });
     expect(screen.queryByTestId("trail-draw")).not.toBeInTheDocument();
 
@@ -214,11 +260,47 @@ describe("TowerShell C3 ambient integration", () => {
     expect(screen.queryByTestId("trail-draw")).not.toBeInTheDocument();
   });
 
+  it("projects TrailDraw with the actual map size reported by GlobeMap", () => {
+    globeHarness.size = { width: 1600, height: 900 };
+    renderTowerWithWs();
+
+    act(() => {
+      vi.advanceTimersByTime(3_000);
+    });
+
+    const path = screen.getByTestId("trail-draw-path").getAttribute("d") ?? "";
+    const coords = Array.from(path.matchAll(/-?\d+(?:\.\d+)?/g)).map((match) =>
+      Number(match[0]),
+    );
+    const lastX = coords.at(-2);
+    const lastY = coords.at(-1);
+    const livePosition = estimateLivePosition(
+      {
+        longitude: -73.78,
+        latitude: 40.64,
+        velocity: 240,
+        heading: 90,
+      },
+      3,
+    );
+    if (!livePosition || lastX === undefined || lastY === undefined) {
+      throw new Error(`missing trail endpoint in ${path}`);
+    }
+    const expected = projectLonLat(
+      livePosition.longitude,
+      livePosition.latitude,
+      globeHarness.size,
+    );
+
+    expect(lastX).toBeCloseTo(expected.x, 3);
+    expect(lastY).toBeCloseTo(expected.y, 3);
+  });
+
   it("clears active TrailDraw immediately when a real policy.created event takes over", () => {
     renderTowerWithWs();
 
     act(() => {
-      vi.advanceTimersByTime(7_000);
+      vi.advanceTimersByTime(3_000);
     });
     expect(screen.getByTestId("trail-draw")).toBeInTheDocument();
 
@@ -243,7 +325,7 @@ describe("TowerShell C3 ambient integration", () => {
     renderTowerWithWs();
 
     act(() => {
-      vi.advanceTimersByTime(15_000);
+      vi.advanceTimersByTime(5_000);
     });
     pushWsEvent("claim.triggered", {
       flight_id: "BA178",
@@ -253,6 +335,7 @@ describe("TowerShell C3 ambient integration", () => {
       source: "demo",
     });
 
+    expect(screen.getByTestId("trail-draw")).toBeInTheDocument();
     expect(screen.getByTestId("shockwave")).toBeInTheDocument();
     expect(screen.getByTestId("traildraw-layer")).toHaveStyle({
       zIndex: "1",

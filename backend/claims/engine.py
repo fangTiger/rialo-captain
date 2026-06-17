@@ -63,6 +63,8 @@ class ClaimEngine:
         self._external_observation_enabled = external_observation_enabled
         self._stop_event = asyncio.Event()
         self._block_height = 0
+        # 后台轮询和 inject-delay 即时检测可能同时进入，串行化可避免同一 ACTIVE policy 并发结算。
+        self._run_lock = asyncio.Lock()
 
     def set_broadcaster(self, broadcaster: ClaimBroadcaster | None) -> None:
         self._broadcaster = broadcaster
@@ -72,11 +74,25 @@ class ClaimEngine:
         return self._block_height
 
     async def run_once(self) -> RunSummary:
-        summary = RunSummary()
-        async with self._session_factory() as session:
-            stmt = select(Policy).where(Policy.status == PolicyStatus.ACTIVE)
-            policies = (await session.execute(stmt)).scalars().all()
+        async with self._run_lock:
+            async with self._session_factory() as session:
+                stmt = select(Policy).where(Policy.status == PolicyStatus.ACTIVE)
+                policies = (await session.execute(stmt)).scalars().all()
+            return await self._run_policies(list(policies))
 
+    async def run_for_flight(self, flight_id: str) -> RunSummary:
+        async with self._run_lock:
+            async with self._session_factory() as session:
+                stmt = select(Policy).where(
+                    Policy.status == PolicyStatus.ACTIVE,
+                    Policy.flight_id == flight_id,
+                )
+                policies = (await session.execute(stmt)).scalars().all()
+            logger.info("checking flight=%s policies=%s", flight_id, len(policies))
+            return await self._run_policies(list(policies))
+
+    async def _run_policies(self, policies: list[Policy]) -> RunSummary:
+        summary = RunSummary()
         for policy in policies:
             summary.checked += 1
             try:
@@ -119,6 +135,7 @@ class ClaimEngine:
             if persistent is None or persistent.status != PolicyStatus.ACTIVE:
                 return
             flight = await session.get(Flight, persistent.flight_id)
+            logger.info("triggered policy=%s delay=%s", persistent.id, payload.delay_minutes)
             if self._broadcaster is not None:
                 await self._broadcaster.broadcast(
                     {
@@ -149,13 +166,14 @@ class ClaimEngine:
                 settle_duration_ms=tx.settle_duration_ms,
             )
             await session.commit()
+            tx_hash = self._mock_tx_hash(
+                claim_id=claim.id,
+                policy_id=persistent.id,
+                signature=signature,
+            )
+            logger.info("settled policy=%s tx=%s", persistent.id, tx_hash)
             if self._broadcaster is not None:
                 block_height = self._next_block_height()
-                tx_hash = self._mock_tx_hash(
-                    claim_id=claim.id,
-                    policy_id=persistent.id,
-                    signature=signature,
-                )
                 await self._broadcaster.broadcast(
                     {
                         "type": "flare",
@@ -185,6 +203,7 @@ class ClaimEngine:
                         },
                     }
                 )
+                logger.info("landed flight=%s", persistent.flight_id)
                 await self._broadcaster.broadcast(
                     {
                         "type": EventType.FLIGHT_LANDED.value,

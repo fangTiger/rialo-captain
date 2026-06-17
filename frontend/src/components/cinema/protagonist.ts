@@ -28,6 +28,7 @@ export interface RealProtagonistEvent {
   longitude: number;
   latitude: number;
   createdAt: number;
+  policyId?: string;
   source: "real";
 }
 
@@ -66,8 +67,12 @@ export function chooseDemoProtagonist(
   flights: DemoFlightCandidate[],
   nameIndex = 0,
 ): CinemaProtagonist | null {
-  const flight = flights.find(isPositionedAirborne);
-  if (!flight || flight.longitude === null || flight.latitude === null) {
+  const candidates = flights.filter(isPositionedAirborne);
+  if (candidates.length === 0) return null;
+
+  const index = ((nameIndex % candidates.length) + candidates.length) % candidates.length;
+  const flight = candidates[index];
+  if (flight.longitude === null || flight.latitude === null) {
     return null;
   }
 
@@ -105,6 +110,7 @@ function toRealProtagonist(event: RealProtagonistEvent): CinemaProtagonist {
     callsign: event.callsign,
     longitude: event.longitude,
     latitude: event.latitude,
+    policyId: event.policyId,
   };
 }
 

@@ -57,11 +57,13 @@ async def _inject_delay_impl(
     *,
     body: InjectDelayRequest,
     session: AsyncSession,
+    request: Request,
 ) -> InjectDelayResponse:
     flight = await FlightService(session).get_flight(body.flight_id)
     if flight is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="flight unknown")
     _DELAY_OVERRIDES[body.flight_id] = body.delay_minutes
+    await request.app.state.claim_engine.run_for_flight(body.flight_id)
     return InjectDelayResponse(flight_id=body.flight_id, delay_minutes=body.delay_minutes)
 
 
@@ -73,17 +75,19 @@ async def _inject_delay_impl(
 async def admin_inject_delay(
     body: InjectDelayRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
+    request: Request,
 ) -> InjectDelayResponse:
-    return await _inject_delay_impl(body=body, session=session)
+    return await _inject_delay_impl(body=body, session=session, request=request)
 
 
 @router.post("/inject-delay", response_model=InjectDelayResponse)
 async def cinema_inject_delay(
     body: InjectDelayRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
+    request: Request,
 ) -> InjectDelayResponse:
     _ensure_cinema_autoseed_enabled()
-    return await _inject_delay_impl(body=body, session=session)
+    return await _inject_delay_impl(body=body, session=session, request=request)
 
 
 async def _seed_demo_impl(
@@ -107,10 +111,19 @@ async def _seed_demo_impl(
     if body.protagonist_name:
         user.name = body.protagonist_name
 
-    stmt = select(Flight)
     if body.flight_id:
-        stmt = stmt.where(Flight.id == body.flight_id)
-    flights = (await session.execute(stmt.limit(5))).scalars().all()
+        requested_flight = body.flight_id.strip()
+        exact_flight = await session.get(Flight, requested_flight)
+        if exact_flight is not None:
+            flights = [exact_flight]
+        else:
+            flights = (
+                await session.execute(
+                    select(Flight).where(Flight.callsign == requested_flight).limit(1)
+                )
+            ).scalars().all()
+    else:
+        flights = (await session.execute(select(Flight).limit(5))).scalars().all()
     if len(flights) < 1:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -141,20 +154,13 @@ async def _seed_demo_impl(
 
     protagonist_flight_id = flights[0].id
 
-    # 前两个航班注入延误，随后立即触发一次结算，填充 demo 视图。
-    for flight in flights[:2]:
-        _DELAY_OVERRIDES[flight.id] = 45
-
-    engine = request.app.state.claim_engine
-    summary = await engine.run_once()
-
     return SeedDemoResponse(
         user_email=body.user_email,
         protagonist_name=body.protagonist_name,
         flight_id=protagonist_flight_id,
         policy_ids=policy_ids,
         policies_created=len(policy_ids),
-        claims_settled=summary.triggered,
+        claims_settled=0,
     )
 
 

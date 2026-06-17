@@ -34,6 +34,7 @@ describe("useWebSocket", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
   });
 
   it("transitions to open on socket open", () => {
@@ -44,6 +45,14 @@ describe("useWebSocket", () => {
       ws.onopen?.();
     });
     expect(useEventStore.getState().wsState).toBe("open");
+  });
+
+  it("uses VITE_WS_BASE_URL when configured", () => {
+    vi.stubEnv("VITE_WS_BASE_URL", "wss://api.example.com");
+
+    renderHook(() => useWebSocket("/ws"));
+
+    expect(MockWebSocket.instances[0].url).toBe("wss://api.example.com/ws");
   });
 
   it("dispatches flare events to store", () => {

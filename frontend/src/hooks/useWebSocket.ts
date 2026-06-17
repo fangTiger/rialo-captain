@@ -19,9 +19,25 @@ const CINEMA_EVENT_TYPES = new Set<CinemaEventType>([
   "claim.triggered",
 ]);
 
+function trimTrailingSlash(value: string) {
+  return value.replace(/\/+$/, "");
+}
+
+function normalizeWsBaseUrl(value: string) {
+  if (value.startsWith("https://")) return `wss://${value.slice("https://".length)}`;
+  if (value.startsWith("http://")) return `ws://${value.slice("http://".length)}`;
+  return value;
+}
+
 function makeWebSocketUrl(path: string) {
+  const configuredBaseUrl = trimTrailingSlash(
+    normalizeWsBaseUrl(import.meta.env.VITE_WS_BASE_URL ?? ""),
+  );
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  if (configuredBaseUrl) return `${configuredBaseUrl}${normalizedPath}`;
+
   const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${proto}//${window.location.host}${path}`;
+  return `${proto}//${window.location.host}${normalizedPath}`;
 }
 
 function parseWsMessage(data: MessageEvent["data"]): WsMessage | null {

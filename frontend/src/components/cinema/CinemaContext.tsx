@@ -15,10 +15,12 @@ import {
   interruptCinemaState,
   markDemoOfflineState,
   markKpiTickState,
+  markRealInjectFailedState,
   pauseHiddenCinemaState,
   resumeCinemaState,
   recoverDataLinkState,
   routeRealProtagonistState,
+  setDemoProtagonistState,
   type CameraTarget,
   type CinemaMode,
   type CinemaPhase,
@@ -38,11 +40,13 @@ export type {
 export interface CinemaContextValue extends CinemaState {
   interrupt: () => void;
   markDemoOffline: (protagonist: CinemaProtagonist) => void;
+  markRealInjectFailed: () => void;
   markKpiTick: () => void;
   pauseHidden: () => void;
   recoverDataLink: () => void;
   resumeCinema: () => void;
   routeRealProtagonist: (event: RealProtagonistEvent) => void;
+  setDemoProtagonist: (protagonist: CinemaProtagonist) => void;
   degradeDataLink: () => void;
 }
 
@@ -80,6 +84,10 @@ export function CinemaProvider({
     () => setState((current) => markKpiTickState(current)),
     [],
   );
+  const markRealInjectFailed = useCallback(
+    () => setState((current) => markRealInjectFailedState(current, Date.now())),
+    [],
+  );
   const pauseHidden = useCallback(
     () => setState((current) => pauseHiddenCinemaState(current)),
     [],
@@ -99,6 +107,11 @@ export function CinemaProvider({
       ),
     [],
   );
+  const setDemoProtagonist = useCallback(
+    (protagonist: CinemaProtagonist) =>
+      setState((current) => setDemoProtagonistState(current, protagonist)),
+    [],
+  );
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -113,21 +126,25 @@ export function CinemaProvider({
       degradeDataLink,
       interrupt,
       markDemoOffline,
+      markRealInjectFailed,
       markKpiTick,
       pauseHidden,
       recoverDataLink,
       resumeCinema,
       routeRealProtagonist,
+      setDemoProtagonist,
     }),
     [
       degradeDataLink,
       interrupt,
       markDemoOffline,
+      markRealInjectFailed,
       markKpiTick,
       pauseHidden,
       recoverDataLink,
       resumeCinema,
       routeRealProtagonist,
+      setDemoProtagonist,
       state,
     ],
   );

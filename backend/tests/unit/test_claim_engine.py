@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 
 import pytest
@@ -85,6 +86,98 @@ async def test_run_once_triggers_claim_when_delay_exceeds_threshold(db_session: 
     assert summary.failed == 0
     assert summary.checked == 1
     assert len(adapter.trigger_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_run_for_flight_only_triggers_target_active_policies(db_session: AsyncSession):
+    target = await _seed_policy(db_session, callsign="BA178")
+    other = await _seed_policy(db_session, callsign="DL101")
+    target_id = target.id
+    target_flight_id = target.flight_id
+    other_id = other.id
+    await db_session.commit()
+    adapter = FakeAdapter(observation={"delay_minutes": 45})
+    engine = ClaimEngine(
+        adapter=adapter,
+        session_factory=_session_factory(db_session),
+        observe_url=lambda fid: f"https://opensky.test/state/{fid}",
+        now=_now,
+    )
+
+    summary = await engine.run_for_flight(target_flight_id)
+
+    assert summary.checked == 1
+    assert summary.triggered == 1
+    assert summary.failed == 0
+    assert len(adapter.trigger_calls) == 1
+
+    target_after = await db_session.get(Policy, target_id)
+    other_after = await db_session.get(Policy, other_id)
+    assert target_after is not None
+    assert other_after is not None
+    await db_session.refresh(target_after)
+    await db_session.refresh(other_after)
+    assert target_after.status == PolicyStatus.PAID
+    assert other_after.status == PolicyStatus.ACTIVE
+
+
+@pytest.mark.asyncio
+async def test_run_for_flight_logs_checked_policy_count(
+    db_session: AsyncSession,
+    caplog: pytest.LogCaptureFixture,
+):
+    policy = await _seed_policy(db_session, callsign="BA178")
+    flight_id = policy.flight_id
+    await db_session.commit()
+    adapter = FakeAdapter(observation={"delay_minutes": 45})
+    engine = ClaimEngine(
+        adapter=adapter,
+        session_factory=_session_factory(db_session),
+        observe_url=lambda fid: f"https://opensky.test/state/{fid}",
+        now=_now,
+    )
+
+    with caplog.at_level(logging.INFO, logger="backend.claims.engine"):
+        await engine.run_for_flight(flight_id)
+
+    assert f"checking flight={flight_id} policies=1" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_run_once_logs_triggered_settled_and_landed(
+    db_session: AsyncSession,
+    caplog: pytest.LogCaptureFixture,
+):
+    policy = await _seed_policy(db_session, callsign="BA178")
+    policy_id = policy.id
+    flight_id = policy.flight_id
+    await db_session.commit()
+    adapter = FakeAdapter(observation={"delay_minutes": 45})
+
+    captured: list[dict] = []
+
+    class FakeBroadcaster:
+        async def broadcast(self, message: dict) -> None:
+            captured.append(message)
+
+        async def send_to_user(self, user_id: str, message: dict) -> None:
+            pass
+
+    engine = ClaimEngine(
+        adapter=adapter,
+        session_factory=_session_factory(db_session),
+        broadcaster=FakeBroadcaster(),
+        observe_url=lambda fid: f"https://opensky.test/state/{fid}",
+        now=_now,
+    )
+
+    with caplog.at_level(logging.INFO, logger="backend.claims.engine"):
+        await engine.run_once()
+
+    settled = next(event for event in captured if event["type"] == "claim.settled")
+    assert f"triggered policy={policy_id} delay=45" in caplog.text
+    assert f"settled policy={policy_id} tx={settled['payload']['tx_hash']}" in caplog.text
+    assert f"landed flight={flight_id}" in caplog.text
 
 
 @pytest.mark.asyncio

@@ -1,9 +1,9 @@
 import type { CinemaPhase } from "./cinemaMachine";
 import type { KeyMoment } from "./keyMoments";
 
-const STORY_TRIGGER_AT_MS = 15_000;
+const STORY_TRIGGER_AT_MS = 5_000;
 const CHAIN_AFTER_SHOCKWAVE_MS = 1_000;
-const FLARE_AFTER_CHAIN_MS = 4_000;
+const FLARE_AFTER_CHAIN_MS = 2_000;
 const PENDING_LOOKBACK_MS = 60_000;
 const ACTIVE_CAP = 6;
 
@@ -25,6 +25,11 @@ export interface KeyMomentTimelineState {
   playedIds: string[];
   shockwaveStartedByPolicy: Record<string, number>;
   chainbeamStartedByPolicy: Record<string, number>;
+}
+
+export interface KeyMomentResetTarget {
+  flightId: string | null;
+  policyId?: string;
 }
 
 export interface AdvanceKeyMomentTimelineContext {
@@ -58,6 +63,21 @@ export function enqueueKeyMoment(
   return {
     ...state,
     pending: [...state.pending, moment],
+  };
+}
+
+export function resetKeyMomentTimelineForProtagonist(
+  state: KeyMomentTimelineState,
+  target: KeyMomentResetTarget,
+): KeyMomentTimelineState {
+  const resetState = createKeyMomentTimelineState();
+  if (!target.flightId) return resetState;
+
+  return {
+    ...resetState,
+    pending: state.pending.filter((moment) =>
+      matchesResetTarget(moment, target),
+    ),
   };
 }
 
@@ -135,6 +155,11 @@ function matchesProtagonistFlight(
   return momentKeys.some((key) => protagonistKeys.has(key));
 }
 
+function matchesResetTarget(moment: KeyMoment, target: KeyMomentResetTarget) {
+  if (target.policyId) return moment.policyId === target.policyId;
+  return matchesProtagonistFlight(moment.flightId, target.flightId);
+}
+
 function canReleaseMoment(
   moment: KeyMoment,
   context: AdvanceKeyMomentTimelineContext,
@@ -142,7 +167,7 @@ function canReleaseMoment(
   chainbeamStartedByPolicy: Record<string, number>,
   pending: KeyMoment[],
 ) {
-  if (context.phase !== "story") return false;
+  if (context.phase !== "zoom-in" && context.phase !== "story") return false;
 
   const cycleElapsed = context.now - context.cycleStartedAt;
   if (cycleElapsed < STORY_TRIGGER_AT_MS) return false;
