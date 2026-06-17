@@ -72,24 +72,45 @@ cd frontend && pnpm exec playwright test
 
 ## Deploy: Vercel 前端
 
-Vercel 负责部署 `frontend/` Vite SPA；FastAPI 后端建议部署到支持常驻进程与 WebSocket 的平台（Railway / Fly / Render 等），再把后端域名填入 Vercel 环境变量。
+Vercel 负责部署 `frontend/` Vite SPA；FastAPI 后端建议部署到支持常驻进程与 WebSocket 的平台（Railway / Fly / Render 等）。公开的前端生产配置不需要填到 Vercel 环境变量，默认写在仓库内：
+
+```text
+frontend/deploy.config.json
+```
+
+这个模式对齐隔壁 `ArcPredict`：
+
+- `ArcPredict/web/vercel.json`：声明 `node scripts/ensure-production-env.mjs && pnpm build` 和 `framework: nextjs`
+- `ArcPredict/web/scripts/ensure-production-env.mjs`：生产构建前校验公开配置
+- `ArcPredict/web/.env.example`：记录公开变量示例
+- `ArcPredict/web/lib/chain.ts`、`ArcPredict/web/lib/addresses.ts`：把 RPC fallback、合约地址等公开默认值写进源码
+
+Rialo-Captain 对应位置：
+
+- `vercel.json`：支持从仓库根目录导入 Vercel
+- `frontend/vercel.json`：支持 Root Directory = `frontend`
+- `frontend/scripts/ensure-production-env.mjs`：读取并校验 checked-in 配置
+- `frontend/deploy.config.json`：公开生产配置默认值
+- `frontend/src/config/deployment.ts`：前端运行时解析 checked-in 配置，本地开发保留 `/api`、`/ws` 代理
 
 Vercel 可以直接导入仓库根目录，也可以把 Root Directory 设置为 `frontend`：
 
 - 仓库根目录导入：使用根目录 `vercel.json`，自动进入 `frontend` 安装并构建。
 - Root Directory = `frontend`：使用 `frontend/vercel.json`。
 
-Vercel Production 环境变量：
+默认生产配置：
 
-```bash
-VITE_GOOGLE_CLIENT_ID=your-real-google-client-id.apps.googleusercontent.com
-VITE_MAPBOX_TOKEN=pk.your-real-mapbox-public-token
-VITE_DEV_LOGIN_ENABLED=false
-VITE_API_BASE_URL=https://your-backend.example.com
-VITE_WS_BASE_URL=wss://your-backend.example.com
+```json
+{
+  "googleClientId": "",
+  "mapboxToken": "pk.rialo-production-token",
+  "apiBaseUrl": "https://api.rialo.example",
+  "wsBaseUrl": "wss://api.rialo.example",
+  "devLoginEnabled": true
+}
 ```
 
-构建命令会先运行 `node scripts/ensure-production-env.mjs`。如果仍使用占位值、缺少外部后端地址，或生产环境未关闭 dev login，Vercel 构建会直接失败。
+构建命令会先运行 `node scripts/ensure-production-env.mjs`。当前默认使用临时登录模式：`devLoginEnabled=true` 时 `googleClientId` 可以为空；后续切回 Google OAuth 时，把 `devLoginEnabled` 改成 `false` 并填入真实 Google Client ID。若 `frontend/deploy.config.json` 仍使用明显占位值或缺少外部后端地址，Vercel 构建会直接失败。
 
 ## Demo: 反应式赔付
 

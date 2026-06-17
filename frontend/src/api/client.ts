@@ -1,3 +1,5 @@
+import { resolvePublicDeployConfig } from "../config/deployment";
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -15,7 +17,7 @@ function normalizeApiPath(path: string) {
 }
 
 function makeApiUrl(path: string) {
-  const baseUrl = trimTrailingSlash(import.meta.env.VITE_API_BASE_URL ?? "");
+  const baseUrl = trimTrailingSlash(resolvePublicDeployConfig().apiBaseUrl);
   if (baseUrl) {
     return `${baseUrl}${normalizeApiPath(path)}`;
   }

@@ -2,11 +2,12 @@ import { GoogleLogin, type CredentialResponse } from "@react-oauth/google";
 import { useNavigate } from "react-router-dom";
 import { useSWRConfig } from "swr";
 import { apiFetch } from "../api/client";
+import { resolvePublicDeployConfig } from "../config/deployment";
 
 export function GoogleSignIn() {
   const navigate = useNavigate();
   const { mutate } = useSWRConfig();
-  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
+  const clientId = resolvePublicDeployConfig().googleClientId;
   const hasClientId = Boolean(
     clientId && !clientId.startsWith("your-google-client-id"),
   );

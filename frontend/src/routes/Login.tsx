@@ -2,9 +2,12 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiFetch } from "../api/client";
 import { GoogleSignIn } from "../auth/GoogleSignIn";
+import { resolvePublicDeployConfig } from "../config/deployment";
 import { useMe } from "../hooks/useMe";
 
 export function Login() {
+  const deployConfig = resolvePublicDeployConfig();
+
   return (
     <main
       style={{
@@ -47,7 +50,7 @@ export function Login() {
           Sign in to watch the sky and insure a flight in one click.
         </p>
         <GoogleSignIn />
-        {import.meta.env.VITE_DEV_LOGIN_ENABLED === "true" && <DevLoginButton />}
+        {deployConfig.devLoginEnabled && <DevLoginButton />}
       </div>
     </main>
   );

@@ -4,6 +4,7 @@ import {
   type CinemaEventType,
   type FlareEvent,
 } from "../store/eventStore";
+import { resolvePublicDeployConfig } from "../config/deployment";
 
 const BACKOFF_SCHEDULE = [1000, 2000, 4000, 8000, 16000, 30000];
 
@@ -31,7 +32,7 @@ function normalizeWsBaseUrl(value: string) {
 
 function makeWebSocketUrl(path: string) {
   const configuredBaseUrl = trimTrailingSlash(
-    normalizeWsBaseUrl(import.meta.env.VITE_WS_BASE_URL ?? ""),
+    normalizeWsBaseUrl(resolvePublicDeployConfig().wsBaseUrl),
   );
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   if (configuredBaseUrl) return `${configuredBaseUrl}${normalizedPath}`;

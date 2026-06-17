@@ -1,12 +1,21 @@
 import { execFileSync } from "node:child_process";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const validEnv = {
-  VITE_GOOGLE_CLIENT_ID: "rialo-prod.apps.googleusercontent.com",
-  VITE_MAPBOX_TOKEN: "pk.rialo-production-token",
-  VITE_API_BASE_URL: "https://api.rialo.example",
-  VITE_WS_BASE_URL: "wss://api.rialo.example",
-  VITE_DEV_LOGIN_ENABLED: "false",
+const validConfig = {
+  googleClientId: "rialo-prod.apps.googleusercontent.com",
+  mapboxToken: "pk.rialo-production-token",
+  apiBaseUrl: "https://api.rialo.example",
+  wsBaseUrl: "wss://api.rialo.example",
+  devLoginEnabled: false,
+};
+
+const validDevLoginConfig = {
+  ...validConfig,
+  googleClientId: "",
+  devLoginEnabled: true,
 };
 
 function runWithEnv(env) {
@@ -27,30 +36,46 @@ function runWithEnv(env) {
   }
 }
 
+function writeConfig(config) {
+  const dir = mkdtempSync(join(tmpdir(), "rialo-deploy-config-"));
+  const path = join(dir, "deploy.config.json");
+  writeFileSync(path, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+  return path;
+}
+
 describe("ensure-production-env", () => {
-  it("passes when production Vercel env is complete", () => {
-    const result = runWithEnv(validEnv);
+  it("passes using checked-in deploy config without Vercel env", () => {
+    const result = runWithEnv({});
 
     expect(result.status).toBe(0);
   });
 
-  it("fails when required Vercel env is missing", () => {
+  it("fails when checked-in API config is missing", () => {
     const result = runWithEnv({
-      ...validEnv,
-      VITE_API_BASE_URL: "",
+      RIALO_DEPLOY_CONFIG_PATH: writeConfig({
+        ...validConfig,
+        apiBaseUrl: "",
+      }),
     });
 
     expect(result.status).not.toBe(0);
-    expect(result.output).toContain("VITE_API_BASE_URL 缺失");
+    expect(result.output).toContain("apiBaseUrl 缺失");
   });
 
-  it("fails when dev login is not disabled", () => {
+  it("passes when temporary dev login is enabled without Google OAuth", () => {
     const result = runWithEnv({
-      ...validEnv,
-      VITE_DEV_LOGIN_ENABLED: "true",
+      RIALO_DEPLOY_CONFIG_PATH: writeConfig(validDevLoginConfig),
     });
 
-    expect(result.status).not.toBe(0);
-    expect(result.output).toContain("生产环境必须关闭 VITE_DEV_LOGIN_ENABLED");
+    expect(result.status).toBe(0);
+  });
+
+  it("allows preview env to override checked-in API config", () => {
+    const result = runWithEnv({
+      RIALO_DEPLOY_CONFIG_PATH: writeConfig(validConfig),
+      VITE_API_BASE_URL: "https://preview-api.example.com",
+    });
+
+    expect(result.status).toBe(0);
   });
 });
