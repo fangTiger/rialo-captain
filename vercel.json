@@ -1,6 +1,6 @@
 {
   "framework": "vite",
-  "installCommand": "cd frontend && pnpm install --frozen-lockfile",
+  "installCommand": "corepack enable && corepack prepare pnpm@9.12.3 --activate && cd frontend && pnpm install --frozen-lockfile",
   "buildCommand": "cd frontend && node scripts/ensure-production-env.mjs && pnpm build",
   "outputDirectory": "frontend/dist",
   "rewrites": [
