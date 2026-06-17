@@ -1,6 +1,7 @@
 {
   "framework": "vite",
-  "buildCommand": "node scripts/ensure-production-env.mjs && pnpm build",
+  "installCommand": "corepack pnpm@9.12.3 install --frozen-lockfile",
+  "buildCommand": "node scripts/ensure-production-env.mjs && corepack pnpm@9.12.3 build",
   "outputDirectory": "dist",
   "rewrites": [
     {

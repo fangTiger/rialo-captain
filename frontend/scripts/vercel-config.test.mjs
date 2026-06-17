@@ -11,7 +11,12 @@ describe("Vercel deploy config", () => {
     const config = readJson("vercel.json");
 
     expect(config.framework).toBe("vite");
-    expect(config.buildCommand).toBe("node scripts/ensure-production-env.mjs && pnpm build");
+    expect(config.installCommand).toBe(
+      "corepack pnpm@9.12.3 install --frozen-lockfile",
+    );
+    expect(config.buildCommand).toBe(
+      "node scripts/ensure-production-env.mjs && corepack pnpm@9.12.3 build",
+    );
     expect(config.outputDirectory).toBe("dist");
     expect(config.rewrites).toEqual([{ source: "/(.*)", destination: "/index.html" }]);
   });
@@ -20,9 +25,11 @@ describe("Vercel deploy config", () => {
     const config = readJson("../vercel.json");
 
     expect(config.framework).toBe("vite");
-    expect(config.installCommand).toBe("cd frontend && pnpm install --frozen-lockfile");
+    expect(config.installCommand).toBe(
+      "cd frontend && corepack pnpm@9.12.3 install --frozen-lockfile",
+    );
     expect(config.buildCommand).toBe(
-      "cd frontend && node scripts/ensure-production-env.mjs && pnpm build",
+      "cd frontend && node scripts/ensure-production-env.mjs && corepack pnpm@9.12.3 build",
     );
     expect(config.outputDirectory).toBe("frontend/dist");
     expect(config.rewrites).toEqual([{ source: "/(.*)", destination: "/index.html" }]);
