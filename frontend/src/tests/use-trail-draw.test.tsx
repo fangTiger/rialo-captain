@@ -42,6 +42,7 @@ interface TrailProbeProps {
   activeProtagonist?: CinemaProtagonist | null;
   liveFlights?: FlightPublic[];
   userElectedFlight?: FlightPublic | null;
+  activeCycleStartedAt?: number;
   resetToken?: number;
   ttlMs?: number;
 }
@@ -52,13 +53,14 @@ function TrailProbe({
   activeProtagonist = protagonist,
   liveFlights = flights,
   userElectedFlight = null,
+  activeCycleStartedAt = cycleStartedAt,
   resetToken = 0,
   ttlMs = TRAIL_DRAW_TTL_MS,
 }: TrailProbeProps) {
   const { activeTrail } = useTrailDraw({
     mode,
     phase,
-    cycleStartedAt,
+    cycleStartedAt: activeCycleStartedAt,
     protagonist: activeProtagonist,
     flights: liveFlights,
     userElectedFlight,
@@ -169,6 +171,42 @@ describe("useTrailDraw", () => {
     const latitude = Number(match[2]);
     expect(longitude).toBeGreaterThan(-72);
     expect(latitude).toBeCloseTo(41, 3);
+  });
+
+  it("starts the trail gate when a demo protagonist arrives after the original gate elapsed", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(cycleStartedAt + 7_000);
+
+    const { rerender } = render(
+      <TrailProbe
+        phase="story"
+        activeProtagonist={null}
+        liveFlights={flights}
+      />,
+    );
+
+    expect(screen.getByTestId("trail-state")).toHaveTextContent("none");
+
+    rerender(
+      <TrailProbe
+        phase="story"
+        activeProtagonist={protagonist}
+        liveFlights={flights}
+      />,
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(2_999);
+    });
+    expect(screen.getByTestId("trail-state")).toHaveTextContent("none");
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+
+    expect(screen.getByTestId("trail-state")).toHaveTextContent(
+      `${cycleStartedAt}:BA178-20260615:traildraw`,
+    );
   });
 
   it("draws the user-elected flight trail even after cinema is interrupted", () => {

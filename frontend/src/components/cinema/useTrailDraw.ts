@@ -78,6 +78,14 @@ function trailFlightSignature(flight: TrailFlight) {
   ].join("|");
 }
 
+function protagonistTriggerKey(protagonist: CinemaProtagonist | null) {
+  if (!protagonist) return null;
+  return [
+    callsignKey(protagonist.flightId),
+    callsignKey(protagonist.callsign),
+  ].join(":");
+}
+
 export function useTrailDraw({
   mode,
   phase,
@@ -95,10 +103,21 @@ export function useTrailDraw({
   const flightSnapshotAtRef = useRef(Date.now());
   const electedSignatureRef = useRef<string | null>(null);
   const electedVersionRef = useRef(0);
+  const protagonistKeyRef = useRef<string | null>(protagonistTriggerKey(protagonist));
+  const protagonistReadyAtRef = useRef<number | null>(
+    protagonist ? cycleStartedAt : null,
+  );
 
   useEffect(() => {
     flightSnapshotAtRef.current = Date.now();
   }, [flights]);
+
+  useEffect(() => {
+    const key = protagonistTriggerKey(protagonist);
+    if (protagonistKeyRef.current === key) return;
+    protagonistKeyRef.current = key;
+    protagonistReadyAtRef.current = key ? Date.now() : null;
+  }, [protagonist?.callsign, protagonist?.flightId]);
 
   useEffect(() => {
     return () => {
@@ -203,9 +222,13 @@ export function useTrailDraw({
 
     const triggerKey = `${cycleStartedAt}:${protagonist.flightId}`;
     if (triggeredKeysRef.current.has(triggerKey)) return;
+    const trailGateStartedAt = Math.max(
+      cycleStartedAt,
+      protagonistReadyAtRef.current ?? cycleStartedAt,
+    );
 
     const activateTrail = () => {
-      const elapsedMs = Date.now() - cycleStartedAt;
+      const elapsedMs = Date.now() - trailGateStartedAt;
       if (elapsedMs < TRAIL_DRAW_START_MS || elapsedMs >= TRAIL_DRAW_END_MS) {
         return;
       }
@@ -251,7 +274,7 @@ export function useTrailDraw({
       }, ttlMs);
     };
 
-    const elapsedMs = Date.now() - cycleStartedAt;
+    const elapsedMs = Date.now() - trailGateStartedAt;
     if (elapsedMs >= TRAIL_DRAW_END_MS) return;
     if (elapsedMs >= TRAIL_DRAW_START_MS) {
       activateTrail();
