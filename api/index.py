@@ -28,6 +28,25 @@ from backend.db import init_db  # noqa: E402
 backend_app = create_app()
 _init_lock = asyncio.Lock()
 _init_done = False
+_flight_seed_lock = asyncio.Lock()
+
+
+async def ensure_live_flights_ready(app) -> None:
+    if os.environ.get("VERCEL") != "1":
+        return
+    cache = getattr(app.state, "flight_cache", None)
+    fetcher = getattr(app.state, "flight_fetcher", None)
+    if cache is None or fetcher is None:
+        return
+    min_flights = 20 if os.environ.get("OPENSKY_ENABLED", "").lower() == "false" else 1
+    entry = cache.get()
+    if len(entry.states) >= min_flights and not entry.stale:
+        return
+    async with _flight_seed_lock:
+        entry = cache.get()
+        if len(entry.states) >= min_flights and not entry.stale:
+            return
+        await fetcher.run_once()
 
 
 @backend_app.middleware("http")
@@ -38,6 +57,8 @@ async def ensure_database_ready(request, call_next):
             if not _init_done:
                 await init_db()
                 _init_done = True
+    if request.url.path == "/flights/live":
+        await ensure_live_flights_ready(request.app)
     return await call_next(request)
 
 

@@ -53,3 +53,26 @@ def test_vercel_entrypoint_forces_writable_tmp_sqlite_on_vercel(monkeypatch):
     import_vercel_entrypoint()
 
     assert get_settings().database_url == "sqlite+aiosqlite:////tmp/rialo-captain.db"
+
+
+@pytest.mark.asyncio
+async def test_vercel_entrypoint_serves_mock_live_flights_on_cold_start(monkeypatch):
+    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.setenv("CLAIM_ENGINE_ENABLED", "false")
+    monkeypatch.setenv("FLIGHT_FETCHER_ENABLED", "false")
+    monkeypatch.setenv("OPENSKY_ENABLED", "false")
+
+    entrypoint = import_vercel_entrypoint()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=entrypoint.app),
+        base_url="https://captain-rialo.vercel.app",
+    ) as client:
+        res = await client.get("/api/flights/live")
+
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["data_stale"] is False
+    assert len(body["flights"]) >= 20
+    assert all(flight["longitude"] is not None for flight in body["flights"])
+    assert all(flight["latitude"] is not None for flight in body["flights"])
