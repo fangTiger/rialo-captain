@@ -17,12 +17,14 @@ TBD - created by archiving change add-vercel-frontend-deploy. Update Purpose aft
 
 #### Scenario: 仓库配置缺失时失败
 - **WHEN** `frontend/deploy.config.json` 中的 `googleClientId`、`mapboxToken`、`apiBaseUrl` 或 `wsBaseUrl` 任一配置缺失
+- **AND** 解析后的生产配置 `devLoginEnabled` 不是 `true`
 - **THEN** 校验脚本以非零状态退出
 - **AND** 输出对应配置缺失的中文说明
 
 #### Scenario: 临时登录模式允许缺省 Google OAuth
 - **WHEN** 解析后的生产配置 `devLoginEnabled` 为 `true`
 - **THEN** 校验脚本允许 `googleClientId` 为空
+- **AND** 校验脚本允许 `apiBaseUrl` 为空以使用同源 `/api`
 - **AND** 前端渲染 Dev Login 入口
 
 #### Scenario: 仓库配置合法时通过
@@ -44,6 +46,11 @@ TBD - created by archiving change add-vercel-frontend-deploy. Update Purpose aft
 #### Scenario: 本地 API base URL 未配置
 - **WHEN** 本地开发或测试中 `VITE_API_BASE_URL` 为空
 - **THEN** `apiFetch("/me")` 请求 `/api/me`
+
+#### Scenario: 临时登录 Production build 使用同源 Vercel API
+- **WHEN** production build 的 `devLoginEnabled` 为 `true`
+- **AND** `frontend/deploy.config.json` 的 `apiBaseUrl` 为空
+- **THEN** production build 中 `apiFetch("/auth/dev-login")` 请求 `/api/auth/dev-login`
 
 #### Scenario: Production build 使用仓库 WebSocket base URL
 - **WHEN** `frontend/deploy.config.json` 的 `wsBaseUrl` 为 `wss://api.example.com`

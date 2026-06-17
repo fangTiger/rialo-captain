@@ -1,7 +1,7 @@
 {
   "googleClientId": "",
   "mapboxToken": "pk.rialo-production-token",
-  "apiBaseUrl": "https://api.rialo.example",
-  "wsBaseUrl": "wss://api.rialo.example",
+  "apiBaseUrl": "",
+  "wsBaseUrl": "",
   "devLoginEnabled": true
 }

@@ -17,6 +17,13 @@ describe("deployment config", () => {
     expect(config.devLoginEnabled).toBe(true);
   });
 
+  it("uses same-origin Vercel API when temporary dev login is enabled", () => {
+    const config = resolvePublicDeployConfig({ production: true });
+
+    expect(config.devLoginEnabled).toBe(true);
+    expect(config.apiBaseUrl).toBe("");
+  });
+
   it("keeps local API and WS proxy behavior when no env override exists", () => {
     const config = resolvePublicDeployConfig({ production: false });
 

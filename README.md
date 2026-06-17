@@ -70,9 +70,9 @@ cd frontend && pnpm exec playwright install --with-deps chromium
 cd frontend && pnpm exec playwright test
 ```
 
-## Deploy: Vercel 前端
+## Deploy: Vercel
 
-Vercel 负责部署 `frontend/` Vite SPA；FastAPI 后端建议部署到支持常驻进程与 WebSocket 的平台（Railway / Fly / Render 等）。公开的前端生产配置不需要填到 Vercel 环境变量，默认写在仓库内：
+Vercel 负责部署 `frontend/` Vite SPA，并通过 `/api/*` 暴露临时 demo 用 FastAPI serverless 入口。公开的前端生产配置不需要填到 Vercel 环境变量，默认写在仓库内：
 
 ```text
 frontend/deploy.config.json
@@ -89,6 +89,7 @@ Rialo-Captain 对应位置：
 
 - `vercel.json`：支持从仓库根目录导入 Vercel
 - `frontend/vercel.json`：支持 Root Directory = `frontend`
+- `api/index.py`：仓库根目录导入时把 FastAPI 挂到同源 `/api`
 - `frontend/scripts/ensure-production-env.mjs`：读取并校验 checked-in 配置
 - `frontend/deploy.config.json`：公开生产配置默认值
 - `frontend/src/config/deployment.ts`：前端运行时解析 checked-in 配置，本地开发保留 `/api`、`/ws` 代理
@@ -104,13 +105,13 @@ Vercel 可以直接导入仓库根目录，也可以把 Root Directory 设置为
 {
   "googleClientId": "",
   "mapboxToken": "pk.rialo-production-token",
-  "apiBaseUrl": "https://api.rialo.example",
-  "wsBaseUrl": "wss://api.rialo.example",
+  "apiBaseUrl": "",
+  "wsBaseUrl": "",
   "devLoginEnabled": true
 }
 ```
 
-构建命令会先运行 `node scripts/ensure-production-env.mjs`。当前默认使用临时登录模式：`devLoginEnabled=true` 时 `googleClientId` 可以为空；后续切回 Google OAuth 时，把 `devLoginEnabled` 改成 `false` 并填入真实 Google Client ID。若 `frontend/deploy.config.json` 仍使用明显占位值或缺少外部后端地址，Vercel 构建会直接失败。
+构建命令会先运行 `node scripts/ensure-production-env.mjs`。当前默认使用临时登录模式：`devLoginEnabled=true` 时 `googleClientId` 和 `apiBaseUrl` 可以为空，前端会请求同源 `/api/auth/dev-login`。后续切回 Google OAuth 和常驻后端时，把 `devLoginEnabled` 改成 `false`，填入真实 Google Client ID、外部 API URL 与 WebSocket URL。若非临时登录模式缺少外部后端地址，Vercel 构建会直接失败。
 
 ## Demo: 反应式赔付
 

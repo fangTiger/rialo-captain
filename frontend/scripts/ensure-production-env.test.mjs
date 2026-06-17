@@ -15,6 +15,8 @@ const validConfig = {
 const validDevLoginConfig = {
   ...validConfig,
   googleClientId: "",
+  apiBaseUrl: "",
+  wsBaseUrl: "",
   devLoginEnabled: true,
 };
 
@@ -62,7 +64,7 @@ describe("ensure-production-env", () => {
     expect(result.output).toContain("apiBaseUrl 缺失");
   });
 
-  it("passes when temporary dev login is enabled without Google OAuth", () => {
+  it("passes when temporary dev login uses same-origin API without Google OAuth", () => {
     const result = runWithEnv({
       RIALO_DEPLOY_CONFIG_PATH: writeConfig(validDevLoginConfig),
     });

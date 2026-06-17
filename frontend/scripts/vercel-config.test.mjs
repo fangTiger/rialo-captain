@@ -32,6 +32,9 @@ describe("Vercel deploy config", () => {
       "cd frontend && node scripts/ensure-production-env.mjs && corepack pnpm@9.12.3 build",
     );
     expect(config.outputDirectory).toBe("frontend/dist");
-    expect(config.rewrites).toEqual([{ source: "/(.*)", destination: "/index.html" }]);
+    expect(config.rewrites).toEqual([
+      { source: "/api/(.*)", destination: "/api/index.py" },
+      { source: "/(.*)", destination: "/index.html" },
+    ]);
   });
 });

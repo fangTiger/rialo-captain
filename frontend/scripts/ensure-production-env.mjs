@@ -97,15 +97,15 @@ if (isPlaceholder(mapboxToken)) {
   errors.push("mapboxToken 格式异常，Mapbox 前端 public token 必须以 pk. 开头。");
 }
 
-if (!apiBaseUrl) {
+if (!apiBaseUrl && devLoginEnabled !== true) {
   errors.push("apiBaseUrl 缺失，生产部署前必须填入外部 FastAPI 后端 HTTP(S) 地址。");
-} else if (!isValidUrl(apiBaseUrl, ["http:", "https:"])) {
+} else if (apiBaseUrl && !isValidUrl(apiBaseUrl, ["http:", "https:"])) {
   errors.push(`apiBaseUrl 的值 "${apiBaseUrl}" 非法，必须是 http:// 或 https:// 开头的有效 URL。`);
 }
 
-if (!wsBaseUrl) {
+if (!wsBaseUrl && devLoginEnabled !== true) {
   errors.push("wsBaseUrl 缺失，生产部署前必须填入外部 FastAPI 后端 WebSocket 地址。");
-} else if (!isValidUrl(wsBaseUrl, ["ws:", "wss:", "http:", "https:"])) {
+} else if (wsBaseUrl && !isValidUrl(wsBaseUrl, ["ws:", "wss:", "http:", "https:"])) {
   errors.push(`wsBaseUrl 的值 "${wsBaseUrl}" 非法，必须是 ws://、wss://、http:// 或 https:// 开头的有效 URL。`);
 }
 
