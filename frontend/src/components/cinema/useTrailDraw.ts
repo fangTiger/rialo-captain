@@ -86,6 +86,16 @@ function protagonistTriggerKey(protagonist: CinemaProtagonist | null) {
   ].join(":");
 }
 
+function trailGateStartForProtagonist(
+  cycleStartedAt: number,
+  protagonistReadyAt: number | null,
+) {
+  if (protagonistReadyAt === null) return cycleStartedAt;
+  return protagonistReadyAt <= cycleStartedAt + TRAIL_DRAW_END_MS
+    ? cycleStartedAt
+    : protagonistReadyAt;
+}
+
 export function useTrailDraw({
   mode,
   phase,
@@ -222,9 +232,9 @@ export function useTrailDraw({
 
     const triggerKey = `${cycleStartedAt}:${protagonist.flightId}`;
     if (triggeredKeysRef.current.has(triggerKey)) return;
-    const trailGateStartedAt = Math.max(
+    const trailGateStartedAt = trailGateStartForProtagonist(
       cycleStartedAt,
-      protagonistReadyAtRef.current ?? cycleStartedAt,
+      protagonistReadyAtRef.current,
     );
 
     const activateTrail = () => {

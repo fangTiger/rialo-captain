@@ -66,6 +66,8 @@ TowerCinemaLayers
 
 闭环压缩后 TrailDraw 在 cycle 第 2 秒出现，并在约第 3 秒清理；此时 C1 phase 名称仍可能是 `establish` 或 `zoom-in`，因此 C3 以 `cycleStartedAt` 与当前墙钟 elapsed 判断触发窗口，而不是等待 `phase === "story"`。触发 key 使用 `${cycleStartedAt}:${protagonist.flightId}` 去重，防止 React 重渲染或 flights 刷新重复播放。
 
+若 protagonist 在第 2-3 秒窗口内才由异步 flights/seed 结果补齐，TrailDraw 仍使用原始 cycle gate，不把窗口整体后移；只有 protagonist 已错过该窗口后才以 protagonist ready 时间作为兜底 gate 起点。
+
 如果用户在 2 秒窗口前接管 manual，新的 TrailDraw 不再释放；已经 active 的短生命周期 trail 可以自然结束，且不改变 camera。页面 hidden 时清理 pending timer，visible 后跟随新 cycle 重新判断。
 
 ### 6. 航迹数据用主角当前点 + heading/velocity 推导短路径

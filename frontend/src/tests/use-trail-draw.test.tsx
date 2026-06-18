@@ -209,6 +209,45 @@ describe("useTrailDraw", () => {
     );
   });
 
+  it("keeps the original cycle gate when a demo protagonist arrives before the trail window closes", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(cycleStartedAt);
+
+    const { rerender } = render(
+      <TrailProbe
+        phase="establish"
+        activeProtagonist={null}
+        liveFlights={flights}
+      />,
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
+    expect(screen.getByTestId("trail-state")).toHaveTextContent("none");
+
+    rerender(
+      <TrailProbe
+        phase="establish"
+        activeProtagonist={protagonist}
+        liveFlights={flights}
+      />,
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(999);
+    });
+    expect(screen.getByTestId("trail-state")).toHaveTextContent("none");
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+
+    expect(screen.getByTestId("trail-state")).toHaveTextContent(
+      `${cycleStartedAt}:BA178-20260615:traildraw`,
+    );
+  });
+
   it("draws the user-elected flight trail even after cinema is interrupted", () => {
     vi.useFakeTimers();
     vi.setSystemTime(cycleStartedAt);
