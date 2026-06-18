@@ -10,7 +10,7 @@ import {
 import type { CinemaPhase } from "./cinemaMachine";
 import type { KeyMoment } from "./keyMoments";
 
-const TIMELINE_TICK_MS = 250;
+const TIMELINE_TICK_MS = 100;
 
 interface UseKeyMomentQueueContext {
   phase: CinemaPhase;

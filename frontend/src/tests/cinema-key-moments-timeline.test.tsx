@@ -355,6 +355,25 @@ describe("useKeyMomentQueue reset", () => {
     vi.useRealTimers();
   });
 
+  it("releases pending moments on the 100ms queue tick", () => {
+    vi.useFakeTimers();
+    const cycleStartedAt = new Date("2026-06-15T00:00:00.000Z").getTime();
+    vi.setSystemTime(cycleStartedAt + 3_900);
+
+    render(<QueueProbe />);
+
+    fireEvent.click(screen.getByRole("button", { name: /enqueue active/i }));
+    expect(screen.getByTestId("queue-active")).toHaveTextContent("none");
+
+    act(() => vi.advanceTimersByTime(99));
+    expect(screen.getByTestId("queue-active")).toHaveTextContent("none");
+
+    act(() => vi.advanceTimersByTime(1));
+    expect(screen.getByTestId("queue-active")).toHaveTextContent(
+      "active:shockwave",
+    );
+  });
+
   it("clears active and pending moments when a real takeover reset arrives", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-15T00:00:15.000Z"));
