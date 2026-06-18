@@ -496,7 +496,7 @@ describe("AutoSeeder", () => {
     expect(useEventStore.getState().flares).toHaveLength(0);
 
     await act(async () => {
-      vi.advanceTimersByTime(2_000);
+      vi.advanceTimersByTime(1_000);
       await Promise.resolve();
     });
 

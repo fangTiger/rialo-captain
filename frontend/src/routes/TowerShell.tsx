@@ -100,7 +100,6 @@ interface TowerCinemaLayersProps {
 }
 
 const DEFAULT_OVERLAY_SIZE: ViewportSize = { width: 1200, height: 720 };
-const MIN_TRAILDRAW_VISIBLE_LENGTH_PX = 56;
 
 function TowerCinemaLayers({
   electedFlight,
@@ -130,7 +129,6 @@ function TowerCinemaLayers({
     activeTrail?.points ?? null,
     mapSize,
     mapViewport,
-    { minVisibleLengthPx: MIN_TRAILDRAW_VISIBLE_LENGTH_PX },
   );
   const atRisk =
     cinema.mode === "cinema" &&

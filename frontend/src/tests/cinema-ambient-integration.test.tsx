@@ -217,7 +217,7 @@ describe("TowerShell C3 ambient integration", () => {
     renderTowerWithWs();
 
     act(() => {
-      vi.advanceTimersByTime(3_000);
+      vi.advanceTimersByTime(2_000);
     });
     expect(screen.getByTestId("trail-draw")).toBeInTheDocument();
     expect(screen.getByTestId("map-atmosphere-layer")).toHaveStyle({
@@ -241,11 +241,11 @@ describe("TowerShell C3 ambient integration", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("renders TrailDraw at the 3 second gate and cleans it up at the 6 second mark", () => {
+  it("renders TrailDraw at the 2 second gate and cleans it up at the 3 second mark", () => {
     renderTowerWithWs();
 
     act(() => {
-      vi.advanceTimersByTime(2_999);
+      vi.advanceTimersByTime(1_999);
     });
     expect(screen.queryByTestId("trail-draw")).not.toBeInTheDocument();
 
@@ -255,7 +255,7 @@ describe("TowerShell C3 ambient integration", () => {
     expect(screen.getByTestId("trail-draw")).toBeInTheDocument();
 
     act(() => {
-      vi.advanceTimersByTime(3_000);
+      vi.advanceTimersByTime(1_000);
     });
     expect(screen.queryByTestId("trail-draw")).not.toBeInTheDocument();
   });
@@ -265,7 +265,7 @@ describe("TowerShell C3 ambient integration", () => {
     renderTowerWithWs();
 
     act(() => {
-      vi.advanceTimersByTime(3_000);
+      vi.advanceTimersByTime(2_000);
     });
 
     const path = screen.getByTestId("trail-draw-path").getAttribute("d") ?? "";
@@ -281,7 +281,7 @@ describe("TowerShell C3 ambient integration", () => {
         velocity: 240,
         heading: 90,
       },
-      3,
+      2,
     );
     if (!livePosition || lastX === undefined || lastY === undefined) {
       throw new Error(`missing trail endpoint in ${path}`);
@@ -300,7 +300,7 @@ describe("TowerShell C3 ambient integration", () => {
     renderTowerWithWs();
 
     act(() => {
-      vi.advanceTimersByTime(3_000);
+      vi.advanceTimersByTime(2_000);
     });
     expect(screen.getByTestId("trail-draw")).toBeInTheDocument();
 
@@ -325,7 +325,7 @@ describe("TowerShell C3 ambient integration", () => {
     renderTowerWithWs();
 
     act(() => {
-      vi.advanceTimersByTime(5_000);
+      vi.advanceTimersByTime(4_000);
     });
     pushWsEvent("claim.triggered", {
       flight_id: "BA178",
@@ -335,7 +335,7 @@ describe("TowerShell C3 ambient integration", () => {
       source: "demo",
     });
 
-    expect(screen.getByTestId("trail-draw")).toBeInTheDocument();
+    expect(screen.queryByTestId("trail-draw")).not.toBeInTheDocument();
     expect(screen.getByTestId("shockwave")).toBeInTheDocument();
     expect(screen.getByTestId("traildraw-layer")).toHaveStyle({
       zIndex: "1",

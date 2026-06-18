@@ -232,7 +232,7 @@ describe("TowerShell C2 key moments integration", () => {
     await renderTowerWithWs();
     expect(MockWebSocket.instances).toHaveLength(1);
 
-    act(() => vi.advanceTimersByTime(5_000));
+    act(() => vi.advanceTimersByTime(4_000));
     pushWsEvent("claim.triggered", {
       flight_id: "BA178",
       policy_id: "policy-1",
@@ -257,7 +257,7 @@ describe("TowerShell C2 key moments integration", () => {
     await renderTowerWithWs();
     expect(MockWebSocket.instances).toHaveLength(1);
 
-    act(() => vi.advanceTimersByTime(5_000));
+    act(() => vi.advanceTimersByTime(4_000));
     pushWsEvent("claim.triggered", {
       flight_id: "BA178",
       policy_id: "policy-1",
@@ -274,7 +274,7 @@ describe("TowerShell C2 key moments integration", () => {
     await renderTowerWithWs();
     expect(MockWebSocket.instances).toHaveLength(1);
 
-    act(() => vi.advanceTimersByTime(5_000));
+    act(() => vi.advanceTimersByTime(4_000));
     pushWsEvent("claim.triggered", {
       flight_id: "BA178",
       policy_id: "policy-1",
@@ -355,13 +355,13 @@ describe("TowerShell C2 key moments integration", () => {
     });
     await flushPromises();
 
-    act(() => vi.advanceTimersByTime(4_999));
+    act(() => vi.advanceTimersByTime(3_999));
     expect(screen.queryByTestId("shockwave")).not.toBeInTheDocument();
 
     act(() => vi.advanceTimersByTime(1));
     expect(screen.getByTestId("shockwave")).toBeInTheDocument();
 
-    act(() => vi.advanceTimersByTime(1_000));
+    act(() => vi.advanceTimersByTime(2_000));
     expect(screen.getByTestId("chainbeam")).toBeInTheDocument();
     expect(screen.getByTestId("chainbeam-tx")).toHaveTextContent(
       "0x12345678...345678",
@@ -436,10 +436,10 @@ describe("TowerShell C2 key moments integration", () => {
       }),
     });
 
-    act(() => vi.advanceTimersByTime(5_000));
+    act(() => vi.advanceTimersByTime(4_000));
     expect(screen.getByTestId("shockwave")).toBeInTheDocument();
 
-    act(() => vi.advanceTimersByTime(1_000));
+    act(() => vi.advanceTimersByTime(2_000));
     expect(screen.getByTestId("chainbeam")).toBeInTheDocument();
 
     act(() => vi.advanceTimersByTime(2_000));
@@ -481,7 +481,7 @@ describe("TowerShell C2 key moments integration", () => {
     await renderTowerWithWs();
     expect(MockWebSocket.instances).toHaveLength(1);
 
-    act(() => vi.advanceTimersByTime(5_000));
+    act(() => vi.advanceTimersByTime(4_000));
     pushWsEvent("claim.triggered", {
       flight_id: "BA178-20260615",
       policy_id: "policy-1",
@@ -499,7 +499,7 @@ describe("TowerShell C2 key moments integration", () => {
     await renderTowerWithWs();
     expect(MockWebSocket.instances).toHaveLength(1);
 
-    act(() => vi.advanceTimersByTime(5_000));
+    act(() => vi.advanceTimersByTime(4_000));
     pushWsEvent("claim.triggered", {
       flight_id: "BA178-20260615",
       policy_id: "policy-1",
@@ -517,7 +517,7 @@ describe("TowerShell C2 key moments integration", () => {
     expect(MockWebSocket.instances).toHaveLength(1);
     expect(screen.getByTestId("kpi-band")).toHaveAttribute("data-tick-id", "0");
 
-    act(() => vi.advanceTimersByTime(5_000));
+    act(() => vi.advanceTimersByTime(4_000));
     pushWsEvent("claim.settled", {
       flight_id: "BA178",
       policy_id: "policy-1",
@@ -545,7 +545,7 @@ describe("TowerShell C2 key moments integration", () => {
     await renderTowerWithWs();
     expect(MockWebSocket.instances).toHaveLength(1);
 
-    act(() => vi.advanceTimersByTime(5_000));
+    act(() => vi.advanceTimersByTime(4_000));
     pushWsEvent("flight.landed", {
       flight_id: "BA178",
       policy_id: "policy-1",
@@ -568,7 +568,7 @@ describe("TowerShell C2 key moments integration", () => {
     await renderTowerWithWs();
     expect(MockWebSocket.instances).toHaveLength(1);
 
-    act(() => vi.advanceTimersByTime(5_000));
+    act(() => vi.advanceTimersByTime(4_000));
     pushWsEvent("claim.triggered", {
       flight_id: "BA178",
       policy_id: "policy-1",

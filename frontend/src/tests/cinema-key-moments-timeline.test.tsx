@@ -243,7 +243,7 @@ describe("TowerShell C2 STORY timeline", () => {
     vi.unstubAllGlobals();
   });
 
-  it("holds claim.triggered until the exact 5s STORY window", () => {
+  it("holds claim.triggered until the exact 4s STORY window", () => {
     renderTower();
     expect(MockWebSocket.instances).toHaveLength(1);
 
@@ -251,14 +251,14 @@ describe("TowerShell C2 STORY timeline", () => {
 
     expect(screen.queryByTestId("shockwave")).not.toBeInTheDocument();
 
-    act(() => vi.advanceTimersByTime(4_999));
+    act(() => vi.advanceTimersByTime(3_999));
     expect(screen.queryByTestId("shockwave")).not.toBeInTheDocument();
 
     act(() => vi.advanceTimersByTime(1));
     expect(screen.getByTestId("shockwave")).toBeInTheDocument();
   });
 
-  it("releases ChainBeam 1s after ShockWave starts and FlareLand 2s after ChainBeam starts", () => {
+  it("releases ChainBeam 2s after ShockWave starts and FlareLand 2s after ChainBeam starts", () => {
     renderTower();
     expect(MockWebSocket.instances).toHaveLength(1);
 
@@ -266,12 +266,12 @@ describe("TowerShell C2 STORY timeline", () => {
     pushWsEvent("claim.settled", currentProtagonistSettled("policy-1"));
     pushWsEvent("flight.landed", currentProtagonistLanded("policy-1"));
 
-    act(() => vi.advanceTimersByTime(5_000));
+    act(() => vi.advanceTimersByTime(4_000));
     expect(screen.getByTestId("shockwave")).toBeInTheDocument();
     expect(screen.queryByTestId("chainbeam")).not.toBeInTheDocument();
     expect(screen.queryByTestId("flareland")).not.toBeInTheDocument();
 
-    act(() => vi.advanceTimersByTime(999));
+    act(() => vi.advanceTimersByTime(1_999));
     expect(screen.queryByTestId("chainbeam")).not.toBeInTheDocument();
 
     act(() => vi.advanceTimersByTime(1));
@@ -281,11 +281,11 @@ describe("TowerShell C2 STORY timeline", () => {
     );
     expect(screen.queryByTestId("flareland")).not.toBeInTheDocument();
 
-    act(() => vi.advanceTimersByTime(1_001));
+    act(() => vi.advanceTimersByTime(1));
     expect(screen.queryByTestId("shockwave")).not.toBeInTheDocument();
     expect(screen.getByTestId("chainbeam")).toBeInTheDocument();
 
-    act(() => vi.advanceTimersByTime(998));
+    act(() => vi.advanceTimersByTime(1_998));
     expect(screen.queryByTestId("flareland")).not.toBeInTheDocument();
 
     act(() => vi.advanceTimersByTime(1));
@@ -301,7 +301,7 @@ describe("TowerShell C2 STORY timeline", () => {
     expect(vi.getTimerCount()).toBeGreaterThan(0);
 
     pushWsEvent("claim.triggered", currentProtagonistTrigger("policy-1"));
-    act(() => vi.advanceTimersByTime(5_000));
+    act(() => vi.advanceTimersByTime(4_000));
     expect(screen.getByTestId("shockwave")).toBeInTheDocument();
 
     unmount();
@@ -336,7 +336,7 @@ describe("TowerShell C2 STORY timeline", () => {
       receivedAt: Date.now() - 61_000,
     });
 
-    act(() => vi.advanceTimersByTime(5_000));
+    act(() => vi.advanceTimersByTime(4_000));
 
     expect(screen.getAllByTestId("shockwave")).toHaveLength(6);
     for (let delay = 40; delay <= 43; delay += 1) {

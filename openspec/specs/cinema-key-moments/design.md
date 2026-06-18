@@ -56,8 +56,8 @@ C2 必须遵守设计文档 §10：60fps、CSS `transform` / `opacity`、ChainBe
 C1 的 `AutoSeeder` 可能在 cycle establish 阶段调用 `/api/seed-demo`，后端也可能提前广播 settlement 类事件。C2 不强制修改 C1 节奏，而是在前端做 story gate：
 
 - 与当前 protagonist `flightId` 或 `callsign` 不匹配的事件不立即播放；若 60 秒内后续成为主角，可在该主角 STORY 中播放，否则过期丢弃。
-- `claim.triggered` 的目标时间窗为 cycle elapsed >= 5s。
-- `claim.settled` 的 ChainBeam 至少在同一 policy 的 ShockWave 之后约 1s 开始；若没有对应 trigger，则在 STORY 中收到 settled 后立即播放。
+- `claim.triggered` 的目标时间窗为 cycle elapsed >= 4s。
+- `claim.settled` 的 ChainBeam 至少在同一 policy 的 ShockWave 之后约 2s 开始；若没有对应 trigger，则在 STORY 中收到 settled 后立即播放。
 - `flight.landed` 的 FlareLand 至少在 ChainBeam 之后约 2s 或收到 landed 时播放；若没有 ChainBeam，则在压缩 STORY 关键窗口中收到 landed 后立即播放。
 
 实现上用 `keyMomentQueue.ts` 的纯函数计算 pending/active moments，React effect 只负责 timers 与 cleanup。这样 fake timers 可以 deterministically 测时间线。

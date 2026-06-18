@@ -54,9 +54,9 @@ Cinema 引擎不重做地图、不引入新框架；C2/C3 动效由 `cinema-key-
 
 Cinema cycle 固定 30s：
 
-- 0-5s `establish`
-- 5-7s `zoom-in`（语义改为 spotlight fade in，不改变 viewport）
-- 7-25s `story`
+- 0-4s `establish`
+- 4-6s `zoom-in`（语义改为 spotlight fade in，不改变 viewport）
+- 6-25s `story`
 - 25-27s `zoom-out`（语义改为 spotlight fade out，不改变 viewport）
 - 27-30s `rest`
 
