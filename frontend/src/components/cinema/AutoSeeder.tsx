@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "../../api/client";
+import { useEventStore, type FlareEvent } from "../../store/eventStore";
 import { useCinema } from "./CinemaContext";
 import {
   chooseDemoProtagonist,
@@ -27,6 +28,11 @@ interface AutoSeederProps {
 }
 
 const DEMO_INJECT_AT_MS = 3_000;
+const FALLBACK_TRIGGER_AT_MS = 5_000;
+const FALLBACK_SETTLED_AT_MS = 7_000;
+const FALLBACK_LANDED_AT_MS = 9_000;
+const FALLBACK_DEMO_PAYOUT = 320;
+const FALLBACK_DEMO_SETTLE_DURATION_MS = 1_400;
 
 function flightMatchKeys(flightId: string) {
   const normalized = flightId.trim().toUpperCase();
@@ -50,6 +56,103 @@ function seedMatchesProtagonist(
   );
 }
 
+function fallbackSignature(policyId: string) {
+  const material = Array.from(policyId)
+    .map((char) => char.charCodeAt(0).toString(16).padStart(2, "0"))
+    .join("");
+  return `0x${material.padEnd(64, "0").slice(0, 64)}`;
+}
+
+function fallbackTxHash(policyId: string) {
+  const material = Array.from(`tx:${policyId}`)
+    .map((char) => char.charCodeAt(0).toString(16).padStart(2, "0"))
+    .join("");
+  return `0x${material.padEnd(40, "0").slice(0, 40)}`;
+}
+
+function synthesizeDemoClosedLoopEvents(
+  seedResult: SeedDemoResponse,
+  delayMinutes: number,
+  cycleStartedAt: number,
+) {
+  if (useEventStore.getState().wsState === "open") return [];
+
+  const policyId = seedResult.policy_ids[0];
+  if (!policyId || !seedResult.flight_id) return [];
+
+  const signature = fallbackSignature(policyId);
+  const flare: FlareEvent = {
+    flight_id: seedResult.flight_id,
+    policy_id: policyId,
+    payout: FALLBACK_DEMO_PAYOUT,
+    delay_minutes: delayMinutes,
+    signature,
+    settle_duration_ms: FALLBACK_DEMO_SETTLE_DURATION_MS,
+  };
+
+  const schedule = (targetMs: number, callback: () => void) => {
+    const elapsedMs = Date.now() - cycleStartedAt;
+    return window.setTimeout(() => {
+      if (useEventStore.getState().wsState === "open") return;
+      callback();
+    }, Math.max(0, targetMs - elapsedMs));
+  };
+
+  return [
+    schedule(FALLBACK_TRIGGER_AT_MS, () => {
+      const now = Date.now();
+      useEventStore.getState().addEvent({
+        id: `demo-fallback:${policyId}:claim-triggered`,
+        type: "claim.triggered",
+        payload: {
+          flight_id: seedResult.flight_id,
+          policy_id: policyId,
+          delay_minutes: delayMinutes,
+          source: "admin-injection",
+          airport_iata: "UNKNOWN",
+        },
+        receivedAt: now,
+      });
+    }),
+    schedule(FALLBACK_SETTLED_AT_MS, () => {
+      const now = Date.now();
+      const store = useEventStore.getState();
+      store.addEvent({
+        id: `demo-fallback:${policyId}:claim-settled`,
+        type: "claim.settled",
+        payload: {
+          ...flare,
+          tx_hash: fallbackTxHash(policyId),
+          block_height: 9001,
+          source: "mock",
+        },
+        receivedAt: now,
+      });
+      store.addFlare(flare);
+      store.addEvent({
+        id: `demo-fallback:${policyId}:flare`,
+        type: "flare",
+        payload: { ...flare },
+        receivedAt: now,
+      });
+    }),
+    schedule(FALLBACK_LANDED_AT_MS, () => {
+      const now = Date.now();
+      useEventStore.getState().addEvent({
+        id: `demo-fallback:${policyId}:flight-landed`,
+        type: "flight.landed",
+        payload: {
+          flight_id: seedResult.flight_id,
+          policy_id: policyId,
+          landed_at: now,
+          source: "mock",
+        },
+        receivedAt: now,
+      });
+    }),
+  ];
+}
+
 export function AutoSeeder({
   flights,
   userEmail = "captain@local.dev",
@@ -71,7 +174,22 @@ export function AutoSeeder({
   const injectedByCycleRef = useRef<Set<number>>(new Set());
   const realInjectedRef = useRef<Set<string>>(new Set());
   const seedResultByCycleRef = useRef<Map<number, SeedDemoResponse>>(new Map());
+  const fallbackTimerRefs = useRef<number[]>([]);
   const [seedReadyTick, setSeedReadyTick] = useState(0);
+  const clearFallbackTimers = useCallback(() => {
+    for (const timerId of fallbackTimerRefs.current) {
+      window.clearTimeout(timerId);
+    }
+    fallbackTimerRefs.current = [];
+  }, []);
+
+  useEffect(() => {
+    return () => clearFallbackTimers();
+  }, [clearFallbackTimers]);
+
+  useEffect(() => {
+    clearFallbackTimers();
+  }, [clearFallbackTimers, cycleId, protagonist?.flightId, protagonist?.kind]);
 
   useEffect(() => {
     if (mode !== "cinema" || phase !== "establish") return;
@@ -163,6 +281,13 @@ export function AutoSeeder({
           flight_id: seedResult.flight_id,
           delay_minutes: delayMinutes,
         }),
+      }).then((result) => {
+        clearFallbackTimers();
+        fallbackTimerRefs.current = synthesizeDemoClosedLoopEvents(
+          seedResult,
+          result.delay_minutes,
+          cycleStartedAt,
+        );
       });
     };
 
@@ -176,13 +301,12 @@ export function AutoSeeder({
     const id = window.setTimeout(injectDemoDelay, remainingMs);
     return () => window.clearTimeout(id);
   }, [
+    clearFallbackTimers,
     cycleId,
     cycleStartedAt,
     mode,
     delayMinutes,
-    protagonist?.callsign,
-    protagonist?.flightId,
-    protagonist?.kind,
+    protagonist,
     realQueue.length,
     seedReadyTick,
   ]);

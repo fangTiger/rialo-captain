@@ -12,6 +12,7 @@ import type { CinemaMode } from "../components/cinema/cinemaMachine";
 import { AutoSeeder } from "../components/cinema/AutoSeeder";
 import { ModeIndicator } from "../components/cinema/ModeIndicator";
 import { chooseDemoProtagonist } from "../components/cinema/protagonist";
+import { useEventStore } from "../store/eventStore";
 
 vi.mock("../api/client", () => ({
   apiFetch: vi.fn(),
@@ -414,6 +415,7 @@ describe("AutoSeeder", () => {
   afterEach(() => {
     vi.useRealTimers();
     apiFetchMock.mockReset();
+    useEventStore.setState({ flares: [], toasts: [], events: [], wsState: "idle" });
   });
 
   it("seeds during establish and injects delay at the 3s mark", async () => {
@@ -464,6 +466,107 @@ describe("AutoSeeder", () => {
         delay_minutes: 45,
       }),
     });
+  });
+
+  it("synthesizes the demo closed-loop events when WebSocket is unavailable", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-15T00:00:00.000Z"));
+    useEventStore.setState({ flares: [], toasts: [], events: [], wsState: "retrying" });
+    apiFetchMock.mockResolvedValueOnce({
+      protagonist_name: "Alice",
+      flight_id: "BA178-20260615",
+      policy_ids: ["p1"],
+      policies_created: 1,
+      claims_settled: 0,
+    });
+    apiFetchMock.mockResolvedValueOnce({
+      flight_id: "BA178-20260615",
+      delay_minutes: 45,
+    });
+
+    renderAutoSeeder();
+    await flushPromises();
+
+    await act(async () => {
+      vi.advanceTimersByTime(3_000);
+      await Promise.resolve();
+    });
+
+    expect(useEventStore.getState().events).toHaveLength(0);
+    expect(useEventStore.getState().flares).toHaveLength(0);
+
+    await act(async () => {
+      vi.advanceTimersByTime(2_000);
+      await Promise.resolve();
+    });
+
+    expect(useEventStore.getState().events.map((event) => event.type)).toEqual([
+      "claim.triggered",
+    ]);
+    expect(useEventStore.getState().flares).toHaveLength(0);
+
+    await act(async () => {
+      vi.advanceTimersByTime(2_000);
+      await Promise.resolve();
+    });
+
+    expect(useEventStore.getState().flares).toHaveLength(1);
+    expect(useEventStore.getState().flares[0]).toMatchObject({
+      flight_id: "BA178-20260615",
+      policy_id: "p1",
+      payout: 320,
+      delay_minutes: 45,
+    });
+    expect(useEventStore.getState().events.map((event) => event.type)).toEqual([
+      "flare",
+      "claim.settled",
+      "claim.triggered",
+    ]);
+
+    await act(async () => {
+      vi.advanceTimersByTime(2_000);
+      await Promise.resolve();
+    });
+
+    const state = useEventStore.getState();
+    expect(state.events.map((event) => event.type)).toEqual([
+      "flight.landed",
+      "flare",
+      "claim.settled",
+      "claim.triggered",
+    ]);
+    expect(state.events.map((event) => event.payload.policy_id)).toEqual(
+      Array.from({ length: 4 }, () => "p1"),
+    );
+  });
+
+  it("does not synthesize demo events when WebSocket is open", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-15T00:00:00.000Z"));
+    useEventStore.setState({ flares: [], toasts: [], events: [], wsState: "open" });
+    apiFetchMock.mockResolvedValueOnce({
+      protagonist_name: "Alice",
+      flight_id: "BA178-20260615",
+      policy_ids: ["p1"],
+      policies_created: 1,
+      claims_settled: 0,
+    });
+    apiFetchMock.mockResolvedValueOnce({
+      flight_id: "BA178-20260615",
+      delay_minutes: 45,
+    });
+
+    renderAutoSeeder();
+    await flushPromises();
+
+    await act(async () => {
+      vi.advanceTimersByTime(3_000);
+      await Promise.resolve();
+    });
+
+    const state = useEventStore.getState();
+    expect(state.flares).toHaveLength(0);
+    expect(state.events).toHaveLength(0);
   });
 
   it("dedupes seed and inject by cycleId across React rerenders", async () => {
