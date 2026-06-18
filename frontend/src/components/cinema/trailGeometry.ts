@@ -17,6 +17,10 @@ export interface TrailCoordinate {
   latitude: number;
 }
 
+export interface TrailProjectionOptions {
+  minVisibleLengthPx?: number;
+}
+
 function coordinateFromSource(source: TrailSource): TrailCoordinate | null {
   const { longitude, latitude } = source;
   if (
@@ -104,13 +108,49 @@ export function projectTrailPoints(
   points: TrailCoordinate[] | null,
   size: ViewportSize,
   viewport: MapViewport,
+  options: TrailProjectionOptions = {},
 ): ScreenPoint[] | null {
   if (!points || points.length === 0) return null;
-  return points.map((point) => {
+  const projected = points.map((point) => {
     const projected = projectLonLat(point.longitude, point.latitude, size);
     return {
       x: projected.x * viewport.k + viewport.x,
       y: projected.y * viewport.k + viewport.y,
     };
   });
+  return expandShortTrail(projected, options.minVisibleLengthPx);
+}
+
+function screenPathLength(points: ScreenPoint[]) {
+  return points.slice(1).reduce((total, point, index) => {
+    const previous = points[index];
+    return total + Math.hypot(point.x - previous.x, point.y - previous.y);
+  }, 0);
+}
+
+function expandShortTrail(
+  points: ScreenPoint[],
+  minVisibleLengthPx: number | undefined,
+) {
+  if (
+    typeof minVisibleLengthPx !== "number" ||
+    minVisibleLengthPx <= 0 ||
+    points.length < 2
+  ) {
+    return points;
+  }
+
+  const length = screenPathLength(points);
+  if (length <= 0 || length >= minVisibleLengthPx) return points;
+
+  const endpoint = points[points.length - 1];
+  const scale = minVisibleLengthPx / length;
+  return points.map((point, index) =>
+    index === points.length - 1
+      ? point
+      : {
+          x: endpoint.x + (point.x - endpoint.x) * scale,
+          y: endpoint.y + (point.y - endpoint.y) * scale,
+        },
+  );
 }

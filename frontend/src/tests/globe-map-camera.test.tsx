@@ -216,7 +216,7 @@ describe("GlobeMap spotlight and legacy camera target", () => {
     expect(onUserGesture).toHaveBeenCalledTimes(3);
   });
 
-  it("renders protagonist highlight as static SVG without animation runtime hooks", () => {
+  it("renders protagonist highlight with CSS pulse animation and without runtime hooks", () => {
     render(<GlobeMap protagonistHighlight={protagonistHighlight} />);
 
     const ring = screen.getByTestId("protagonist-ring-BA178");
@@ -225,9 +225,13 @@ describe("GlobeMap spotlight and legacy camera target", () => {
     expect(spotlightCircles).toHaveLength(2);
     expect(ring).not.toHaveAttribute("data-framer-motion");
     expect(ring).not.toHaveAttribute("data-gsap");
-    for (const circle of spotlightCircles) {
-      expect(circle.getAttribute("style") ?? "").not.toContain("animation");
-      expect(circle.getAttribute("style") ?? "").not.toContain("transform");
-    }
+    expect(spotlightCircles[0]).toHaveClass("protagonist-spotlight-ring-animated");
+    expect(spotlightCircles[0]).toHaveStyle({
+      animationName: "protagonist-spotlight-ring-breathe",
+    });
+    expect(spotlightCircles[1]).toHaveClass("protagonist-spotlight-pulse-animated");
+    expect(spotlightCircles[1]).toHaveStyle({
+      animationName: "protagonist-spotlight-pulse-expand",
+    });
   });
 });

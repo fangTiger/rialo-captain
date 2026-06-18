@@ -1,0 +1,52 @@
+.protagonist-spotlight-ring,
+.protagonist-spotlight-pulse {
+  transform-box: fill-box;
+  transform-origin: center;
+  will-change: opacity, transform;
+}
+
+.protagonist-spotlight-ring-animated {
+  animation-duration: 1.8s;
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+}
+
+.protagonist-spotlight-pulse-animated {
+  animation-duration: 1.8s;
+  animation-iteration-count: infinite;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes protagonist-spotlight-ring-breathe {
+  0%,
+  100% {
+    opacity: 0.78;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+@keyframes protagonist-spotlight-pulse-expand {
+  0% {
+    opacity: 0.45;
+    transform: scale(0.72);
+  }
+  70% {
+    opacity: 0.18;
+    transform: scale(1.28);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.42);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .protagonist-spotlight-ring-animated,
+  .protagonist-spotlight-pulse-animated {
+    animation: none !important;
+  }
+}

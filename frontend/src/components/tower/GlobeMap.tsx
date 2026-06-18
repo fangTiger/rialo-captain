@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { geoEquirectangular, geoPath, type GeoProjection } from "d3-geo";
 import { feature } from "topojson-client";
@@ -14,6 +15,7 @@ import {
   FLIGHT_TIME_ACCEL,
   matchesFlightIdentity,
 } from "../cinema/flightMotion";
+import "./GlobeMap.css";
 
 interface Props {
   cameraTarget?: CameraTarget | null;
@@ -45,6 +47,12 @@ const WORLD_TOPOJSON_URL =
 const MIN_K = 0.6;
 const MAX_K = 12;
 const TICK_INTERVAL_MS = 500;
+const protagonistRingStyle: CSSProperties = {
+  animationName: "protagonist-spotlight-ring-breathe",
+};
+const protagonistPulseStyle: CSSProperties = {
+  animationName: "protagonist-spotlight-pulse-expand",
+};
 export function GlobeMap({
   cameraTarget = null,
   onUserGesture,
@@ -505,7 +513,7 @@ export function GlobeMap({
                       style={{ pointerEvents: "none" }}
                     >
                       <circle
-                        className="protagonist-spotlight-ring"
+                        className="protagonist-spotlight-ring protagonist-spotlight-ring-animated"
                         cx={x}
                         cy={y}
                         r={12 / viewport.k}
@@ -514,9 +522,10 @@ export function GlobeMap({
                         strokeWidth={1.4 / viewport.k}
                         opacity={0.9}
                         pointerEvents="none"
+                        style={protagonistRingStyle}
                       />
                       <circle
-                        className="protagonist-spotlight-pulse"
+                        className="protagonist-spotlight-pulse protagonist-spotlight-pulse-animated"
                         cx={x}
                         cy={y}
                         r={18 / viewport.k}
@@ -524,6 +533,7 @@ export function GlobeMap({
                         stroke="rgba(255, 68, 128, 0.35)"
                         strokeWidth={0.8 / viewport.k}
                         pointerEvents="none"
+                        style={protagonistPulseStyle}
                       />
                     </g>
                   )}

@@ -5,6 +5,13 @@ import {
   projectTrailPoints,
 } from "../components/cinema/trailGeometry";
 
+function screenPathLength(points: Array<{ x: number; y: number }>) {
+  return points.slice(1).reduce((total, point, index) => {
+    const previous = points[index];
+    return total + Math.hypot(point.x - previous.x, point.y - previous.y);
+  }, 0);
+}
+
 describe("trail geometry", () => {
   it("generates a multi-point trail from heading and ends at the protagonist", () => {
     const points = buildTrailPoints({
@@ -64,5 +71,27 @@ describe("trail geometry", () => {
       x: first.x * viewport.k + viewport.x,
       y: first.y * viewport.k + viewport.y,
     });
+  });
+
+  it("can expand short global trails to a minimum visible screen length", () => {
+    const size = { width: 1280, height: 720 };
+    const viewport = { k: 1, x: 0, y: 0 };
+    const points = buildTrailPoints({
+      longitude: -73.78,
+      latitude: 40.64,
+      heading: 90,
+      velocity: 240,
+    });
+    if (!points) throw new Error("trail should be available");
+
+    const natural = projectTrailPoints(points, size, viewport);
+    const visible = projectTrailPoints(points, size, viewport, {
+      minVisibleLengthPx: 56,
+    });
+
+    if (!natural || !visible) throw new Error("trail projection should exist");
+    expect(screenPathLength(natural)).toBeLessThan(10);
+    expect(screenPathLength(visible)).toBeGreaterThanOrEqual(56);
+    expect(visible.at(-1)).toEqual(natural.at(-1));
   });
 });

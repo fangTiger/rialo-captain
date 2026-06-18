@@ -125,6 +125,8 @@ describe("C3 ambient visual components", () => {
 
     const trail = screen.getByTestId("trail-draw");
     expect(trail.tagName.toLowerCase()).toBe("svg");
+    expect(trail).toHaveAttribute("width", "100%");
+    expect(trail).toHaveAttribute("height", "100%");
     expect(trail).toHaveStyle({ pointerEvents: "none" });
 
     const path = screen.getByTestId("trail-draw-path");

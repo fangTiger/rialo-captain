@@ -37,7 +37,9 @@ export function TrailDraw({ points, reducedMotion }: TrailDrawProps) {
           : "cinema-traildraw is-animated"
       }
       data-testid="trail-draw"
+      height="100%"
       style={{ pointerEvents: "none" }}
+      width="100%"
     >
       <path
         className={
