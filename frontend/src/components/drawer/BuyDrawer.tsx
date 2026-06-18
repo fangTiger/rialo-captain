@@ -16,12 +16,23 @@ interface FlightDetailDto {
   samples: number;
 }
 
+export interface PurchasedPolicy {
+  id: string;
+  flight_id: string;
+  premium: number;
+  payout: number;
+  status: string;
+  contract_ref: string;
+  created_at: number;
+}
+
 interface Props {
   flightId: string;
   onClose: () => void;
+  onPurchased?: (policy: PurchasedPolicy) => void;
 }
 
-export function BuyDrawer({ flightId, onClose }: Props) {
+export function BuyDrawer({ flightId, onClose, onPurchased }: Props) {
   const { data: flight } = useSWR<FlightDetailDto>(
     `/flights/${flightId}`,
     (p: string) => apiFetch<FlightDetailDto>(p),
@@ -58,10 +69,11 @@ export function BuyDrawer({ flightId, onClose }: Props) {
     setBusy(true);
     setErr(null);
     try {
-      await apiFetch("/policies", {
+      const policy = await apiFetch<PurchasedPolicy>("/policies", {
         method: "POST",
         body: JSON.stringify({ flight_id: flightId, premium }),
       });
+      onPurchased?.(policy);
       await refresh();
       onClose();
     } catch (e) {

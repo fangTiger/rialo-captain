@@ -25,6 +25,7 @@ interface AutoSeederProps {
   userEmail?: string;
   delayMinutes?: number;
   demoSelectionOffset?: number;
+  demoLocked?: boolean;
 }
 
 const DEMO_INJECT_AT_MS = 3_000;
@@ -70,19 +71,41 @@ function fallbackTxHash(policyId: string) {
   return `0x${material.padEnd(40, "0").slice(0, 40)}`;
 }
 
-function synthesizeDemoClosedLoopEvents(
-  seedResult: SeedDemoResponse,
+function hasFallbackEquivalentEvent(type: string, policyId: string) {
+  return useEventStore
+    .getState()
+    .events.some(
+      (event) =>
+        event.type === type && event.payload.policy_id === policyId,
+    );
+}
+
+interface ClosedLoopFallbackInput {
+  idPrefix: string;
+  flightId: string;
+  policyId: string;
   delayMinutes: number,
   cycleStartedAt: number,
-) {
-  if (useEventStore.getState().wsState === "open") return [];
+  triggerSource: string;
+  settledSource: string;
+  landedSource: string;
+}
 
-  const policyId = seedResult.policy_ids[0];
-  if (!policyId || !seedResult.flight_id) return [];
+function synthesizeClosedLoopEvents({
+  idPrefix,
+  flightId,
+  policyId,
+  delayMinutes,
+  cycleStartedAt,
+  triggerSource,
+  settledSource,
+  landedSource,
+}: ClosedLoopFallbackInput) {
+  if (!policyId || !flightId) return [];
 
   const signature = fallbackSignature(policyId);
   const flare: FlareEvent = {
-    flight_id: seedResult.flight_id,
+    flight_id: flightId,
     policy_id: policyId,
     payout: FALLBACK_DEMO_PAYOUT,
     delay_minutes: delayMinutes,
@@ -93,59 +116,61 @@ function synthesizeDemoClosedLoopEvents(
   const schedule = (targetMs: number, callback: () => void) => {
     const elapsedMs = Date.now() - cycleStartedAt;
     return window.setTimeout(() => {
-      if (useEventStore.getState().wsState === "open") return;
       callback();
     }, Math.max(0, targetMs - elapsedMs));
   };
 
   return [
     schedule(FALLBACK_TRIGGER_AT_MS, () => {
+      if (hasFallbackEquivalentEvent("claim.triggered", policyId)) return;
       const now = Date.now();
       useEventStore.getState().addEvent({
-        id: `demo-fallback:${policyId}:claim-triggered`,
+        id: `${idPrefix}:${policyId}:claim-triggered`,
         type: "claim.triggered",
         payload: {
-          flight_id: seedResult.flight_id,
+          flight_id: flightId,
           policy_id: policyId,
           delay_minutes: delayMinutes,
-          source: "admin-injection",
+          source: triggerSource,
           airport_iata: "UNKNOWN",
         },
         receivedAt: now,
       });
     }),
     schedule(FALLBACK_SETTLED_AT_MS, () => {
+      if (hasFallbackEquivalentEvent("claim.settled", policyId)) return;
       const now = Date.now();
       const store = useEventStore.getState();
       store.addEvent({
-        id: `demo-fallback:${policyId}:claim-settled`,
+        id: `${idPrefix}:${policyId}:claim-settled`,
         type: "claim.settled",
         payload: {
           ...flare,
           tx_hash: fallbackTxHash(policyId),
           block_height: 9001,
-          source: "mock",
+          source: settledSource,
         },
         receivedAt: now,
       });
       store.addFlare(flare);
       store.addEvent({
-        id: `demo-fallback:${policyId}:flare`,
+        id: `${idPrefix}:${policyId}:flare`,
         type: "flare",
         payload: { ...flare },
         receivedAt: now,
       });
     }),
     schedule(FALLBACK_LANDED_AT_MS, () => {
+      if (hasFallbackEquivalentEvent("flight.landed", policyId)) return;
       const now = Date.now();
       useEventStore.getState().addEvent({
-        id: `demo-fallback:${policyId}:flight-landed`,
+        id: `${idPrefix}:${policyId}:flight-landed`,
         type: "flight.landed",
         payload: {
-          flight_id: seedResult.flight_id,
+          flight_id: flightId,
           policy_id: policyId,
           landed_at: now,
-          source: "mock",
+          source: landedSource,
         },
         receivedAt: now,
       });
@@ -153,11 +178,50 @@ function synthesizeDemoClosedLoopEvents(
   ];
 }
 
+function synthesizeDemoClosedLoopEvents(
+  seedResult: SeedDemoResponse,
+  delayMinutes: number,
+  cycleStartedAt: number,
+) {
+  const policyId = seedResult.policy_ids[0];
+  if (!policyId) return [];
+  return synthesizeClosedLoopEvents({
+    idPrefix: "demo-fallback",
+    flightId: seedResult.flight_id,
+    policyId,
+    delayMinutes,
+    cycleStartedAt,
+    triggerSource: "admin-injection",
+    settledSource: "mock",
+    landedSource: "mock",
+  });
+}
+
+function synthesizeRealClosedLoopEvents(
+  protagonist: NonNullable<ReturnType<typeof useCinema>["protagonist"]>,
+  delayMinutes: number,
+  cycleStartedAt: number,
+) {
+  if (protagonist.kind !== "REAL") return [];
+  const policyId = protagonist.policyId ?? protagonist.flightId;
+  return synthesizeClosedLoopEvents({
+    idPrefix: "real-fallback",
+    flightId: protagonist.flightId,
+    policyId,
+    delayMinutes,
+    cycleStartedAt,
+    triggerSource: "real-fallback",
+    settledSource: "real-fallback",
+    landedSource: "real-fallback",
+  });
+}
+
 export function AutoSeeder({
   flights,
   userEmail = "captain@local.dev",
   delayMinutes = 45,
   demoSelectionOffset = 0,
+  demoLocked = false,
 }: AutoSeederProps) {
   const {
     cycleId,
@@ -192,7 +256,13 @@ export function AutoSeeder({
   }, [clearFallbackTimers, cycleId, protagonist?.flightId, protagonist?.kind]);
 
   useEffect(() => {
+    if (!demoLocked || protagonist?.kind === "REAL") return;
+    clearFallbackTimers();
+  }, [clearFallbackTimers, demoLocked, protagonist?.kind]);
+
+  useEffect(() => {
     if (mode !== "cinema" || phase !== "establish") return;
+    if (demoLocked) return;
     if (seededByCycleRef.current.has(cycleId)) return;
     if (protagonist?.kind === "REAL" || realQueue.length > 0) return;
 
@@ -219,6 +289,7 @@ export function AutoSeeder({
     });
   }, [
     cycleId,
+    demoLocked,
     demoSelectionOffset,
     flights,
     markDemoOffline,
@@ -248,11 +319,20 @@ export function AutoSeeder({
         flight_id: protagonist.flightId,
         delay_minutes: delayMinutes,
       }),
+    }).then((result) => {
+      clearFallbackTimers();
+      fallbackTimerRefs.current = synthesizeRealClosedLoopEvents(
+        protagonist,
+        result.delay_minutes,
+        cycleStartedAt,
+      );
     }).catch(() => {
       markRealInjectFailed();
     });
   }, [
+    clearFallbackTimers,
     cycleId,
+    cycleStartedAt,
     delayMinutes,
     markRealInjectFailed,
     mode,
@@ -264,6 +344,7 @@ export function AutoSeeder({
   useEffect(() => {
     if (mode !== "cinema") return;
     if (protagonist?.kind !== "DEMO") return;
+    if (demoLocked) return;
     if (realQueue.length > 0) return;
     if (injectedByCycleRef.current.has(cycleId)) return;
 
@@ -304,6 +385,7 @@ export function AutoSeeder({
     clearFallbackTimers,
     cycleId,
     cycleStartedAt,
+    demoLocked,
     mode,
     delayMinutes,
     protagonist,

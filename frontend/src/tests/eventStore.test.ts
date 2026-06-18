@@ -37,6 +37,27 @@ describe("eventStore", () => {
     expect(useEventStore.getState().flares).toHaveLength(1);
   });
 
+  it("deduplicates repeated flares by policy id", () => {
+    useEventStore.getState().addFlare({
+      flight_id: "BA178-20260614",
+      policy_id: "p1",
+      payout: 80,
+      delay_minutes: 45,
+      signature: "0xfallback",
+      settle_duration_ms: 100,
+    });
+    useEventStore.getState().addFlare({
+      flight_id: "BA178-20260614",
+      policy_id: "p1",
+      payout: 80,
+      delay_minutes: 45,
+      signature: "0xbackend",
+      settle_duration_ms: 120,
+    });
+
+    expect(useEventStore.getState().flares).toHaveLength(1);
+  });
+
   it("flares capped at 100", () => {
     const { addFlare } = useEventStore.getState();
     for (let i = 0; i < 150; i++) {
@@ -92,6 +113,34 @@ describe("eventStore", () => {
 
     useEventStore.getState().addEvent(event);
     useEventStore.getState().addEvent({ ...event, payload: { ...event.payload } });
+
+    expect(useEventStore.getState().events).toHaveLength(1);
+  });
+
+  it("deduplicates typed cinema events by type and policy id", () => {
+    useEventStore.getState().addEvent({
+      type: "claim.settled",
+      payload: {
+        flight_id: "BA178-20260614",
+        policy_id: "p1",
+        payout: 80,
+        delay_minutes: 45,
+        tx_hash: "0xfallback",
+        source: "real-fallback",
+      },
+    });
+    useEventStore.getState().addEvent({
+      type: "claim.settled",
+      payload: {
+        flight_id: "BA178-20260614",
+        policy_id: "p1",
+        payout: 80,
+        delay_minutes: 45,
+        tx_hash: "0xbackend",
+        block_height: 9001,
+        source: "mock",
+      },
+    });
 
     expect(useEventStore.getState().events).toHaveLength(1);
   });

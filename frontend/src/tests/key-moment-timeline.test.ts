@@ -3,6 +3,7 @@ import {
   advanceKeyMomentTimeline,
   createKeyMomentTimelineState,
   enqueueKeyMoment,
+  resetKeyMomentTimelineForProtagonist,
 } from "../components/cinema/keyMomentTimeline";
 import type { KeyMoment } from "../components/cinema/keyMoments";
 
@@ -200,6 +201,50 @@ describe("key moment timeline", () => {
       "queued-real:shockwave",
     ]);
     expect(state.pending).toHaveLength(0);
+  });
+
+  it("moves matching active moments back to pending when a real takeover resets the cycle", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(cycleStartedAt);
+
+    let state = createKeyMomentTimelineState();
+    state = enqueueKeyMoment(state, shockwave("fast-real", cycleStartedAt + 1_000));
+    state = advanceAt(state, 12_000);
+
+    expect(state.active.map((active) => active.moment.id)).toEqual([
+      "fast-real:shockwave",
+    ]);
+
+    state = resetKeyMomentTimelineForProtagonist(state, {
+      flightId: "BA178-20260615",
+      policyId: "pol-fast-real",
+    });
+
+    expect(state.active).toHaveLength(0);
+    expect(state.playedIds).toHaveLength(0);
+    expect(state.pending.map((moment) => moment.id)).toEqual([
+      "fast-real:shockwave",
+    ]);
+
+    vi.setSystemTime(cycleStartedAt + 12_000 + 5_999);
+    state = advanceKeyMomentTimeline(state, {
+      now: Date.now(),
+      phase: "establish",
+      cycleStartedAt: cycleStartedAt + 12_000,
+      protagonistFlightId: "BA178-20260615",
+    });
+    expect(state.active).toHaveLength(0);
+
+    vi.setSystemTime(cycleStartedAt + 12_000 + 6_000);
+    state = advanceKeyMomentTimeline(state, {
+      now: Date.now(),
+      phase: "zoom-in",
+      cycleStartedAt: cycleStartedAt + 12_000,
+      protagonistFlightId: "BA178-20260615",
+    });
+    expect(state.active.map((active) => active.moment.id)).toEqual([
+      "fast-real:shockwave",
+    ]);
   });
 
   it("drops a pending non-protagonist moment if that flight becomes protagonist after the lookback window", () => {

@@ -74,6 +74,12 @@ function pushWsEvent(type: string, payload: Record<string, unknown>) {
   });
 }
 
+function releaseKeyMomentTick() {
+  act(() => {
+    vi.advanceTimersByTime(0);
+  });
+}
+
 vi.mock("../hooks/useFlights", () => ({
   useFlights: () => ({
     flights: [
@@ -334,6 +340,7 @@ describe("TowerShell C3 ambient integration", () => {
       airport_iata: "JFK",
       source: "demo",
     });
+    releaseKeyMomentTick();
 
     expect(screen.queryByTestId("trail-draw")).not.toBeInTheDocument();
     expect(screen.getByTestId("shockwave")).toBeInTheDocument();

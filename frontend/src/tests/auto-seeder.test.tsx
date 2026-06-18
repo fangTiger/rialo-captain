@@ -106,6 +106,16 @@ function renderAutoSeeder(initialMode?: CinemaMode) {
   );
 }
 
+function renderLockedAutoSeeder() {
+  return render(
+    <CinemaProvider>
+      <CinemaController />
+      <AutoSeeder demoLocked flights={liveFlights} />
+      <ProtagonistProbe />
+    </CinemaProvider>,
+  );
+}
+
 function renderAutoSeederWithProbe() {
   return render(
     <CinemaProvider initialProtagonist={initialProtagonist}>
@@ -186,6 +196,7 @@ function QueueSetupThenAutoSeeder() {
       callsign: "UA200",
       longitude: -122.4,
       latitude: 37.6,
+      policyId: "policy-real-active",
     });
     cinema.routeRealProtagonist(queuedRealEvent);
     cinema.setDemoProtagonist(initialProtagonist);
@@ -468,6 +479,22 @@ describe("AutoSeeder", () => {
     });
   });
 
+  it("does not choose a demo protagonist while the user has locked a flight", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-15T00:00:00.000Z"));
+
+    renderLockedAutoSeeder();
+    await flushPromises();
+
+    await act(async () => {
+      vi.advanceTimersByTime(6_000);
+      await Promise.resolve();
+    });
+
+    expect(screen.getByTestId("protagonist-kind")).toBeEmptyDOMElement();
+    expect(apiFetchMock).not.toHaveBeenCalled();
+  });
+
   it("synthesizes the demo closed-loop events when WebSocket is unavailable", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-15T00:00:00.000Z"));
@@ -538,6 +565,95 @@ describe("AutoSeeder", () => {
     expect(state.events.map((event) => event.payload.policy_id)).toEqual(
       Array.from({ length: 4 }, () => "p1"),
     );
+  });
+
+  it("synthesizes REAL closed-loop events when WebSocket is unavailable", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-15T00:00:00.000Z"));
+    useEventStore.setState({ flares: [], toasts: [], events: [], wsState: "retrying" });
+    apiFetchMock.mockResolvedValue({
+      flight_id: "UA200-20260615",
+      delay_minutes: 45,
+    });
+
+    renderAutoSeederWithRealProtagonist();
+    await flushPromises();
+
+    expect(apiFetchMock).toHaveBeenCalledTimes(1);
+    expect(useEventStore.getState().events).toHaveLength(0);
+
+    await act(async () => {
+      vi.advanceTimersByTime(6_000);
+      await Promise.resolve();
+    });
+
+    expect(useEventStore.getState().events.map((event) => event.type)).toEqual([
+      "claim.triggered",
+    ]);
+
+    await act(async () => {
+      vi.advanceTimersByTime(2_000);
+      await Promise.resolve();
+    });
+
+    expect(useEventStore.getState().flares).toHaveLength(1);
+    expect(useEventStore.getState().flares[0]).toMatchObject({
+      flight_id: "UA200-20260615",
+      policy_id: "policy-real-active",
+      payout: 320,
+      delay_minutes: 45,
+    });
+    expect(useEventStore.getState().events.map((event) => event.type)).toEqual([
+      "flare",
+      "claim.settled",
+      "claim.triggered",
+    ]);
+
+    await act(async () => {
+      vi.advanceTimersByTime(2_000);
+      await Promise.resolve();
+    });
+
+    expect(useEventStore.getState().events.map((event) => event.type)).toEqual([
+      "flight.landed",
+      "flare",
+      "claim.settled",
+      "claim.triggered",
+    ]);
+  });
+
+  it("synthesizes missing REAL closed-loop moments even when WebSocket is open", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-15T00:00:00.000Z"));
+    useEventStore.setState({ flares: [], toasts: [], events: [], wsState: "open" });
+    apiFetchMock.mockResolvedValue({
+      flight_id: "UA200-20260615",
+      delay_minutes: 45,
+    });
+
+    renderAutoSeederWithRealProtagonist();
+    await flushPromises();
+
+    await act(async () => {
+      vi.advanceTimersByTime(6_000);
+      await Promise.resolve();
+    });
+
+    expect(useEventStore.getState().events.map((event) => event.type)).toEqual([
+      "claim.triggered",
+    ]);
+
+    await act(async () => {
+      vi.advanceTimersByTime(4_000);
+      await Promise.resolve();
+    });
+
+    expect(useEventStore.getState().events.map((event) => event.type)).toEqual([
+      "flight.landed",
+      "flare",
+      "claim.settled",
+      "claim.triggered",
+    ]);
   });
 
   it("does not synthesize demo events when WebSocket is open", async () => {

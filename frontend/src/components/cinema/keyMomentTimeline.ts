@@ -73,11 +73,19 @@ export function resetKeyMomentTimelineForProtagonist(
   const resetState = createKeyMomentTimelineState();
   if (!target.flightId) return resetState;
 
+  const matchingMoments = [
+    ...state.pending,
+    ...state.active.map((activeMoment) => activeMoment.moment),
+  ].filter((moment) => matchesResetTarget(moment, target));
+  const seenMomentIds = new Set<string>();
+
   return {
     ...resetState,
-    pending: state.pending.filter((moment) =>
-      matchesResetTarget(moment, target),
-    ),
+    pending: matchingMoments.filter((moment) => {
+      if (seenMomentIds.has(moment.id)) return false;
+      seenMomentIds.add(moment.id);
+      return true;
+    }),
   };
 }
 

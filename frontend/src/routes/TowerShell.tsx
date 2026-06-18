@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { AutoSeeder } from "../components/cinema/AutoSeeder";
 import { CameraDirector } from "../components/cinema/CameraDirector";
 import { CinemaController } from "../components/cinema/CinemaController";
@@ -8,7 +15,10 @@ import {
   type CinemaProtagonist,
   useCinema,
 } from "../components/cinema/CinemaContext";
-import { EventChoreographer } from "../components/cinema/EventChoreographer";
+import {
+  EventChoreographer,
+  normalizeCreatedAtMs,
+} from "../components/cinema/EventChoreographer";
 import { ModeIndicator } from "../components/cinema/ModeIndicator";
 import { ProtagonistBadge } from "../components/cinema/ProtagonistBadge";
 import { ChainBeam } from "../components/cinema/ChainBeam";
@@ -17,10 +27,18 @@ import { HeatmapBg } from "../components/cinema/HeatmapBg";
 import { ShockWave } from "../components/cinema/ShockWave";
 import { TrailDraw } from "../components/cinema/TrailDraw";
 import { chooseDemoProtagonist } from "../components/cinema/protagonist";
-import { projectTrailPoints } from "../components/cinema/trailGeometry";
+import {
+  buildTrailPoints,
+  projectTrailPoints,
+} from "../components/cinema/trailGeometry";
 import { useAmbientHeatmap } from "../components/cinema/useAmbientHeatmap";
 import { useKeyMomentQueue } from "../components/cinema/useKeyMomentQueue";
-import { useTrailDraw } from "../components/cinema/useTrailDraw";
+import {
+  TRAIL_DRAW_START_MS,
+  TRAIL_DRAW_TTL_MS,
+  useTrailDraw,
+  type ActiveTrailDraw,
+} from "../components/cinema/useTrailDraw";
 import {
   GlobeMap,
   type ProtagonistHighlight,
@@ -29,8 +47,12 @@ import { RadarSweep } from "../components/tower/RadarSweep";
 import { EventFeedSidebar } from "../components/tower/EventFeedSidebar";
 import { KPIBand } from "../components/tower/KPIBand";
 import { DataStaleBadge } from "../components/tower/DataStaleBadge";
-import { BuyDrawer } from "../components/drawer/BuyDrawer";
+import {
+  BuyDrawer,
+  type PurchasedPolicy,
+} from "../components/drawer/BuyDrawer";
 import { useFlights, type FlightPublic } from "../hooks/useFlights";
+import { useEventStore, type FlareEvent } from "../store/eventStore";
 import {
   hangarAnchorForSize,
   projectMomentPoint,
@@ -45,6 +67,10 @@ export function TowerShell() {
   const [drawerFlightId, setDrawerFlightId] = useState<string | null>(null);
   const [electedCallsign, setElectedCallsign] = useState<string | null>(null);
   const [electedTrailToken, setElectedTrailToken] = useState(0);
+  const [purchasedPolicy, setPurchasedPolicy] = useState<PurchasedPolicy | null>(
+    null,
+  );
+  const purchaseCompletedRef = useRef(false);
   const demoSelectionOffsetRef = useRef<number | null>(null);
   if (demoSelectionOffsetRef.current === null) {
     demoSelectionOffsetRef.current = Math.floor(Math.random() * 1_000_000_000);
@@ -71,6 +97,7 @@ export function TowerShell() {
       >
         <CinemaController />
         <AutoSeeder
+          demoLocked={Boolean(electedCallsign)}
           demoSelectionOffset={demoSelectionOffset}
           flights={flights}
         />
@@ -85,18 +112,30 @@ export function TowerShell() {
               .slice(0, 10)
               .replaceAll("-", "");
             setElectedCallsign(normalized);
+            setPurchasedPolicy(null);
             setElectedTrailToken((token) => token + 1);
             setDrawerFlightId(`${normalized}-${date}`);
           }}
           electedTrailToken={electedTrailToken}
+          purchasedPolicy={purchasedPolicy}
         />
       </CinemaProvider>
       {drawerFlightId && (
         <BuyDrawer
           flightId={drawerFlightId}
+          onPurchased={(policy) => {
+            purchaseCompletedRef.current = true;
+            setPurchasedPolicy(policy);
+          }}
           onClose={() => {
+            if (purchaseCompletedRef.current) {
+              purchaseCompletedRef.current = false;
+              setDrawerFlightId(null);
+              return;
+            }
             setDrawerFlightId(null);
-            setElectedTrailToken((token) => token + 1);
+            setElectedCallsign(null);
+            setPurchasedPolicy(null);
           }}
         />
       )}
@@ -109,38 +148,82 @@ interface TowerCinemaLayersProps {
   flights: FlightPublic[];
   onSelectFlight: (callsign: string) => void;
   electedTrailToken: number;
+  purchasedPolicy: PurchasedPolicy | null;
 }
 
 const DEFAULT_OVERLAY_SIZE: ViewportSize = { width: 1200, height: 720 };
+const PURCHASE_SHOCKWAVE_AT_MS = 6_000;
+const PURCHASE_CHAIN_AT_MS = 8_000;
+const PURCHASE_LANDED_AT_MS = 10_000;
+const PURCHASE_DELAY_MINUTES = 45;
+const PURCHASE_SETTLE_DURATION_MS = 1_400;
+
+function fallbackSignature(policyId: string) {
+  const material = Array.from(policyId)
+    .map((char) => char.charCodeAt(0).toString(16).padStart(2, "0"))
+    .join("");
+  return `0x${material.padEnd(64, "0").slice(0, 64)}`;
+}
+
+function fallbackTxHash(policyId: string) {
+  const material = Array.from(`tx:${policyId}`)
+    .map((char) => char.charCodeAt(0).toString(16).padStart(2, "0"))
+    .join("");
+  return `0x${material.padEnd(40, "0").slice(0, 40)}`;
+}
+
+function hasPolicyEvent(type: string, policyId: string) {
+  return useEventStore
+    .getState()
+    .events.some(
+      (event) => event.type === type && event.payload.policy_id === policyId,
+    );
+}
 
 function TowerCinemaLayers({
   electedFlight,
   electedTrailToken,
   flights,
   onSelectFlight,
+  purchasedPolicy,
 }: TowerCinemaLayersProps) {
   const cinema = useCinema();
   const [mapViewport, setMapViewport] = useState<MapViewport>({ k: 1, x: 0, y: 0 });
   const [mapSize, setMapSize] = useState<ViewportSize>(DEFAULT_OVERLAY_SIZE);
   const ambientHeatmap = useAmbientHeatmap();
+  const keyMomentProtagonistFlightId =
+    electedFlight?.callsign ?? cinema.protagonist?.flightId ?? null;
   const keyMomentQueue = useKeyMomentQueue({
     cycleStartedAt: cinema.cycleStartedAt,
     phase: cinema.phase,
-    protagonistFlightId: cinema.protagonist?.flightId ?? null,
+    protagonistFlightId: keyMomentProtagonistFlightId,
   });
   const previousStoryResetIdRef = useRef(cinema.storyResetId);
+  const previousElectedCallsignRef = useRef<string | null>(null);
+  const routedPurchasedPolicyRef = useRef<string | null>(null);
+  const purchaseTimelineTimersRef = useRef<number[]>([]);
+  const [purchasedTrail, setPurchasedTrail] = useState<ActiveTrailDraw | null>(
+    null,
+  );
+  const clearPurchaseTimelineTimers = useCallback(() => {
+    for (const timerId of purchaseTimelineTimersRef.current) {
+      window.clearTimeout(timerId);
+    }
+    purchaseTimelineTimersRef.current = [];
+  }, []);
   const { activeTrail } = useTrailDraw({
     mode: cinema.mode,
     phase: cinema.phase,
     cycleStartedAt: cinema.cycleStartedAt,
     protagonist: cinema.protagonist,
     flights,
-    userElectedFlight: electedFlight,
+    userElectedFlight: purchasedPolicy ? null : electedFlight,
     userElectedTrailToken: electedTrailToken,
     resetToken: cinema.storyResetId,
   });
+  const displayedTrail = activeTrail ?? purchasedTrail;
   const trailPoints = projectTrailPoints(
-    activeTrail?.points ?? null,
+    displayedTrail?.points ?? null,
     mapSize,
     mapViewport,
   );
@@ -155,6 +238,153 @@ function TowerCinemaLayers({
     cinema.mode === "cinema" &&
     cinema.phase === "story" &&
     cinema.protagonist !== null;
+
+  useEffect(() => {
+    return () => clearPurchaseTimelineTimers();
+  }, [clearPurchaseTimelineTimers]);
+
+  useEffect(() => {
+    if (purchasedPolicy) return;
+    routedPurchasedPolicyRef.current = null;
+    clearPurchaseTimelineTimers();
+    setPurchasedTrail(null);
+  }, [clearPurchaseTimelineTimers, purchasedPolicy]);
+
+  useEffect(() => {
+    if (!purchasedPolicy || !electedFlight) return;
+    if (routedPurchasedPolicyRef.current === purchasedPolicy.id) return;
+    if (
+      typeof electedFlight.longitude !== "number" ||
+      typeof electedFlight.latitude !== "number"
+    ) {
+      return;
+    }
+
+    routedPurchasedPolicyRef.current = purchasedPolicy.id;
+    const now = Date.now();
+    const policyId = purchasedPolicy.id;
+    const flightId = purchasedPolicy.flight_id;
+    cinema.routeRealProtagonist({
+      id: `manual-buy:${policyId}`,
+      flightId,
+      callsign: electedFlight.callsign,
+      longitude: electedFlight.longitude,
+      latitude: electedFlight.latitude,
+      createdAt: normalizeCreatedAtMs(purchasedPolicy.created_at, now),
+      policyId,
+      source: "real",
+    });
+
+    clearPurchaseTimelineTimers();
+    setPurchasedTrail(null);
+    const schedule = (targetMs: number, callback: () => void) => {
+      const timerId = window.setTimeout(() => {
+        callback();
+      }, Math.max(0, targetMs - (Date.now() - now)));
+      purchaseTimelineTimersRef.current.push(timerId);
+    };
+
+    schedule(TRAIL_DRAW_START_MS, () => {
+      const points = buildTrailPoints({
+        longitude: electedFlight.longitude,
+        latitude: electedFlight.latitude,
+        heading: electedFlight.heading,
+        velocity: electedFlight.velocity,
+      });
+      if (!points) return;
+
+      const startedAt = Date.now();
+      const trail: ActiveTrailDraw = {
+        id: `manual-buy:${policyId}:traildraw`,
+        flightId,
+        startedAt,
+        expiresAt: startedAt + TRAIL_DRAW_TTL_MS,
+        points,
+      };
+      setPurchasedTrail(trail);
+      const clearTimerId = window.setTimeout(() => {
+        setPurchasedTrail((current) =>
+          current?.id === trail.id ? null : current,
+        );
+      }, TRAIL_DRAW_TTL_MS);
+      purchaseTimelineTimersRef.current.push(clearTimerId);
+    });
+
+    schedule(PURCHASE_SHOCKWAVE_AT_MS, () => {
+      if (hasPolicyEvent("claim.triggered", policyId)) return;
+      useEventStore.getState().addEvent({
+        id: `manual-buy:${policyId}:claim-triggered`,
+        type: "claim.triggered",
+        payload: {
+          flight_id: flightId,
+          policy_id: policyId,
+          delay_minutes: PURCHASE_DELAY_MINUTES,
+          source: "real-fallback",
+          airport_iata: "UNKNOWN",
+        },
+      });
+    });
+
+    schedule(PURCHASE_CHAIN_AT_MS, () => {
+      if (hasPolicyEvent("claim.settled", policyId)) return;
+      const signature = fallbackSignature(policyId);
+      const flare: FlareEvent = {
+        flight_id: flightId,
+        policy_id: policyId,
+        payout: purchasedPolicy.payout,
+        delay_minutes: PURCHASE_DELAY_MINUTES,
+        signature,
+        settle_duration_ms: PURCHASE_SETTLE_DURATION_MS,
+      };
+      const store = useEventStore.getState();
+      store.addEvent({
+        id: `manual-buy:${policyId}:claim-settled`,
+        type: "claim.settled",
+        payload: {
+          ...flare,
+          tx_hash: fallbackTxHash(policyId),
+          block_height: 9001,
+          source: "real-fallback",
+        },
+      });
+      store.addFlare(flare);
+      store.addEvent({
+        id: `manual-buy:${policyId}:flare`,
+        type: "flare",
+        payload: { ...flare },
+      });
+    });
+
+    schedule(PURCHASE_LANDED_AT_MS, () => {
+      if (hasPolicyEvent("flight.landed", policyId)) return;
+      useEventStore.getState().addEvent({
+        id: `manual-buy:${policyId}:flight-landed`,
+        type: "flight.landed",
+        payload: {
+          flight_id: flightId,
+          policy_id: policyId,
+          landed_at: Date.now(),
+          source: "real-fallback",
+        },
+      });
+    });
+  }, [
+    cinema,
+    clearPurchaseTimelineTimers,
+    electedFlight,
+    purchasedPolicy,
+  ]);
+
+  useEffect(() => {
+    const currentCallsign = electedFlight?.callsign ?? null;
+    if (
+      currentCallsign &&
+      previousElectedCallsignRef.current !== currentCallsign
+    ) {
+      keyMomentQueue.clearAllMoments();
+    }
+    previousElectedCallsignRef.current = currentCallsign;
+  }, [electedFlight?.callsign, keyMomentQueue]);
 
   useEffect(() => {
     if (previousStoryResetIdRef.current === cinema.storyResetId) return;

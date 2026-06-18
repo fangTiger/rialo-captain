@@ -52,6 +52,10 @@ function pushWsEvent(type: string, payload: Record<string, unknown>) {
   });
 }
 
+function releaseKeyMomentTick() {
+  act(() => vi.advanceTimersByTime(0));
+}
+
 function pushStoredEvent({
   id,
   type,
@@ -381,6 +385,7 @@ describe("useKeyMomentQueue reset", () => {
     const { rerender } = render(<QueueProbe />);
 
     fireEvent.click(screen.getByRole("button", { name: /enqueue active/i }));
+    releaseKeyMomentTick();
     expect(screen.getByTestId("queue-active")).toHaveTextContent(
       "active:shockwave",
     );
@@ -389,6 +394,7 @@ describe("useKeyMomentQueue reset", () => {
     expect(screen.getByTestId("queue-active")).toHaveTextContent("none");
 
     fireEvent.click(screen.getByRole("button", { name: /enqueue pending/i }));
+    releaseKeyMomentTick();
     expect(screen.getByTestId("queue-active")).toHaveTextContent("none");
 
     fireEvent.click(screen.getByRole("button", { name: /clear all/i }));

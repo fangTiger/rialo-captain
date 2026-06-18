@@ -79,6 +79,10 @@ function pushWsBurst(events: { type: string; payload: Record<string, unknown> }[
   });
 }
 
+function releaseKeyMomentTick() {
+  act(() => vi.advanceTimersByTime(0));
+}
+
 async function flushPromises() {
   await act(async () => {
     await Promise.resolve();
@@ -158,12 +162,39 @@ vi.mock("../components/drawer/BuyDrawer", () => ({
   BuyDrawer: ({
     flightId,
     onClose,
+    onPurchased,
   }: {
     flightId: string;
     onClose: () => void;
+    onPurchased?: (policy: {
+      id: string;
+      flight_id: string;
+      premium: number;
+      payout: number;
+      status: string;
+      contract_ref: string;
+      created_at: number;
+    }) => void;
   }) => (
     <div data-testid="buy-drawer" data-flight-id={flightId}>
       buy drawer
+      <button
+        type="button"
+        onClick={() => {
+          onPurchased?.({
+            id: "policy-real-buy",
+            flight_id: flightId,
+            premium: 10,
+            payout: 320,
+            status: "active",
+            contract_ref: "mock-policy-real-buy",
+            created_at: Date.now(),
+          });
+          onClose();
+        }}
+      >
+        confirm buy
+      </button>
       <button type="button" onClick={onClose}>
         close drawer
       </button>
@@ -240,6 +271,7 @@ describe("TowerShell C2 key moments integration", () => {
       airport_iata: "JFK",
       source: "demo",
     });
+    releaseKeyMomentTick();
 
     expect(screen.getByTestId("cinema-overlay")).toContainElement(
       screen.getByTestId("shockwave"),
@@ -264,6 +296,7 @@ describe("TowerShell C2 key moments integration", () => {
       delay_minutes: 47,
       source: "demo",
     });
+    releaseKeyMomentTick();
 
     expect(screen.getByTestId("cinema-overlay")).toContainElement(
       screen.getByTestId("shockwave"),
@@ -282,6 +315,7 @@ describe("TowerShell C2 key moments integration", () => {
       airport_iata: "JFK",
       source: "demo",
     });
+    releaseKeyMomentTick();
     expect(screen.getByTestId("shockwave")).toBeInTheDocument();
 
     pushWsEvent("policy.created", {
@@ -372,6 +406,137 @@ describe("TowerShell C2 key moments integration", () => {
     expect(screen.getByTestId("flareland")).toHaveTextContent("FLARE");
   });
 
+  it("turns the selected buy flight into the REAL protagonist and runs the closed-loop fallback", async () => {
+    await renderTowerWithWs();
+    expect(MockWebSocket.instances).toHaveLength(1);
+
+    fireEvent.click(screen.getByTestId("mock-globe-gesture"));
+    expect(screen.getByTestId("mode-indicator-state")).toHaveTextContent(
+      "manual",
+    );
+
+    fireEvent.click(screen.getByTestId("mock-globe"));
+    expect(screen.getByTestId("buy-drawer")).toHaveAttribute(
+      "data-flight-id",
+      "BA178-20260615",
+    );
+
+    apiFetchMock.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: /confirm buy/i }));
+    await flushPromises();
+
+    expect(screen.queryByTestId("buy-drawer")).not.toBeInTheDocument();
+    expect(screen.getByTestId("mode-indicator-state")).toHaveTextContent(
+      "cinema",
+    );
+    expect(screen.getByTestId("protagonist-badge")).toHaveTextContent(
+      "REAL · LIVE",
+    );
+    expect(screen.getByTestId("protagonist-badge")).toHaveTextContent("BA178");
+    expect(apiFetchMock).toHaveBeenCalledWith("/inject-delay", {
+      method: "POST",
+      body: JSON.stringify({
+        flight_id: "BA178-20260615",
+        delay_minutes: 45,
+      }),
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(4_000);
+      await Promise.resolve();
+    });
+    expect(screen.getByTestId("traildraw-layer")).toContainElement(
+      screen.getByTestId("trail-draw"),
+    );
+
+    await act(async () => {
+      vi.advanceTimersByTime(2_000);
+      vi.advanceTimersByTime(0);
+      await Promise.resolve();
+    });
+    expect(screen.getByTestId("shockwave")).toBeInTheDocument();
+
+    await act(async () => {
+      vi.advanceTimersByTime(2_000);
+      vi.advanceTimersByTime(0);
+      await Promise.resolve();
+    });
+    expect(screen.getByTestId("chainbeam")).toBeInTheDocument();
+    expect(
+      Number(screen.getByTestId("kpi-band").getAttribute("data-tick-id")),
+    ).toBeGreaterThan(0);
+
+    await act(async () => {
+      vi.advanceTimersByTime(2_000);
+      vi.advanceTimersByTime(0);
+      await Promise.resolve();
+    });
+    await flushPromises();
+    releaseKeyMomentTick();
+    expect(screen.getByTestId("flareland")).toBeInTheDocument();
+  });
+
+  it("runs the selected buy timeline even if inject-delay is still pending", async () => {
+    apiFetchMock.mockImplementation(async (path) => {
+      if (path === "/seed-demo") {
+        return {
+          protagonist_name: "Alice",
+          flight_id: "BA178-20260615",
+          policy_ids: ["policy-demo-1"],
+          policies_created: 1,
+          claims_settled: 0,
+        };
+      }
+
+      if (path === "/inject-delay") {
+        return new Promise(() => undefined);
+      }
+
+      return {};
+    });
+
+    await renderTowerWithWs();
+
+    fireEvent.click(screen.getByTestId("mock-globe"));
+    fireEvent.click(screen.getByRole("button", { name: /confirm buy/i }));
+    await flushPromises();
+
+    expect(screen.getByTestId("protagonist-badge")).toHaveTextContent(
+      "REAL · LIVE",
+    );
+
+    await act(async () => {
+      vi.advanceTimersByTime(4_000);
+      await Promise.resolve();
+    });
+    expect(screen.getByTestId("traildraw-layer")).toContainElement(
+      screen.getByTestId("trail-draw"),
+    );
+
+    await act(async () => {
+      vi.advanceTimersByTime(2_000);
+      vi.advanceTimersByTime(0);
+      await Promise.resolve();
+    });
+    expect(screen.getByTestId("shockwave")).toBeInTheDocument();
+
+    await act(async () => {
+      vi.advanceTimersByTime(2_000);
+      vi.advanceTimersByTime(0);
+      await Promise.resolve();
+    });
+    expect(screen.getByTestId("chainbeam")).toBeInTheDocument();
+
+    await act(async () => {
+      vi.advanceTimersByTime(2_000);
+      vi.advanceTimersByTime(0);
+      await Promise.resolve();
+    });
+    await flushPromises();
+    releaseKeyMomentTick();
+    expect(screen.getByTestId("flareland")).toBeInTheDocument();
+  });
+
   it("keeps closed-loop moments when REAL takeover and backend events arrive in one websocket burst", async () => {
     await renderTowerWithWs();
     expect(MockWebSocket.instances).toHaveLength(1);
@@ -446,7 +611,7 @@ describe("TowerShell C2 key moments integration", () => {
     expect(screen.getByTestId("flareland")).toBeInTheDocument();
   });
 
-  it("does not render C2 moments from REAL policy.created and inject-delay alone", async () => {
+  it("uses REAL closed-loop fallback events when WebSocket is unavailable after inject-delay", async () => {
     await renderTowerWithWs();
     expect(MockWebSocket.instances).toHaveLength(1);
     apiFetchMock.mockClear();
@@ -470,11 +635,28 @@ describe("TowerShell C2 key moments integration", () => {
       }),
     });
 
-    act(() => vi.advanceTimersByTime(30_000));
+    await act(async () => {
+      vi.advanceTimersByTime(6_000);
+      vi.advanceTimersByTime(0);
+      await Promise.resolve();
+    });
+    expect(screen.getByTestId("shockwave")).toBeInTheDocument();
 
-    expect(screen.queryByTestId("shockwave")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("chainbeam")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("flareland")).not.toBeInTheDocument();
+    await act(async () => {
+      vi.advanceTimersByTime(2_000);
+      vi.advanceTimersByTime(0);
+      await Promise.resolve();
+    });
+    expect(screen.getByTestId("chainbeam")).toBeInTheDocument();
+
+    await act(async () => {
+      vi.advanceTimersByTime(2_000);
+      vi.advanceTimersByTime(0);
+      await Promise.resolve();
+    });
+    await flushPromises();
+    releaseKeyMomentTick();
+    expect(screen.getByTestId("flareland")).toBeInTheDocument();
   });
 
   it("renders ShockWave at protagonist fallback coordinates when airport locator is unknown", async () => {
@@ -489,6 +671,7 @@ describe("TowerShell C2 key moments integration", () => {
       airport_iata: "ZZZ",
       source: "demo",
     });
+    releaseKeyMomentTick();
 
     expect(screen.getByTestId("cinema-overlay")).toContainElement(
       screen.getByTestId("shockwave"),
@@ -506,6 +689,7 @@ describe("TowerShell C2 key moments integration", () => {
       delay_minutes: 47,
       source: "demo",
     });
+    releaseKeyMomentTick();
 
     expect(screen.getByTestId("cinema-overlay")).toContainElement(
       screen.getByTestId("shockwave"),
@@ -527,6 +711,7 @@ describe("TowerShell C2 key moments integration", () => {
       airport_iata: "JFK",
       source: "demo",
     });
+    releaseKeyMomentTick();
 
     expect(screen.getByTestId("kpi-band")).toHaveAttribute("data-tick-id", "1");
     expect(screen.getByTestId("cinema-overlay")).toContainElement(
@@ -553,6 +738,7 @@ describe("TowerShell C2 key moments integration", () => {
       airport_iata: "JFK",
       source: "demo",
     });
+    releaseKeyMomentTick();
 
     expect(screen.getByTestId("cinema-overlay")).toContainElement(
       screen.getByTestId("flareland"),
@@ -576,6 +762,7 @@ describe("TowerShell C2 key moments integration", () => {
       airport_iata: "JFK",
       source: "demo",
     });
+    releaseKeyMomentTick();
 
     expect(screen.getByTestId("shockwave")).toBeInTheDocument();
     expect(screen.getByTestId("cinema-overlay")).toHaveStyle({
@@ -590,6 +777,7 @@ describe("TowerShell C2 key moments integration", () => {
       "data-flight-id",
       "BA178-20260615",
     );
+    expect(screen.queryByTestId("shockwave")).not.toBeInTheDocument();
     expect(screen.getByTestId("location-probe")).toHaveTextContent("/");
     expect(
       screen.queryByText("flight detail BA178-20260615"),

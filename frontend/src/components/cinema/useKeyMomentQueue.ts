@@ -25,6 +25,7 @@ function shouldAdvance(state: KeyMomentTimelineState) {
 export function useKeyMomentQueue(context: UseKeyMomentQueueContext) {
   const contextRef = useRef(context);
   const intervalRef = useRef<number | null>(null);
+  const releaseTimerRef = useRef<number | null>(null);
   const [timelineState, setTimelineState] = useState<KeyMomentTimelineState>(
     createKeyMomentTimelineState,
   );
@@ -42,9 +43,12 @@ export function useKeyMomentQueue(context: UseKeyMomentQueueContext) {
   }, []);
 
   const enqueue = useCallback((moment: KeyMoment) => {
-    setTimelineState((current) =>
-      advance(enqueueKeyMoment(current, moment)),
-    );
+    setTimelineState((current) => enqueueKeyMoment(current, moment));
+    if (releaseTimerRef.current !== null) return;
+    releaseTimerRef.current = window.setTimeout(() => {
+      releaseTimerRef.current = null;
+      setTimelineState((current) => advance(current));
+    }, 0);
   }, [advance]);
 
   const clearAllMoments = useCallback(() => {
@@ -75,6 +79,10 @@ export function useKeyMomentQueue(context: UseKeyMomentQueueContext) {
       if (intervalRef.current !== null) {
         window.clearInterval(intervalRef.current);
         intervalRef.current = null;
+      }
+      if (releaseTimerRef.current !== null) {
+        window.clearTimeout(releaseTimerRef.current);
+        releaseTimerRef.current = null;
       }
     };
   }, [advance]);

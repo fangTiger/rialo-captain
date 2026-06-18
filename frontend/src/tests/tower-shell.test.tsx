@@ -39,17 +39,6 @@ const trailHarness = vi.hoisted(() => ({
   useTrailDraw: vi.fn(() => ({ activeTrail: null })),
 }));
 
-interface UseTrailDrawProbeOptions {
-  userElectedTrailToken?: number;
-}
-
-function lastTrailDrawOptions() {
-  const call = trailHarness.useTrailDraw.mock.calls.at(-1) as
-    | [UseTrailDrawProbeOptions]
-    | undefined;
-  return call?.[0];
-}
-
 vi.mock("../hooks/useFlights", () => ({
   useFlights: () => ({
     flights: towerHarness.flights,
@@ -101,14 +90,17 @@ vi.mock("../components/cinema/CinemaController", () => ({
 
 vi.mock("../components/cinema/AutoSeeder", () => ({
   AutoSeeder: ({
+    demoLocked,
     demoSelectionOffset,
     flights,
   }: {
+    demoLocked?: boolean;
     demoSelectionOffset?: number;
     flights: unknown[];
   }) => (
     <div
       data-testid="auto-seeder"
+      data-demo-locked={String(Boolean(demoLocked))}
       data-demo-selection-offset={demoSelectionOffset ?? "none"}
       data-flights={flights.length}
     />
@@ -422,7 +414,7 @@ describe("TowerShell", () => {
     );
   });
 
-  it("keeps the selected flight highlighted and trail-ready after the buy drawer closes", () => {
+  it("cancels the selected flight lock when the buy drawer closes", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-14T08:00:00.000Z"));
     cinemaState.protagonist = {
@@ -471,6 +463,10 @@ describe("TowerShell", () => {
       "data-protagonist-highlight",
       "DL101",
     );
+    expect(screen.getByTestId("auto-seeder")).toHaveAttribute(
+      "data-demo-locked",
+      "false",
+    );
 
     fireEvent.click(screen.getByText("mock globe"));
 
@@ -478,6 +474,10 @@ describe("TowerShell", () => {
       "data-protagonist-highlight",
       "BA178",
     );
+    expect(screen.getByTestId("auto-seeder")).toHaveAttribute(
+      "data-demo-locked",
+      "true",
+    );
     expect(trailHarness.useTrailDraw).toHaveBeenLastCalledWith(
       expect.objectContaining({
         userElectedFlight: expect.objectContaining({
@@ -486,27 +486,22 @@ describe("TowerShell", () => {
         userElectedTrailToken: expect.any(Number),
       }),
     );
-    const selectedTrailToken =
-      lastTrailDrawOptions()?.userElectedTrailToken ?? 0;
-
     fireEvent.click(screen.getByText("close drawer"));
 
     expect(screen.queryByTestId("buy-drawer")).not.toBeInTheDocument();
     expect(screen.getByTestId("mock-globe")).toHaveAttribute(
       "data-protagonist-highlight",
-      "BA178",
+      "DL101",
+    );
+    expect(screen.getByTestId("auto-seeder")).toHaveAttribute(
+      "data-demo-locked",
+      "false",
     );
     expect(trailHarness.useTrailDraw).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        userElectedFlight: expect.objectContaining({
-          callsign: "BA178",
-        }),
-        userElectedTrailToken: expect.any(Number),
+        userElectedFlight: null,
       }),
     );
-    expect(
-      lastTrailDrawOptions()?.userElectedTrailToken ?? 0,
-    ).toBeGreaterThan(selectedTrailToken);
   });
 
   it("uses the session seed to choose a rotating initial demo protagonist", () => {

@@ -78,6 +78,12 @@ function cinemaEventKey(type: CinemaEventType, payload: Record<string, unknown>)
   return `${type}:${stableValueKey(payload)}`;
 }
 
+function policyEventKey(type: CinemaEventType, payload: Record<string, unknown>) {
+  return typeof payload.policy_id === "string"
+    ? `${type}:policy:${payload.policy_id}`
+    : null;
+}
+
 export const useEventStore = create<EventStore>((set) => ({
   flares: [],
   toasts: [],
@@ -86,7 +92,13 @@ export const useEventStore = create<EventStore>((set) => ({
   addFlare: (flare) =>
     set((state) => {
       const incomingKey = flareEventKey(flare);
-      if (state.flares.some((existing) => flareEventKey(existing) === incomingKey)) {
+      if (
+        state.flares.some(
+          (existing) =>
+            existing.policy_id === flare.policy_id ||
+            flareEventKey(existing) === incomingKey,
+        )
+      ) {
         return state;
       }
 
@@ -101,10 +113,20 @@ export const useEventStore = create<EventStore>((set) => ({
   addEvent: (event) =>
     set((state) => {
       const incomingKey = cinemaEventKey(event.type, event.payload);
+      const incomingPolicyKey = policyEventKey(event.type, event.payload);
       const alreadyRecorded = state.events.some(
-        (existing) =>
-          (event.id !== undefined && existing.id === event.id) ||
-          cinemaEventKey(existing.type, existing.payload) === incomingKey,
+        (existing) => {
+          const existingPolicyKey = policyEventKey(
+            existing.type,
+            existing.payload,
+          );
+          return (
+            (event.id !== undefined && existing.id === event.id) ||
+            (incomingPolicyKey !== null &&
+              existingPolicyKey === incomingPolicyKey) ||
+            cinemaEventKey(existing.type, existing.payload) === incomingKey
+          );
+        },
       );
       if (alreadyRecorded) return state;
 

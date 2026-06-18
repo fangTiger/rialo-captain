@@ -265,12 +265,22 @@ function toRealProtagonist(event: RealProtagonistEvent): CinemaProtagonist {
   };
 }
 
+function hasSeenRealEventPolicy(
+  state: CinemaState,
+  event: RealProtagonistEvent,
+) {
+  if (!event.policyId) return false;
+  if (state.protagonist?.policyId === event.policyId) return true;
+  return state.realQueue.some((queued) => queued.policyId === event.policyId);
+}
+
 export function routeRealProtagonistState(
   state: CinemaState,
   event: RealProtagonistEvent,
   now: number,
 ): CinemaState {
   if (now - event.createdAt > REAL_EVENT_LOOKBACK_MS) return state;
+  if (hasSeenRealEventPolicy(state, event)) return state;
 
   const lastRealTakeoverEventAt = state.lastRealTakeoverEventAt;
   const isBurst =
@@ -290,8 +300,11 @@ export function routeRealProtagonistState(
   const protagonist = toRealProtagonist(event);
   return {
     ...state,
+    mode: "cinema",
     phase: "establish",
     cycleStartedAt: now,
+    manualStartedAt: null,
+    manualRemainingMs: 0,
     protagonist,
     cameraTarget: null,
     storyResetId: state.storyResetId + 1,

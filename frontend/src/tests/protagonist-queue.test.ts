@@ -161,6 +161,30 @@ describe("REAL protagonist queue", () => {
     expect(result.protagonist?.callsign).toBe("REAL4");
   });
 
+  it("returns from manual mode when a user-purchased real flight takes over", () => {
+    const state = {
+      ...createInitialCinemaState(now - 10_000, null, "interactive"),
+      manualStartedAt: now - 5_000,
+      manualRemainingMs: 25_000,
+    };
+
+    const result = routeRealProtagonistState(
+      state,
+      eventWithPolicy("REAL5", "policy-real-5"),
+      now,
+    );
+
+    expect(result.mode).toBe("cinema");
+    expect(result.manualStartedAt).toBeNull();
+    expect(result.manualRemainingMs).toBe(0);
+    expect(result.phase).toBe("establish");
+    expect(result.protagonist).toMatchObject({
+      kind: "REAL",
+      callsign: "REAL5",
+      policyId: "policy-real-5",
+    });
+  });
+
   it("takes the first real event at 0ms and queues burst events before 1000ms", () => {
     const first = routeRealProtagonistState(
       createInitialCinemaState(now - 5_000),
@@ -184,6 +208,23 @@ describe("REAL protagonist queue", () => {
     expect(second.protagonist?.callsign).toBe("REAL0");
     expect(second.lastRealTakeoverAt).toBe(now);
     expect(second.realQueue.map((queued) => queued.id)).toEqual(["REAL999"]);
+  });
+
+  it("ignores duplicate real events for the active policy during a burst", () => {
+    const first = routeRealProtagonistState(
+      createInitialCinemaState(now - 5_000),
+      eventWithPolicy("REAL0", "policy-real-0"),
+      now,
+    );
+
+    const duplicate = routeRealProtagonistState(
+      first,
+      eventWithPolicy("REAL0-replay", "policy-real-0", now + 500),
+      now + 500,
+    );
+
+    expect(duplicate.protagonist?.callsign).toBe("REAL0");
+    expect(duplicate.realQueue).toHaveLength(0);
   });
 
   it("preserves policyId when a queued real event becomes protagonist on the next cycle", () => {
