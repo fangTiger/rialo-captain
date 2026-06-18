@@ -16,7 +16,7 @@ import {
 import type { FlightPublic } from "../../hooks/useFlights";
 
 export const TRAIL_DRAW_TTL_MS = 1_000;
-export const TRAIL_DRAW_START_MS = 2_000;
+export const TRAIL_DRAW_START_MS = 4_000;
 const TRAIL_DRAW_END_MS = TRAIL_DRAW_START_MS + TRAIL_DRAW_TTL_MS;
 
 export interface ActiveTrailDraw {

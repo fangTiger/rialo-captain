@@ -82,7 +82,7 @@ describe("CinemaProvider cycle state", () => {
 
     expectState({ phase: "establish", cycleId: "1", cameraReason: "none" });
 
-    act(() => vi.advanceTimersByTime(4_000));
+    act(() => vi.advanceTimersByTime(6_000));
     expectState({ phase: "zoom-in", cycleId: "1", cameraReason: "none" });
     expect(screen.getByTestId("camera-zoom")).toHaveTextContent("none");
     expect(screen.getByTestId("camera-lon")).toHaveTextContent("none");
@@ -91,7 +91,7 @@ describe("CinemaProvider cycle state", () => {
     expectState({ phase: "story", cycleId: "1", cameraReason: "none" });
     expect(screen.getByTestId("camera-zoom")).toHaveTextContent("none");
 
-    act(() => vi.advanceTimersByTime(19_000));
+    act(() => vi.advanceTimersByTime(17_000));
     expectState({ phase: "zoom-out", cycleId: "1", cameraReason: "none" });
     expect(screen.getByTestId("camera-zoom")).toHaveTextContent("none");
 
@@ -204,7 +204,7 @@ describe("CinemaProvider cycle state", () => {
     vi.setSystemTime(new Date("2026-06-15T00:00:00.000Z"));
     renderCinema();
 
-    act(() => vi.advanceTimersByTime(4_000));
+    act(() => vi.advanceTimersByTime(6_000));
     expect(screen.getByTestId("phase")).toHaveTextContent("zoom-in");
 
     act(() => setVisibilityState("hidden"));

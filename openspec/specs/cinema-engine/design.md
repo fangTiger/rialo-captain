@@ -54,9 +54,9 @@ Cinema 引擎不重做地图、不引入新框架；C2/C3 动效由 `cinema-key-
 
 Cinema cycle 固定 30s：
 
-- 0-4s `establish`
-- 4-6s `zoom-in`（语义改为 spotlight fade in，不改变 viewport）
-- 6-25s `story`
+- 0-6s `establish`
+- 6-8s `zoom-in`（语义改为 spotlight fade in，不改变 viewport）
+- 8-25s `story`
 - 25-27s `zoom-out`（语义改为 spotlight fade out，不改变 viewport）
 - 27-30s `rest`
 
@@ -67,7 +67,7 @@ Controller 使用 `Date.now()` / fake timers 推进 phase；`GlobeMap` 内已有
 AutoSeeder 监听 `mode === "cinema"` 且页面 visible：
 
 - cycle 进入 `establish` 时选择下一条 DEMO 主角，调用 `/api/seed-demo`，body 包含 `user_email`、`flight_id`（可选）和 `protagonist_name`。
-- cycle 到第 3s 且 seed 成功时调用 `/api/inject-delay`，body 包含 seed 返回的 `flight_id` 与固定 demo delay，让 DEMO 闭环在约 8 秒内完成。
+- cycle 到第 3s 且 seed 成功时调用 `/api/inject-delay`，body 包含 seed 返回的 `flight_id` 与固定 demo delay，让 DEMO 闭环在约 10 秒内完成。
 - 当前 protagonist 为 REAL 时跳过 `/api/seed-demo`，并在 REAL 成为当前主角后立即调用 `/api/inject-delay`，让后端 ClaimEngine 有时间在 STORY 视觉窗口前广播 `claim.triggered`、`claim.settled` 与 `flight.landed`。
 - `/api/inject-delay` 与 `/api/admin/inject-delay` 写入 delay override 后会立即调用 `ClaimEngine.run_for_flight(flight_id)`，只扫描目标航班 ACTIVE policy；后台 30 秒 `run_once()` 仍作为自然延误兜底保留。
 - 每个 `cycleId` 最多 seed 一次、inject 一次，失败不会在同 cycle 重试刷屏。

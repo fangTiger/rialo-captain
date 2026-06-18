@@ -243,7 +243,7 @@ describe("TowerShell C2 STORY timeline", () => {
     vi.unstubAllGlobals();
   });
 
-  it("holds claim.triggered until the exact 4s STORY window", () => {
+  it("holds claim.triggered until the exact 6s STORY window", () => {
     renderTower();
     expect(MockWebSocket.instances).toHaveLength(1);
 
@@ -251,7 +251,7 @@ describe("TowerShell C2 STORY timeline", () => {
 
     expect(screen.queryByTestId("shockwave")).not.toBeInTheDocument();
 
-    act(() => vi.advanceTimersByTime(3_999));
+    act(() => vi.advanceTimersByTime(5_999));
     expect(screen.queryByTestId("shockwave")).not.toBeInTheDocument();
 
     act(() => vi.advanceTimersByTime(1));
@@ -266,7 +266,7 @@ describe("TowerShell C2 STORY timeline", () => {
     pushWsEvent("claim.settled", currentProtagonistSettled("policy-1"));
     pushWsEvent("flight.landed", currentProtagonistLanded("policy-1"));
 
-    act(() => vi.advanceTimersByTime(4_000));
+    act(() => vi.advanceTimersByTime(6_000));
     expect(screen.getByTestId("shockwave")).toBeInTheDocument();
     expect(screen.queryByTestId("chainbeam")).not.toBeInTheDocument();
     expect(screen.queryByTestId("flareland")).not.toBeInTheDocument();
@@ -301,7 +301,7 @@ describe("TowerShell C2 STORY timeline", () => {
     expect(vi.getTimerCount()).toBeGreaterThan(0);
 
     pushWsEvent("claim.triggered", currentProtagonistTrigger("policy-1"));
-    act(() => vi.advanceTimersByTime(4_000));
+    act(() => vi.advanceTimersByTime(6_000));
     expect(screen.getByTestId("shockwave")).toBeInTheDocument();
 
     unmount();
@@ -336,7 +336,7 @@ describe("TowerShell C2 STORY timeline", () => {
       receivedAt: Date.now() - 61_000,
     });
 
-    act(() => vi.advanceTimersByTime(4_000));
+    act(() => vi.advanceTimersByTime(6_000));
 
     expect(screen.getAllByTestId("shockwave")).toHaveLength(6);
     for (let delay = 40; delay <= 43; delay += 1) {
@@ -358,7 +358,7 @@ describe("useKeyMomentQueue reset", () => {
   it("releases pending moments on the 100ms queue tick", () => {
     vi.useFakeTimers();
     const cycleStartedAt = new Date("2026-06-15T00:00:00.000Z").getTime();
-    vi.setSystemTime(cycleStartedAt + 3_900);
+    vi.setSystemTime(cycleStartedAt + 5_900);
 
     render(<QueueProbe />);
 

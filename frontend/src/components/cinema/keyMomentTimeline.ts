@@ -1,7 +1,7 @@
 import type { CinemaPhase } from "./cinemaMachine";
 import type { KeyMoment } from "./keyMoments";
 
-const STORY_TRIGGER_AT_MS = 4_000;
+const STORY_TRIGGER_AT_MS = 6_000;
 const CHAIN_AFTER_SHOCKWAVE_MS = 2_000;
 const FLARE_AFTER_CHAIN_MS = 2_000;
 const PENDING_LOOKBACK_MS = 60_000;

@@ -9,7 +9,7 @@ C1 已归档 `cinema-engine`，提供 `CinemaProvider`、30 秒 cycle、REAL/DEM
 **Goals:**
 
 - 用 `HeatmapBg` 在地图底层持续显示过去 5 分钟保单坐标密度，形成全球紫红色呼吸热斑。
-- 用 `TrailDraw` 在 cycle 第 2-3 秒为当前主角航班绘制一笔画航迹，比 4 秒 ShockWave 提前约 2 秒铺垫。
+- 用 `TrailDraw` 在 cycle 第 4-5 秒为当前主角航班绘制一笔画航迹，比 6 秒 ShockWave 提前约 2 秒铺垫。
 - 让 C3 与 C1/C2 共存：不影响 manual takeover、点击飞机导航、KPI tick、C2 key moments。
 - 所有 C3 动效遵守性能预算：SVG + CSS，避免布局抖动，不使用 canvas，不引入新依赖。
 - reduced motion 下给出静态但可见的氛围状态。
@@ -64,11 +64,11 @@ TowerCinemaLayers
 
 ### 5. TrailDraw 由 cycle elapsed/protagonist 触发，而不是 WS 直接触发
 
-闭环压缩后 TrailDraw 在 cycle 第 2 秒出现，并在约第 3 秒清理；此时 C1 phase 名称仍可能是 `establish` 或 `zoom-in`，因此 C3 以 `cycleStartedAt` 与当前墙钟 elapsed 判断触发窗口，而不是等待 `phase === "story"`。触发 key 使用 `${cycleStartedAt}:${protagonist.flightId}` 去重，防止 React 重渲染或 flights 刷新重复播放。
+闭环压缩后 TrailDraw 在 cycle 第 4 秒出现，并在约第 5 秒清理；此时 C1 phase 名称仍可能是 `establish` 或 `zoom-in`，因此 C3 以 `cycleStartedAt` 与当前墙钟 elapsed 判断触发窗口，而不是等待 `phase === "story"`。触发 key 使用 `${cycleStartedAt}:${protagonist.flightId}` 去重，防止 React 重渲染或 flights 刷新重复播放。
 
-若 protagonist 在第 2-3 秒窗口内才由异步 flights/seed 结果补齐，TrailDraw 仍使用原始 cycle gate，不把窗口整体后移；只有 protagonist 已错过该窗口后才以 protagonist ready 时间作为兜底 gate 起点。
+若 protagonist 在第 4-5 秒窗口内才由异步 flights/seed 结果补齐，TrailDraw 仍使用原始 cycle gate，不把窗口整体后移；只有 protagonist 已错过该窗口后才以 protagonist ready 时间作为兜底 gate 起点。
 
-如果用户在 2 秒窗口前接管 manual，新的 TrailDraw 不再释放；已经 active 的短生命周期 trail 可以自然结束，且不改变 camera。页面 hidden 时清理 pending timer，visible 后跟随新 cycle 重新判断。
+如果用户在 4 秒窗口前接管 manual，新的 TrailDraw 不再释放；已经 active 的短生命周期 trail 可以自然结束，且不改变 camera。页面 hidden 时清理 pending timer，visible 后跟随新 cycle 重新判断。
 
 ### 6. 航迹数据用主角当前点 + heading/velocity 推导短路径
 
@@ -84,7 +84,7 @@ TowerCinemaLayers
 
 ### 7. TrailDraw 使用 SVG path stroke-dash 动画
 
-`TrailDraw` 渲染为 `svg[data-testid="trail-draw"]` 内的 `<path>`。普通模式下使用 `stroke-dasharray` / `stroke-dashoffset` 做 2-3 秒一笔画，并用 `opacity` fade out；这与设计文档附录 A 的 “SVG path stroke-dasharray 动画” 一致。Reduced motion 下 path 直接完整显示，不设置 dash 动画 class。
+`TrailDraw` 渲染为 `svg[data-testid="trail-draw"]` 内的 `<path>`。普通模式下使用 `stroke-dasharray` / `stroke-dashoffset` 做 4-5 秒一笔画，并用 `opacity` fade out；这与设计文档附录 A 的 “SVG path stroke-dasharray 动画” 一致。Reduced motion 下 path 直接完整显示，不设置 dash 动画 class。
 
 TrailDraw 层位于 C2 key moments 下方，避免遮住 ShockWave/ChainBeam/FlareLand；`pointer-events: none` 继承自 overlay。
 

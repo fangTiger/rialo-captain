@@ -90,14 +90,14 @@ afterEach(() => {
 });
 
 describe("useTrailDraw", () => {
-  it("triggers once when the cycle reaches the 2 second trail gate", () => {
+  it("triggers once when the cycle reaches the 4 second trail gate", () => {
     vi.useFakeTimers();
     vi.setSystemTime(cycleStartedAt);
 
     render(<TrailProbe phase="establish" />);
 
     act(() => {
-      vi.advanceTimersByTime(1_999);
+      vi.advanceTimersByTime(3_999);
     });
     expect(screen.getByTestId("trail-state")).toHaveTextContent("none");
 
@@ -113,7 +113,7 @@ describe("useTrailDraw", () => {
 
   it("does not retrigger for the same cycle and protagonist", () => {
     vi.useFakeTimers();
-    vi.setSystemTime(cycleStartedAt + 2_000);
+    vi.setSystemTime(cycleStartedAt + 4_000);
 
     const { rerender } = render(<TrailProbe phase="establish" />);
     const firstState = screen.getByTestId("trail-state").textContent;
@@ -159,7 +159,7 @@ describe("useTrailDraw", () => {
     );
 
     act(() => {
-      vi.advanceTimersByTime(2_000);
+      vi.advanceTimersByTime(4_000);
     });
 
     const text = screen.getByTestId("trail-state").textContent ?? "";
@@ -196,7 +196,7 @@ describe("useTrailDraw", () => {
     );
 
     act(() => {
-      vi.advanceTimersByTime(1_999);
+      vi.advanceTimersByTime(3_999);
     });
     expect(screen.getByTestId("trail-state")).toHaveTextContent("none");
 
@@ -222,7 +222,7 @@ describe("useTrailDraw", () => {
     );
 
     act(() => {
-      vi.advanceTimersByTime(1_000);
+      vi.advanceTimersByTime(3_000);
     });
     expect(screen.getByTestId("trail-state")).toHaveTextContent("none");
 
@@ -334,7 +334,7 @@ describe("useTrailDraw", () => {
     "does not trigger while mode is %s",
     (mode) => {
       vi.useFakeTimers();
-      vi.setSystemTime(cycleStartedAt + 2_000);
+      vi.setSystemTime(cycleStartedAt + 4_000);
 
       render(<TrailProbe mode={mode} phase="establish" />);
 
@@ -344,7 +344,7 @@ describe("useTrailDraw", () => {
 
   it("does not trigger without a protagonist or with invalid coordinates", () => {
     vi.useFakeTimers();
-    vi.setSystemTime(cycleStartedAt + 2_000);
+    vi.setSystemTime(cycleStartedAt + 4_000);
 
     const { rerender } = render(
       <TrailProbe phase="establish" activeProtagonist={null} />,
@@ -367,7 +367,7 @@ describe("useTrailDraw", () => {
 
   it("clears the active trail after ttl", () => {
     vi.useFakeTimers();
-    vi.setSystemTime(cycleStartedAt + 2_000);
+    vi.setSystemTime(cycleStartedAt + 4_000);
 
     render(<TrailProbe phase="establish" ttlMs={3_000} />);
 
@@ -386,7 +386,7 @@ describe("useTrailDraw", () => {
 
   it("clears the active trail when the cinema reset token changes", () => {
     vi.useFakeTimers();
-    vi.setSystemTime(cycleStartedAt + 2_000);
+    vi.setSystemTime(cycleStartedAt + 4_000);
 
     const { rerender } = render(<TrailProbe phase="establish" resetToken={0} />);
 
@@ -399,7 +399,7 @@ describe("useTrailDraw", () => {
 
   it("removes the pending ttl timer on unmount", () => {
     vi.useFakeTimers();
-    vi.setSystemTime(cycleStartedAt + 2_000);
+    vi.setSystemTime(cycleStartedAt + 4_000);
 
     const { unmount } = render(<TrailProbe phase="establish" ttlMs={3_000} />);
 

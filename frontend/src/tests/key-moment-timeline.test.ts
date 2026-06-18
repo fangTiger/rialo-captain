@@ -67,21 +67,21 @@ describe("key moment timeline", () => {
     vi.useRealTimers();
   });
 
-  it("releases trigger exactly at the 4s STORY window", () => {
+  it("releases trigger exactly at the 6s STORY window", () => {
     vi.useFakeTimers();
     vi.setSystemTime(cycleStartedAt);
 
     let state = createKeyMomentTimelineState();
     state = enqueueKeyMoment(state, shockwave("trigger"));
 
-    state = advanceAt(state, 3_999);
+    state = advanceAt(state, 5_999);
     expect(state.active).toHaveLength(0);
 
-    state = advanceAt(state, 4_000);
+    state = advanceAt(state, 6_000);
     expect(state.active.map((moment) => moment.moment.kind)).toEqual([
       "shockwave",
     ]);
-    expect(state.active[0].startedAt).toBe(cycleStartedAt + 4_000);
+    expect(state.active[0].startedAt).toBe(cycleStartedAt + 6_000);
   });
 
   it("releases settled 2s after ShockWave and landed 2s after ChainBeam", () => {
@@ -93,27 +93,27 @@ describe("key moment timeline", () => {
     state = enqueueKeyMoment(state, chainbeam("settled"));
     state = enqueueKeyMoment(state, flareland("landed"));
 
-    state = advanceAt(state, 4_000);
-    expect(state.active.map((moment) => moment.moment.kind)).toEqual([
-      "shockwave",
-    ]);
-
-    state = advanceAt(state, 5_999);
-    expect(state.active.map((moment) => moment.moment.kind)).toEqual([
-      "shockwave",
-    ]);
-
     state = advanceAt(state, 6_000);
     expect(state.active.map((moment) => moment.moment.kind)).toEqual([
-      "chainbeam",
+      "shockwave",
     ]);
 
     state = advanceAt(state, 7_999);
     expect(state.active.map((moment) => moment.moment.kind)).toEqual([
-      "chainbeam",
+      "shockwave",
     ]);
 
     state = advanceAt(state, 8_000);
+    expect(state.active.map((moment) => moment.moment.kind)).toEqual([
+      "chainbeam",
+    ]);
+
+    state = advanceAt(state, 9_999);
+    expect(state.active.map((moment) => moment.moment.kind)).toEqual([
+      "chainbeam",
+    ]);
+
+    state = advanceAt(state, 10_000);
     expect(state.active.map((moment) => moment.moment.kind)).toEqual([
       "chainbeam",
       "flareland",
@@ -127,7 +127,7 @@ describe("key moment timeline", () => {
     let state = createKeyMomentTimelineState();
     state = enqueueKeyMoment(state, chainbeam("settled"));
 
-    state = advanceAt(state, 4_000);
+    state = advanceAt(state, 6_000);
 
     expect(state.active.map((moment) => moment.moment.kind)).toEqual([
       "chainbeam",
@@ -145,7 +145,7 @@ describe("key moment timeline", () => {
     });
     state = enqueueKeyMoment(state, shockwave("old", cycleStartedAt - 61_000));
 
-    state = advanceAt(state, 4_000);
+    state = advanceAt(state, 6_000);
 
     expect(state.active).toHaveLength(0);
     expect(state.pending.map((moment) => moment.id)).toEqual([
@@ -160,7 +160,7 @@ describe("key moment timeline", () => {
     let state = createKeyMomentTimelineState();
     state = enqueueKeyMoment(state, shockwave("dated-backend-id"));
 
-    vi.setSystemTime(cycleStartedAt + 4_000);
+    vi.setSystemTime(cycleStartedAt + 6_000);
     state = advanceKeyMomentTimeline(state, {
       now: Date.now(),
       phase: "story",
@@ -184,11 +184,11 @@ describe("key moment timeline", () => {
       flightId: "UA200-20260615",
     });
 
-    state = advanceAt(state, 4_000);
+    state = advanceAt(state, 6_000);
     expect(state.active).toHaveLength(0);
     expect(state.pending).toHaveLength(1);
 
-    vi.setSystemTime(cycleStartedAt + 6_000);
+    vi.setSystemTime(cycleStartedAt + 8_000);
     state = advanceKeyMomentTimeline(state, {
       now: Date.now(),
       phase: "story",
@@ -233,7 +233,7 @@ describe("key moment timeline", () => {
       state = enqueueKeyMoment(state, shockwave(`trigger-${index}`));
     }
 
-    state = advanceAt(state, 4_000);
+    state = advanceAt(state, 6_000);
 
     expect(state.active).toHaveLength(6);
     expect(state.active.map((active) => active.moment.id)).toEqual([

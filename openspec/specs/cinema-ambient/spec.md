@@ -77,13 +77,13 @@ cinema-ambient 能力定义 Rialo-Captain Cinema 大屏 C3 氛围装饰：Heatma
 - **AND** 系统 SHALL NOT 通过 layout 属性驱动每帧动画
 
 ### Requirement: TrailDraw STORY 触发
-系统 SHALL 在当前主角闭环关键时刻前为主角触发一次 `TrailDraw`，并把播放窗口对齐到 cycle 第 2-3 秒，使航迹比 ShockWave 至少提前约 2 秒出现。
+系统 SHALL 在当前主角闭环关键时刻前为主角触发一次 `TrailDraw`，并把播放窗口对齐到 cycle 第 4-5 秒，使航迹比 ShockWave 至少提前约 2 秒出现。
 
-#### Scenario: 第 2 秒触发 TrailDraw
+#### Scenario: 第 4 秒触发 TrailDraw
 - **GIVEN** 当前处于 cinema 模式且存在可投影 protagonist
-- **WHEN** cycle elapsed 为 1999ms
+- **WHEN** cycle elapsed 为 3999ms
 - **THEN** 系统 SHALL NOT 创建 TrailDraw active item
-- **WHEN** cycle elapsed 到达 2000ms
+- **WHEN** cycle elapsed 到达 4000ms
 - **THEN** 系统 SHALL 创建一个 TrailDraw active item
 - **AND** key SHALL 包含 `cycleStartedAt` 与 `protagonist.flightId`
 
@@ -94,19 +94,19 @@ cinema-ambient 能力定义 Rialo-Captain Cinema 大屏 C3 氛围装饰：Heatma
 
 #### Scenario: 非 cinema 或无主角不触发
 - **GIVEN** 系统处于 manual、paused-hidden、degraded 或没有可投影 protagonist
-- **WHEN** phase 变化或 timer 到达 2 秒窗口
+- **WHEN** phase 变化或 timer 到达 4 秒窗口
 - **THEN** 系统 SHALL NOT 渲染新的 TrailDraw
 
 #### Scenario: TrailDraw 生命周期结束后清理
 - **GIVEN** TrailDraw 已开始播放
-- **WHEN** cycle elapsed 到达约 3000ms 或组件生命周期结束
+- **WHEN** cycle elapsed 到达约 5000ms 或组件生命周期结束
 - **THEN** TrailDraw DOM SHALL 从 overlay 中移除
 
 #### Scenario: REAL 抢占重置 TrailDraw 节奏
 - **GIVEN** DEMO TrailDraw 正在 active
 - **WHEN** REAL `policy.created` 立即抢占并重置 cycle
 - **THEN** 系统 SHALL 清理旧 TrailDraw
-- **AND** 新 REAL protagonist SHALL 在自己的 cycle 第 2 秒触发 TrailDraw
+- **AND** 新 REAL protagonist SHALL 在自己的 cycle 第 4 秒触发 TrailDraw
 
 ### Requirement: TrailDraw 航迹几何
 系统 SHALL 使用当前主角坐标和可用航向信息生成可投影的短航迹；缺少真实历史航点时使用 deterministic fallback。

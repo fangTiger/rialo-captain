@@ -52,8 +52,8 @@ const REAL_QUEUE_CAP = 3;
 export const REAL_INJECT_ERROR_MS = 3_000;
 
 export function phaseForElapsed(elapsedMs: number): CinemaPhase {
-  if (elapsedMs < 4_000) return "establish";
-  if (elapsedMs < 6_000) return "zoom-in";
+  if (elapsedMs < 6_000) return "establish";
+  if (elapsedMs < 8_000) return "zoom-in";
   if (elapsedMs < 25_000) return "story";
   if (elapsedMs < 27_000) return "zoom-out";
   return "rest";
