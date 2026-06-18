@@ -21,7 +21,10 @@ import { projectTrailPoints } from "../components/cinema/trailGeometry";
 import { useAmbientHeatmap } from "../components/cinema/useAmbientHeatmap";
 import { useKeyMomentQueue } from "../components/cinema/useKeyMomentQueue";
 import { useTrailDraw } from "../components/cinema/useTrailDraw";
-import { GlobeMap } from "../components/tower/GlobeMap";
+import {
+  GlobeMap,
+  type ProtagonistHighlight,
+} from "../components/tower/GlobeMap";
 import { RadarSweep } from "../components/tower/RadarSweep";
 import { EventFeedSidebar } from "../components/tower/EventFeedSidebar";
 import { KPIBand } from "../components/tower/KPIBand";
@@ -39,7 +42,9 @@ import type { CoordinateLocator, MomentLocator } from "../components/cinema/keyM
 
 export function TowerShell() {
   const { flights } = useFlights();
-  const [selectedFlightId, setSelectedFlightId] = useState<string | null>(null);
+  const [drawerFlightId, setDrawerFlightId] = useState<string | null>(null);
+  const [electedCallsign, setElectedCallsign] = useState<string | null>(null);
+  const [electedTrailToken, setElectedTrailToken] = useState(0);
   const demoSelectionOffsetRef = useRef<number | null>(null);
   if (demoSelectionOffsetRef.current === null) {
     demoSelectionOffsetRef.current = Math.floor(Math.random() * 1_000_000_000);
@@ -50,14 +55,14 @@ export function TowerShell() {
     [demoSelectionOffset, flights],
   );
   const electedFlight = useMemo(() => {
-    if (!selectedFlightId) return null;
-    const callsign = selectedFlightId.split("-")[0]?.trim().toUpperCase();
+    if (!electedCallsign) return null;
+    const callsign = electedCallsign.trim().toUpperCase();
     if (!callsign) return null;
     return (
       flights.find((flight) => flight.callsign.trim().toUpperCase() === callsign) ??
       null
     );
-  }, [selectedFlightId, flights]);
+  }, [electedCallsign, flights]);
 
   return (
     <div style={{ position: "absolute", inset: 0, top: 50, bottom: 32 }}>
@@ -79,14 +84,20 @@ export function TowerShell() {
               .toISOString()
               .slice(0, 10)
               .replaceAll("-", "");
-            setSelectedFlightId(`${normalized}-${date}`);
+            setElectedCallsign(normalized);
+            setElectedTrailToken((token) => token + 1);
+            setDrawerFlightId(`${normalized}-${date}`);
           }}
+          electedTrailToken={electedTrailToken}
         />
       </CinemaProvider>
-      {selectedFlightId && (
+      {drawerFlightId && (
         <BuyDrawer
-          flightId={selectedFlightId}
-          onClose={() => setSelectedFlightId(null)}
+          flightId={drawerFlightId}
+          onClose={() => {
+            setDrawerFlightId(null);
+            setElectedTrailToken((token) => token + 1);
+          }}
         />
       )}
     </div>
@@ -97,12 +108,14 @@ interface TowerCinemaLayersProps {
   electedFlight: FlightPublic | null;
   flights: FlightPublic[];
   onSelectFlight: (callsign: string) => void;
+  electedTrailToken: number;
 }
 
 const DEFAULT_OVERLAY_SIZE: ViewportSize = { width: 1200, height: 720 };
 
 function TowerCinemaLayers({
   electedFlight,
+  electedTrailToken,
   flights,
   onSelectFlight,
 }: TowerCinemaLayersProps) {
@@ -123,6 +136,7 @@ function TowerCinemaLayers({
     protagonist: cinema.protagonist,
     flights,
     userElectedFlight: electedFlight,
+    userElectedTrailToken: electedTrailToken,
     resetToken: cinema.storyResetId,
   });
   const trailPoints = projectTrailPoints(
@@ -130,6 +144,13 @@ function TowerCinemaLayers({
     mapSize,
     mapViewport,
   );
+  const protagonistHighlight = useMemo<ProtagonistHighlight | null>(() => {
+    if (!electedFlight) return cinema.protagonist;
+    return {
+      flightId: electedFlight.callsign,
+      callsign: electedFlight.callsign,
+    };
+  }, [cinema.protagonist, electedFlight]);
   const atRisk =
     cinema.mode === "cinema" &&
     cinema.phase === "story" &&
@@ -184,7 +205,7 @@ function TowerCinemaLayers({
             }}
             onUserGesture={cinema.interrupt}
             onSelectFlight={onSelectFlight}
-            protagonistHighlight={cinema.protagonist}
+            protagonistHighlight={protagonistHighlight}
           />
         )}
       </CameraDirector>

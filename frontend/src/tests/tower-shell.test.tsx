@@ -39,6 +39,17 @@ const trailHarness = vi.hoisted(() => ({
   useTrailDraw: vi.fn(() => ({ activeTrail: null })),
 }));
 
+interface UseTrailDrawProbeOptions {
+  userElectedTrailToken?: number;
+}
+
+function lastTrailDrawOptions() {
+  const call = trailHarness.useTrailDraw.mock.calls.at(-1) as
+    | [UseTrailDrawProbeOptions]
+    | undefined;
+  return call?.[0];
+}
+
 vi.mock("../hooks/useFlights", () => ({
   useFlights: () => ({
     flights: towerHarness.flights,
@@ -262,6 +273,14 @@ describe("TowerShell", () => {
     vi.useRealTimers();
     vi.restoreAllMocks();
     cinemaState.interrupt.mockReset();
+    cinemaState.protagonist = {
+      kind: "DEMO",
+      flightId: "BA178",
+      callsign: "BA178",
+      longitude: -73.78,
+      latitude: 40.64,
+      name: "Alice",
+    };
     trailHarness.useTrailDraw.mockClear();
     towerHarness.providerMounts = 0;
     towerHarness.flights = [
@@ -401,6 +420,93 @@ describe("TowerShell", () => {
         }),
       }),
     );
+  });
+
+  it("keeps the selected flight highlighted and trail-ready after the buy drawer closes", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-14T08:00:00.000Z"));
+    cinemaState.protagonist = {
+      kind: "DEMO",
+      flightId: "DL101",
+      callsign: "DL101",
+      longitude: -118.41,
+      latitude: 33.94,
+      name: "Bob",
+    };
+    towerHarness.flights = [
+      {
+        icao24: "a1b2c3",
+        callsign: "BA178",
+        origin_country: "United Kingdom",
+        longitude: -73.78,
+        latitude: 40.64,
+        velocity: 240,
+        heading: 90,
+        on_ground: false,
+      },
+      {
+        icao24: "d4e5f6",
+        callsign: "DL101",
+        origin_country: "United States",
+        longitude: -118.41,
+        latitude: 33.94,
+        velocity: 230,
+        heading: 80,
+        on_ground: false,
+      },
+    ];
+
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId("mock-globe")).toHaveAttribute(
+      "data-protagonist-highlight",
+      "DL101",
+    );
+
+    fireEvent.click(screen.getByText("mock globe"));
+
+    expect(screen.getByTestId("mock-globe")).toHaveAttribute(
+      "data-protagonist-highlight",
+      "BA178",
+    );
+    expect(trailHarness.useTrailDraw).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        userElectedFlight: expect.objectContaining({
+          callsign: "BA178",
+        }),
+        userElectedTrailToken: expect.any(Number),
+      }),
+    );
+    const selectedTrailToken =
+      lastTrailDrawOptions()?.userElectedTrailToken ?? 0;
+
+    fireEvent.click(screen.getByText("close drawer"));
+
+    expect(screen.queryByTestId("buy-drawer")).not.toBeInTheDocument();
+    expect(screen.getByTestId("mock-globe")).toHaveAttribute(
+      "data-protagonist-highlight",
+      "BA178",
+    );
+    expect(trailHarness.useTrailDraw).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        userElectedFlight: expect.objectContaining({
+          callsign: "BA178",
+        }),
+        userElectedTrailToken: expect.any(Number),
+      }),
+    );
+    expect(
+      lastTrailDrawOptions()?.userElectedTrailToken ?? 0,
+    ).toBeGreaterThan(selectedTrailToken);
   });
 
   it("uses the session seed to choose a rotating initial demo protagonist", () => {

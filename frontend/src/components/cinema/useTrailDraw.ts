@@ -39,6 +39,7 @@ interface UseTrailDrawOptions {
   protagonist: CinemaProtagonist | null;
   flights?: TrailFlight[];
   userElectedFlight?: TrailFlight | null;
+  userElectedTrailToken?: number;
   resetToken?: number;
   ttlMs?: number;
 }
@@ -103,6 +104,7 @@ export function useTrailDraw({
   protagonist,
   flights = [],
   userElectedFlight = null,
+  userElectedTrailToken = 0,
   resetToken = 0,
   ttlMs = TRAIL_DRAW_TTL_MS,
 }: UseTrailDrawOptions) {
@@ -161,7 +163,10 @@ export function useTrailDraw({
     }
 
     if (userElectedFlight) {
-      const signature = trailFlightSignature(userElectedFlight);
+      const signature = [
+        trailFlightSignature(userElectedFlight),
+        userElectedTrailToken,
+      ].join("|");
       if (electedSignatureRef.current !== signature) {
         electedSignatureRef.current = signature;
         electedVersionRef.current += 1;
@@ -310,6 +315,7 @@ export function useTrailDraw({
     userElectedFlight?.latitude,
     userElectedFlight?.longitude,
     userElectedFlight?.velocity,
+    userElectedTrailToken,
   ]);
 
   return { activeTrail };

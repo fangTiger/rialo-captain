@@ -42,6 +42,7 @@ interface TrailProbeProps {
   activeProtagonist?: CinemaProtagonist | null;
   liveFlights?: FlightPublic[];
   userElectedFlight?: FlightPublic | null;
+  userElectedTrailToken?: number;
   activeCycleStartedAt?: number;
   resetToken?: number;
   ttlMs?: number;
@@ -53,6 +54,7 @@ function TrailProbe({
   activeProtagonist = protagonist,
   liveFlights = flights,
   userElectedFlight = null,
+  userElectedTrailToken = 0,
   activeCycleStartedAt = cycleStartedAt,
   resetToken = 0,
   ttlMs = TRAIL_DRAW_TTL_MS,
@@ -64,6 +66,7 @@ function TrailProbe({
     protagonist: activeProtagonist,
     flights: liveFlights,
     userElectedFlight,
+    userElectedTrailToken,
     resetToken,
     ttlMs,
   });
@@ -328,6 +331,53 @@ describe("useTrailDraw", () => {
     const secondState = screen.getByTestId("trail-state").textContent ?? "";
     expect(secondState).toMatch(/^elected:DL101:\d+:traildraw\|/);
     expect(secondState).not.toBe(firstState);
+  });
+
+  it("replays the same user-elected flight when the trail token changes", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(cycleStartedAt);
+    const electedFlight: FlightPublic = {
+      ...flights[0],
+      callsign: "DL101",
+      longitude: -72,
+      latitude: 41,
+      heading: 90,
+      velocity: 240,
+    };
+
+    const { rerender } = render(
+      <TrailProbe
+        mode="interactive"
+        activeProtagonist={null}
+        liveFlights={[electedFlight]}
+        userElectedFlight={electedFlight}
+        userElectedTrailToken={1}
+        ttlMs={500}
+      />,
+    );
+    const firstState = screen.getByTestId("trail-state").textContent ?? "";
+    expect(firstState).toMatch(/^elected:DL101:\d+:traildraw\|/);
+
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(screen.getByTestId("trail-state")).toHaveTextContent("none");
+
+    vi.setSystemTime(cycleStartedAt + 1_000);
+    rerender(
+      <TrailProbe
+        mode="interactive"
+        activeProtagonist={null}
+        liveFlights={[electedFlight]}
+        userElectedFlight={electedFlight}
+        userElectedTrailToken={2}
+        ttlMs={500}
+      />,
+    );
+
+    const replayedState = screen.getByTestId("trail-state").textContent ?? "";
+    expect(replayedState).toMatch(/^elected:DL101:\d+:traildraw\|/);
+    expect(replayedState).not.toBe(firstState);
   });
 
   it.each<CinemaMode>(["interactive", "paused-hidden", "degraded"])(
