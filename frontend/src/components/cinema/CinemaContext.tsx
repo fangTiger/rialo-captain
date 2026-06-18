@@ -20,6 +20,7 @@ import {
   resumeCinemaState,
   recoverDataLinkState,
   routeRealProtagonistState,
+  setCyclePromotionLockedState,
   setDemoProtagonistState,
   type CameraTarget,
   type CinemaMode,
@@ -45,7 +46,11 @@ export interface CinemaContextValue extends CinemaState {
   pauseHidden: () => void;
   recoverDataLink: () => void;
   resumeCinema: () => void;
-  routeRealProtagonist: (event: RealProtagonistEvent) => void;
+  routeRealProtagonist: (
+    event: RealProtagonistEvent,
+    options?: { playbackLockMs?: number },
+  ) => void;
+  setCyclePromotionLocked: (locked: boolean) => void;
   setDemoProtagonist: (protagonist: CinemaProtagonist) => void;
   degradeDataLink: () => void;
 }
@@ -101,10 +106,18 @@ export function CinemaProvider({
     [],
   );
   const routeRealProtagonist = useCallback(
-    (event: RealProtagonistEvent) =>
+    (
+      event: RealProtagonistEvent,
+      options?: { playbackLockMs?: number },
+    ) =>
       setState((current) =>
-        routeRealProtagonistState(current, event, Date.now()),
+        routeRealProtagonistState(current, event, Date.now(), options),
       ),
+    [],
+  );
+  const setCyclePromotionLocked = useCallback(
+    (locked: boolean) =>
+      setState((current) => setCyclePromotionLockedState(current, locked)),
     [],
   );
   const setDemoProtagonist = useCallback(
@@ -132,6 +145,7 @@ export function CinemaProvider({
       recoverDataLink,
       resumeCinema,
       routeRealProtagonist,
+      setCyclePromotionLocked,
       setDemoProtagonist,
     }),
     [
@@ -144,6 +158,7 @@ export function CinemaProvider({
       recoverDataLink,
       resumeCinema,
       routeRealProtagonist,
+      setCyclePromotionLocked,
       setDemoProtagonist,
       state,
     ],

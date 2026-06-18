@@ -250,6 +250,26 @@ describe("REAL protagonist queue", () => {
     expect(promoted.realQueue).toHaveLength(0);
   });
 
+  it("does not promote queued real events at a cycle boundary while manual focus is locked", () => {
+    const initial = {
+      ...createInitialCinemaState(now - 5_000, {
+        kind: "DEMO" as const,
+        flightId: "BA178",
+        callsign: "BA178",
+        longitude: -73.78,
+        latitude: 40.64,
+      }),
+      realQueue: [eventWithPolicy("REAL999", "policy-real-999", now + 999)],
+      cyclePromotionLocked: true,
+    };
+
+    const advanced = advanceCinemaState(initial, now + 30_000);
+
+    expect(advanced.protagonist?.callsign).toBe("BA178");
+    expect(advanced.realQueue).toHaveLength(1);
+    expect(advanced.cycleId).toBeGreaterThan(initial.cycleId);
+  });
+
   it.each([1_000, 1_001])(
     "allows a new immediate real takeover at %sms after the previous takeover",
     (offsetMs) => {

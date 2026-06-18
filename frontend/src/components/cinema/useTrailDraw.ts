@@ -129,7 +129,7 @@ export function useTrailDraw({
     if (protagonistKeyRef.current === key) return;
     protagonistKeyRef.current = key;
     protagonistReadyAtRef.current = key ? Date.now() : null;
-  }, [protagonist?.callsign, protagonist?.flightId]);
+  }, [protagonist]);
 
   useEffect(() => {
     return () => {
@@ -305,16 +305,9 @@ export function useTrailDraw({
     flights,
     mode,
     phase,
-    protagonist?.callsign,
-    protagonist?.flightId,
-    protagonist?.latitude,
-    protagonist?.longitude,
+    protagonist,
     ttlMs,
-    userElectedFlight?.callsign,
-    userElectedFlight?.heading,
-    userElectedFlight?.latitude,
-    userElectedFlight?.longitude,
-    userElectedFlight?.velocity,
+    userElectedFlight,
     userElectedTrailToken,
   ]);
 

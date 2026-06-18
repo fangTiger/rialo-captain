@@ -103,6 +103,7 @@ export function TowerShell() {
         />
         <TowerCinemaLayers
           electedFlight={electedFlight}
+          manualFocusLocked={Boolean(electedCallsign)}
           flights={flights}
           onSelectFlight={(callsign) => {
             const normalized = callsign.trim();
@@ -145,6 +146,7 @@ export function TowerShell() {
 
 interface TowerCinemaLayersProps {
   electedFlight: FlightPublic | null;
+  manualFocusLocked: boolean;
   flights: FlightPublic[];
   onSelectFlight: (callsign: string) => void;
   electedTrailToken: number;
@@ -157,6 +159,7 @@ const PURCHASE_CHAIN_AT_MS = 8_000;
 const PURCHASE_LANDED_AT_MS = 10_000;
 const PURCHASE_DELAY_MINUTES = 45;
 const PURCHASE_SETTLE_DURATION_MS = 1_400;
+const PURCHASE_PLAYBACK_LOCK_MS = 12_000;
 
 function fallbackSignature(policyId: string) {
   const material = Array.from(policyId)
@@ -184,10 +187,12 @@ function TowerCinemaLayers({
   electedFlight,
   electedTrailToken,
   flights,
+  manualFocusLocked,
   onSelectFlight,
   purchasedPolicy,
 }: TowerCinemaLayersProps) {
   const cinema = useCinema();
+  const setCyclePromotionLocked = cinema.setCyclePromotionLocked;
   const [mapViewport, setMapViewport] = useState<MapViewport>({ k: 1, x: 0, y: 0 });
   const [mapSize, setMapSize] = useState<ViewportSize>(DEFAULT_OVERLAY_SIZE);
   const ambientHeatmap = useAmbientHeatmap();
@@ -198,6 +203,7 @@ function TowerCinemaLayers({
     phase: cinema.phase,
     protagonistFlightId: keyMomentProtagonistFlightId,
   });
+  const clearKeyMoments = keyMomentQueue.clearAllMoments;
   const previousStoryResetIdRef = useRef(cinema.storyResetId);
   const previousElectedCallsignRef = useRef<string | null>(null);
   const routedPurchasedPolicyRef = useRef<string | null>(null);
@@ -235,9 +241,22 @@ function TowerCinemaLayers({
     };
   }, [cinema.protagonist, electedFlight]);
   const atRisk =
-    cinema.mode === "cinema" &&
+    (cinema.mode === "cinema" || cinema.playbackLockedUntil !== null) &&
     cinema.phase === "story" &&
     cinema.protagonist !== null;
+
+  const handleSelectFlight = useCallback(
+    (callsign: string) => {
+      clearKeyMoments();
+      onSelectFlight(callsign);
+    },
+    [clearKeyMoments, onSelectFlight],
+  );
+
+  useEffect(() => {
+    setCyclePromotionLocked(manualFocusLocked);
+    return () => setCyclePromotionLocked(false);
+  }, [manualFocusLocked, setCyclePromotionLocked]);
 
   useEffect(() => {
     return () => clearPurchaseTimelineTimers();
@@ -264,16 +283,21 @@ function TowerCinemaLayers({
     const now = Date.now();
     const policyId = purchasedPolicy.id;
     const flightId = purchasedPolicy.flight_id;
-    cinema.routeRealProtagonist({
-      id: `manual-buy:${policyId}`,
-      flightId,
-      callsign: electedFlight.callsign,
-      longitude: electedFlight.longitude,
-      latitude: electedFlight.latitude,
-      createdAt: normalizeCreatedAtMs(purchasedPolicy.created_at, now),
-      policyId,
-      source: "real",
-    });
+    cinema.routeRealProtagonist(
+      {
+        id: `manual-buy:${policyId}`,
+        flightId,
+        callsign: electedFlight.callsign,
+        longitude: electedFlight.longitude,
+        latitude: electedFlight.latitude,
+        createdAt: normalizeCreatedAtMs(purchasedPolicy.created_at, now),
+        policyId,
+        source: "real",
+      },
+      {
+        playbackLockMs: PURCHASE_PLAYBACK_LOCK_MS,
+      },
+    );
 
     clearPurchaseTimelineTimers();
     setPurchasedTrail(null);
@@ -434,7 +458,7 @@ function TowerCinemaLayers({
               );
             }}
             onUserGesture={cinema.interrupt}
-            onSelectFlight={onSelectFlight}
+            onSelectFlight={handleSelectFlight}
             protagonistHighlight={protagonistHighlight}
           />
         )}

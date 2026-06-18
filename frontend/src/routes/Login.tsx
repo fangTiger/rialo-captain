@@ -1,4 +1,10 @@
-import { type FormEvent, useState } from "react";
+import {
+  type FormEvent,
+  type KeyboardEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { useNavigate } from "react-router-dom";
 import { useSWRConfig } from "swr";
 import { apiFetch } from "../api/client";
@@ -9,6 +15,54 @@ import "./Login.css";
 export function Login() {
   const deployConfig = resolvePublicDeployConfig();
   const [devPanelOpen, setDevPanelOpen] = useState(false);
+  const launcherRef = useRef<HTMLButtonElement | null>(null);
+  const shellRef = useRef<HTMLDivElement | null>(null);
+  const restoreFocusRef = useRef(false);
+
+  useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell) return;
+
+    shell.toggleAttribute("inert", devPanelOpen);
+    if (devPanelOpen) {
+      shell.setAttribute("aria-hidden", "true");
+      return () => {
+        shell.removeAttribute("aria-hidden");
+        shell.toggleAttribute("inert", false);
+      };
+    }
+
+    shell.removeAttribute("aria-hidden");
+    shell.toggleAttribute("inert", false);
+
+    if (restoreFocusRef.current) {
+      launcherRef.current?.focus();
+      restoreFocusRef.current = false;
+    }
+
+    return () => {
+      shell.removeAttribute("aria-hidden");
+      shell.toggleAttribute("inert", false);
+    };
+  }, [devPanelOpen]);
+
+  function openDevPanel() {
+    restoreFocusRef.current = false;
+    setDevPanelOpen(true);
+  }
+
+  function closeDevPanel() {
+    restoreFocusRef.current = true;
+    setDevPanelOpen(false);
+  }
+
+  function toggleDevPanel() {
+    if (devPanelOpen) {
+      closeDevPanel();
+      return;
+    }
+    openDevPanel();
+  }
 
   return (
     <main className={`login-page${devPanelOpen ? " login-page--dev-open" : ""}`}>
@@ -44,25 +98,26 @@ export function Login() {
         <span className="login-beacon login-beacon--secondary" />
       </div>
 
-      <div className="login-shell">
+      <div className="login-shell" ref={shellRef}>
         <header className="login-nav">
           <div className="login-brand" aria-label="Rialo Captain">
             <span className="login-brand-mark" aria-hidden="true" />
             <span>Rialo Captain</span>
           </div>
-          <nav className="login-nav-links" aria-label="Login page sections">
+          <div className="login-nav-links" aria-hidden="true">
             <span>Field</span>
             <span>Routes</span>
             <span>Claims</span>
-          </nav>
+          </div>
           {deployConfig.devLoginEnabled && (
             <button
               type="button"
               className="login-app-trigger"
+              ref={launcherRef}
               aria-expanded={devPanelOpen}
               aria-haspopup="dialog"
               aria-controls="dev-access-card"
-              onClick={() => setDevPanelOpen((open) => !open)}
+              onClick={toggleDevPanel}
             >
               Latch APP
             </button>
@@ -130,7 +185,7 @@ export function Login() {
       </div>
 
       {deployConfig.devLoginEnabled && devPanelOpen && (
-        <DevLoginCard onClose={() => setDevPanelOpen(false)} />
+        <DevLoginCard onClose={closeDevPanel} />
       )}
     </main>
   );
@@ -146,6 +201,12 @@ function DevLoginCard({
   const [email, setEmail] = useState("captain@local.dev");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLFormElement | null>(null);
+  const emailInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    emailInputRef.current?.focus();
+  }, []);
 
   async function dev(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -165,13 +226,48 @@ function DevLoginCard({
     }
   }
 
+  function handleKeyDown(event: KeyboardEvent<HTMLFormElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onClose();
+      return;
+    }
+
+    if (event.key !== "Tab") return;
+
+    const focusableElements = Array.from(
+      dialogRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
+      ) ?? [],
+    ).filter((element) => !element.hasAttribute("disabled"));
+
+    if (focusableElements.length === 0) return;
+
+    const firstFocusable = focusableElements[0];
+    const lastFocusable = focusableElements[focusableElements.length - 1];
+
+    if (event.shiftKey && document.activeElement === firstFocusable) {
+      event.preventDefault();
+      lastFocusable.focus();
+      return;
+    }
+
+    if (!event.shiftKey && document.activeElement === lastFocusable) {
+      event.preventDefault();
+      firstFocusable.focus();
+    }
+  }
+
   return (
     <form
       id="dev-access-card"
       className="dev-login-card"
+      ref={dialogRef}
       role="dialog"
+      aria-modal="true"
       aria-labelledby="dev-access-title"
       onSubmit={dev}
+      onKeyDown={handleKeyDown}
     >
       <div className="dev-login-card__header">
         <div>
@@ -196,6 +292,7 @@ function DevLoginCard({
           aria-label="Dev login email"
           autoComplete="email"
           placeholder="captain@local.dev"
+          ref={emailInputRef}
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}

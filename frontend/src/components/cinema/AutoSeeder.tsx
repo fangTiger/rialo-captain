@@ -295,7 +295,7 @@ export function AutoSeeder({
     markDemoOffline,
     mode,
     phase,
-    protagonist?.kind,
+    protagonist,
     realQueue.length,
     setDemoProtagonist,
     userEmail,
@@ -336,9 +336,7 @@ export function AutoSeeder({
     delayMinutes,
     markRealInjectFailed,
     mode,
-    protagonist?.flightId,
-    protagonist?.kind,
-    protagonist?.policyId,
+    protagonist,
   ]);
 
   useEffect(() => {

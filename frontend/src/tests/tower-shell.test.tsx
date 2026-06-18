@@ -3,12 +3,22 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { TowerShell } from "../routes/TowerShell";
 
+interface TrailDrawMockOptions {
+  userElectedFlight?: { callsign: string } | null;
+}
+
 const cinemaState = vi.hoisted(() => ({
   interrupt: vi.fn(),
   cameraTarget: null as { reason: string } | null,
+  cycleId: 1,
+  cycleStartedAt: new Date("2026-06-14T08:00:00.000Z").getTime(),
+  cyclePromotionLocked: false,
   kpiTickId: 7,
+  manualRemainingMs: 0,
+  manualStartedAt: null,
   mode: "cinema" as const,
   phase: "story" as const,
+  playbackLockedUntil: null,
   protagonist: {
     kind: "DEMO" as const,
     flightId: "BA178",
@@ -17,6 +27,11 @@ const cinemaState = vi.hoisted(() => ({
     latitude: 40.64,
     name: "Alice",
   },
+  realInjectErrorUntil: null,
+  realQueue: [],
+  routeRealProtagonist: vi.fn(),
+  setCyclePromotionLocked: vi.fn(),
+  storyResetId: 0,
 }));
 
 const towerHarness = vi.hoisted(() => ({
@@ -36,8 +51,29 @@ const towerHarness = vi.hoisted(() => ({
 }));
 
 const trailHarness = vi.hoisted(() => ({
-  useTrailDraw: vi.fn(() => ({ activeTrail: null })),
+  useTrailDraw: vi.fn((options?: TrailDrawMockOptions) => {
+    void options;
+    return { activeTrail: null };
+  }),
 }));
+
+const keyMomentHarness = vi.hoisted(() => {
+  const harness = {
+    order: [] as string[],
+    clearAllMoments: vi.fn(() => {
+      harness.order.push("clear");
+    }),
+    enqueue: vi.fn(),
+    resetForProtagonist: vi.fn(),
+    useKeyMomentQueue: vi.fn(() => ({
+      activeMoments: [],
+      clearAllMoments: harness.clearAllMoments,
+      enqueue: harness.enqueue,
+      resetForProtagonist: harness.resetForProtagonist,
+    })),
+  };
+  return harness;
+});
 
 vi.mock("../hooks/useFlights", () => ({
   useFlights: () => ({
@@ -51,6 +87,10 @@ vi.mock("../hooks/useFlights", () => ({
 
 vi.mock("../components/cinema/useTrailDraw", () => ({
   useTrailDraw: trailHarness.useTrailDraw,
+}));
+
+vi.mock("../components/cinema/useKeyMomentQueue", () => ({
+  useKeyMomentQueue: keyMomentHarness.useKeyMomentQueue,
 }));
 
 vi.mock("../components/cinema/CinemaContext", async () => {
@@ -265,6 +305,8 @@ describe("TowerShell", () => {
     vi.useRealTimers();
     vi.restoreAllMocks();
     cinemaState.interrupt.mockReset();
+    cinemaState.routeRealProtagonist.mockReset();
+    cinemaState.setCyclePromotionLocked.mockReset();
     cinemaState.protagonist = {
       kind: "DEMO",
       flightId: "BA178",
@@ -274,6 +316,12 @@ describe("TowerShell", () => {
       name: "Alice",
     };
     trailHarness.useTrailDraw.mockClear();
+    trailHarness.useTrailDraw.mockImplementation(() => ({ activeTrail: null }));
+    keyMomentHarness.order = [];
+    keyMomentHarness.clearAllMoments.mockClear();
+    keyMomentHarness.enqueue.mockClear();
+    keyMomentHarness.resetForProtagonist.mockClear();
+    keyMomentHarness.useKeyMomentQueue.mockClear();
     towerHarness.providerMounts = 0;
     towerHarness.flights = [
       {
@@ -412,6 +460,34 @@ describe("TowerShell", () => {
         }),
       }),
     );
+  });
+
+  it("clears active key moments before rendering the selected flight focus", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-14T08:00:00.000Z"));
+    trailHarness.useTrailDraw.mockImplementation((options) => {
+      if (options?.userElectedFlight) {
+        keyMomentHarness.order.push(
+          `trail:${options.userElectedFlight.callsign}`,
+        );
+      }
+      return { activeTrail: null };
+    });
+
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByText("mock globe"));
+
+    expect(keyMomentHarness.order.slice(0, 2)).toEqual(["clear", "trail:BA178"]);
   });
 
   it("cancels the selected flight lock when the buy drawer closes", () => {

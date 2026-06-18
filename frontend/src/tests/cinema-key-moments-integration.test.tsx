@@ -406,7 +406,7 @@ describe("TowerShell C2 key moments integration", () => {
     expect(screen.getByTestId("flareland")).toHaveTextContent("FLARE");
   });
 
-  it("turns the selected buy flight into the REAL protagonist and runs the closed-loop fallback", async () => {
+  it("turns the selected buy flight into the REAL protagonist and runs the closed-loop fallback after interrupt", async () => {
     await renderTowerWithWs();
     expect(MockWebSocket.instances).toHaveLength(1);
 
@@ -441,6 +441,11 @@ describe("TowerShell C2 key moments integration", () => {
       }),
     });
 
+    fireEvent.click(screen.getByTestId("mock-globe-gesture"));
+    expect(screen.getByTestId("mode-indicator-state")).toHaveTextContent(
+      "cinema",
+    );
+
     await act(async () => {
       vi.advanceTimersByTime(4_000);
       await Promise.resolve();
@@ -449,6 +454,7 @@ describe("TowerShell C2 key moments integration", () => {
       screen.getByTestId("trail-draw"),
     );
 
+    fireEvent.click(screen.getByTestId("mock-globe-gesture"));
     await act(async () => {
       vi.advanceTimersByTime(2_000);
       vi.advanceTimersByTime(0);
@@ -456,6 +462,7 @@ describe("TowerShell C2 key moments integration", () => {
     });
     expect(screen.getByTestId("shockwave")).toBeInTheDocument();
 
+    fireEvent.click(screen.getByTestId("mock-globe-gesture"));
     await act(async () => {
       vi.advanceTimersByTime(2_000);
       vi.advanceTimersByTime(0);
@@ -466,6 +473,7 @@ describe("TowerShell C2 key moments integration", () => {
       Number(screen.getByTestId("kpi-band").getAttribute("data-tick-id")),
     ).toBeGreaterThan(0);
 
+    fireEvent.click(screen.getByTestId("mock-globe-gesture"));
     await act(async () => {
       vi.advanceTimersByTime(2_000);
       vi.advanceTimersByTime(0);

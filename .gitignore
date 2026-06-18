@@ -47,3 +47,5 @@ frontend/.env.local
 
 # Graphify output (项目流程产物)
 graphify-out/
+.vercel
+.env*

@@ -34,6 +34,8 @@ export interface CinemaState {
   cycleStartedAt: number;
   manualStartedAt: number | null;
   manualRemainingMs: number;
+  playbackLockedUntil: number | null;
+  cyclePromotionLocked: boolean;
   protagonist: CinemaProtagonist | null;
   realQueue: RealProtagonistEvent[];
   cameraTarget: CameraTarget | null;
@@ -51,6 +53,10 @@ const REAL_EVENT_LOOKBACK_MS = 60_000;
 const REAL_QUEUE_CAP = 3;
 export const REAL_INJECT_ERROR_MS = 3_000;
 
+interface RouteRealProtagonistOptions {
+  playbackLockMs?: number;
+}
+
 export function phaseForElapsed(elapsedMs: number): CinemaPhase {
   if (elapsedMs < 6_000) return "establish";
   if (elapsedMs < 8_000) return "zoom-in";
@@ -59,15 +65,19 @@ export function phaseForElapsed(elapsedMs: number): CinemaPhase {
   return "rest";
 }
 
-export function cameraTargetForPhase(
-  _phase: CinemaPhase,
-  _protagonist: CinemaProtagonist | null,
-): CameraTarget | null {
+export function cameraTargetForPhase(): CameraTarget | null {
   return null;
 }
 
 export function advanceCinemaState(state: CinemaState, now: number): CinemaState {
-  const baseState = clearExpiredRealInjectError(state, now);
+  let baseState = clearExpiredPlaybackLock(
+    clearExpiredRealInjectError(state, now),
+    now,
+  );
+
+  if (baseState.mode === "interactive" && isPlaybackLocked(baseState, now)) {
+    baseState = keepPlaybackLockedCinemaState(baseState);
+  }
 
   if (baseState.mode === "interactive") {
     const manualStartedAt = baseState.manualStartedAt ?? now;
@@ -96,7 +106,11 @@ export function advanceCinemaState(state: CinemaState, now: number): CinemaState
 
   let protagonist = baseState.protagonist;
   let realQueue = baseState.realQueue;
-  if (completedCycles > 0 && baseState.realQueue.length > 0) {
+  if (
+    completedCycles > 0 &&
+    baseState.realQueue.length > 0 &&
+    !baseState.cyclePromotionLocked
+  ) {
     const [queuedReal, ...remainingRealQueue] = baseState.realQueue;
     protagonist = toRealProtagonist(queuedReal);
     realQueue = remainingRealQueue;
@@ -125,6 +139,8 @@ export function createInitialCinemaState(
     cycleStartedAt: now,
     manualStartedAt: null,
     manualRemainingMs: 0,
+    playbackLockedUntil: null,
+    cyclePromotionLocked: false,
     protagonist,
     realQueue: [],
     cameraTarget: null,
@@ -137,6 +153,10 @@ export function createInitialCinemaState(
 }
 
 export function interruptCinemaState(state: CinemaState, now: number): CinemaState {
+  if (isPlaybackLocked(state, now)) {
+    return keepPlaybackLockedCinemaState(state);
+  }
+
   if (state.mode === "interactive") {
     return {
       ...state,
@@ -155,11 +175,16 @@ export function interruptCinemaState(state: CinemaState, now: number): CinemaSta
 }
 
 export function resumeCinemaState(state: CinemaState, now: number): CinemaState {
+  if (isPlaybackLocked(state, now)) {
+    return keepPlaybackLockedCinemaState(state);
+  }
+
   return {
     ...createInitialCinemaState(now, state.protagonist),
     cycleId: state.cycleId + 1,
     kpiTickId: state.kpiTickId,
     realQueue: state.realQueue,
+    cyclePromotionLocked: state.cyclePromotionLocked,
     storyResetId: state.storyResetId,
     lastRealTakeoverAt: state.lastRealTakeoverAt,
     lastRealTakeoverEventAt: state.lastRealTakeoverEventAt,
@@ -174,6 +199,17 @@ export function pauseHiddenCinemaState(state: CinemaState): CinemaState {
     cameraTarget: null,
     manualRemainingMs: 0,
     manualStartedAt: null,
+  };
+}
+
+export function setCyclePromotionLockedState(
+  state: CinemaState,
+  locked: boolean,
+): CinemaState {
+  if (state.cyclePromotionLocked === locked) return state;
+  return {
+    ...state,
+    cyclePromotionLocked: locked,
   };
 }
 
@@ -254,6 +290,33 @@ function clearExpiredRealInjectError(
   };
 }
 
+function clearExpiredPlaybackLock(
+  state: CinemaState,
+  now: number,
+): CinemaState {
+  if (state.playbackLockedUntil === null || now < state.playbackLockedUntil) {
+    return state;
+  }
+  return {
+    ...state,
+    playbackLockedUntil: null,
+  };
+}
+
+function isPlaybackLocked(state: CinemaState, now: number) {
+  return state.playbackLockedUntil !== null && now < state.playbackLockedUntil;
+}
+
+function keepPlaybackLockedCinemaState(state: CinemaState): CinemaState {
+  return {
+    ...state,
+    mode: "cinema",
+    manualStartedAt: null,
+    manualRemainingMs: 0,
+    cameraTarget: null,
+  };
+}
+
 function toRealProtagonist(event: RealProtagonistEvent): CinemaProtagonist {
   return {
     kind: "REAL",
@@ -278,6 +341,7 @@ export function routeRealProtagonistState(
   state: CinemaState,
   event: RealProtagonistEvent,
   now: number,
+  options: RouteRealProtagonistOptions = {},
 ): CinemaState {
   if (now - event.createdAt > REAL_EVENT_LOOKBACK_MS) return state;
   if (hasSeenRealEventPolicy(state, event)) return state;
@@ -305,6 +369,8 @@ export function routeRealProtagonistState(
     cycleStartedAt: now,
     manualStartedAt: null,
     manualRemainingMs: 0,
+    playbackLockedUntil:
+      options.playbackLockMs !== undefined ? now + options.playbackLockMs : null,
     protagonist,
     cameraTarget: null,
     storyResetId: state.storyResetId + 1,

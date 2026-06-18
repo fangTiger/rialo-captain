@@ -11,7 +11,7 @@ module.exports = {
     "no-restricted-syntax": [
       "error",
       {
-        selector: "Literal[value=/Inter|Roboto|Arial|Fraunces|system-ui/i]",
+        selector: "Literal[value=/\\b(Inter|Roboto|Arial|Fraunces|system-ui)\\b/i]",
         message: "禁用字体: 来自 web-design-engineer skill 规约。请使用 Geist / Söhne / JetBrains Mono",
       },
     ],

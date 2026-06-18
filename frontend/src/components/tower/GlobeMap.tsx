@@ -188,6 +188,7 @@ export function GlobeMap({
   // 当前 hover 飞机的历史航迹 polyline.
   // 优先用后端 track (OpenSky), 失败/未加载时 fallback 用客户端 history.
   const hoverTrackInfo = useMemo<{ path: string; source: "opensky" | "client"; pointCount: number } | null>(() => {
+    void tick;
     if (!hovered) return null;
     const backendResult = tracks[hovered.icao24];
     const useBackend = Array.isArray(backendResult) && backendResult.length >= 2;
@@ -253,8 +254,7 @@ export function GlobeMap({
   }, [
     cameraTarget,
     cancelCameraAnimation,
-    size.height,
-    size.width,
+    size,
   ]);
 
   // 每次拿到新 flights 数据, 给每个 icao24 累积历史点
