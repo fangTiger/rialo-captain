@@ -35,7 +35,13 @@ function renderHangarSlot(
       <HangarSlot p={policy} onEvidence={onEvidence} />
     </MemoryRouter>,
   );
-  return screen.getByRole("button", { name: /BA178-20260614/i });
+  return screen.getByRole("button", { name: /^open flight BA178-20260614$/i });
+}
+
+function getEvidenceButton() {
+  return screen.getByRole("button", {
+    name: /view evidence for policy p1/i,
+  });
 }
 
 describe("HangarSlot", () => {
@@ -57,17 +63,23 @@ describe("HangarSlot", () => {
     const onEvidence = vi.fn();
     renderHangarSlot(onEvidence);
 
-    fireEvent.click(screen.getByRole("button", { name: /^evidence$/i }));
+    const evidenceButton = getEvidenceButton();
+
+    expect(evidenceButton).toHaveTextContent("Evidence");
+
+    fireEvent.click(evidenceButton);
 
     expect(onEvidence).toHaveBeenCalledWith({ kind: "policy", id: "p1" });
     expect(navigateMock).not.toHaveBeenCalled();
   });
 
-  it("uses the same navigation for Enter and Space", () => {
+  it("ignores repeated Enter and Space keydown events on the row container", () => {
     const slot = renderHangarSlot();
 
     fireEvent.keyDown(slot, { key: "Enter" });
+    fireEvent.keyDown(slot, { key: "Enter", repeat: true });
     fireEvent.keyDown(slot, { key: " " });
+    fireEvent.keyDown(slot, { key: " ", repeat: true });
 
     expect(navigateMock).toHaveBeenNthCalledWith(1, "/flight/BA178-20260614", {
       state: { from: "/policies" },
@@ -75,5 +87,24 @@ describe("HangarSlot", () => {
     expect(navigateMock).toHaveBeenNthCalledWith(2, "/flight/BA178-20260614", {
       state: { from: "/policies" },
     });
+    expect(navigateMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not trigger row navigation when the Evidence button receives keyboard input", () => {
+    const onEvidence = vi.fn();
+    renderHangarSlot(onEvidence);
+
+    const evidenceButton = getEvidenceButton();
+
+    fireEvent.keyDown(evidenceButton, { key: "Enter" });
+    fireEvent.keyDown(evidenceButton, { key: " " });
+
+    expect(navigateMock).not.toHaveBeenCalled();
+    expect(onEvidence).not.toHaveBeenCalled();
+
+    fireEvent.click(evidenceButton);
+
+    expect(onEvidence).toHaveBeenCalledWith({ kind: "policy", id: "p1" });
+    expect(navigateMock).not.toHaveBeenCalled();
   });
 });

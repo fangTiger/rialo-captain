@@ -42,6 +42,7 @@ export function HangarSlot({ p, onEvidence }: HangarSlotProps) {
       onClick={goToFlight}
       onKeyDown={(event) => {
         if (event.target !== event.currentTarget) return;
+        if (event.repeat) return;
         if (event.key !== "Enter" && event.key !== " ") return;
         event.preventDefault();
         goToFlight();
@@ -103,6 +104,7 @@ export function HangarSlot({ p, onEvidence }: HangarSlotProps) {
           </span>
           <button
             type="button"
+            aria-label={`View evidence for policy ${p.id} on flight ${p.flight_id}`}
             style={evidenceButtonStyle}
             onClick={(event) => {
               event.preventDefault();
@@ -112,6 +114,9 @@ export function HangarSlot({ p, onEvidence }: HangarSlotProps) {
             onKeyDown={(event) => {
               if (event.key === "Enter" || event.key === " ") {
                 event.stopPropagation();
+                if (event.repeat) {
+                  event.preventDefault();
+                }
               }
             }}
           >

@@ -37,6 +37,12 @@ function renderClaimRow(onEvidence?: (subject: NonNullable<EvidenceSubject>) => 
   return screen.getByRole("button", { name: /policy-alpha-123/i });
 }
 
+function getEvidenceButton() {
+  return screen.getByRole("button", {
+    name: /view evidence for claim c1/i,
+  });
+}
+
 describe("ClaimRow", () => {
   beforeEach(() => {
     navigateMock.mockClear();
@@ -56,17 +62,23 @@ describe("ClaimRow", () => {
     const onEvidence = vi.fn();
     renderClaimRow(onEvidence);
 
-    fireEvent.click(screen.getByRole("button", { name: /^evidence$/i }));
+    const evidenceButton = getEvidenceButton();
+
+    expect(evidenceButton).toHaveTextContent("Evidence");
+
+    fireEvent.click(evidenceButton);
 
     expect(onEvidence).toHaveBeenCalledWith({ kind: "claim", id: "c1" });
     expect(navigateMock).not.toHaveBeenCalled();
   });
 
-  it("uses the same navigation for Enter and Space", () => {
+  it("ignores repeated Enter and Space keydown events on the row container", () => {
     const row = renderClaimRow();
 
     fireEvent.keyDown(row, { key: "Enter" });
+    fireEvent.keyDown(row, { key: "Enter", repeat: true });
     fireEvent.keyDown(row, { key: " " });
+    fireEvent.keyDown(row, { key: " ", repeat: true });
 
     expect(navigateMock).toHaveBeenNthCalledWith(1, "/flight/BA178-20260614", {
       state: { from: "/claims" },
@@ -74,5 +86,24 @@ describe("ClaimRow", () => {
     expect(navigateMock).toHaveBeenNthCalledWith(2, "/flight/BA178-20260614", {
       state: { from: "/claims" },
     });
+    expect(navigateMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not trigger row navigation when the Evidence button receives keyboard input", () => {
+    const onEvidence = vi.fn();
+    renderClaimRow(onEvidence);
+
+    const evidenceButton = getEvidenceButton();
+
+    fireEvent.keyDown(evidenceButton, { key: "Enter" });
+    fireEvent.keyDown(evidenceButton, { key: " " });
+
+    expect(navigateMock).not.toHaveBeenCalled();
+    expect(onEvidence).not.toHaveBeenCalled();
+
+    fireEvent.click(evidenceButton);
+
+    expect(onEvidence).toHaveBeenCalledWith({ kind: "claim", id: "c1" });
+    expect(navigateMock).not.toHaveBeenCalled();
   });
 });

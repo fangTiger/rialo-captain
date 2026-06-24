@@ -37,6 +37,7 @@ export function ClaimRow({ c, onEvidence }: ClaimRowProps) {
       onClick={goToFlight}
       onKeyDown={(event) => {
         if (event.target !== event.currentTarget) return;
+        if (event.repeat) return;
         if (event.key !== "Enter" && event.key !== " ") return;
         event.preventDefault();
         goToFlight();
@@ -72,6 +73,7 @@ export function ClaimRow({ c, onEvidence }: ClaimRowProps) {
       </div>
       <button
         type="button"
+        aria-label={`View evidence for claim ${c.id} on flight ${c.flight_id}`}
         style={evidenceButtonStyle}
         onClick={(event) => {
           event.preventDefault();
@@ -81,6 +83,9 @@ export function ClaimRow({ c, onEvidence }: ClaimRowProps) {
         onKeyDown={(event) => {
           if (event.key === "Enter" || event.key === " ") {
             event.stopPropagation();
+            if (event.repeat) {
+              event.preventDefault();
+            }
           }
         }}
       >

@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { SWRConfig } from "swr";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ClaimsFeed } from "../routes/ClaimsFeed";
+import type { EvidenceSubject } from "../hooks/useEvidenceTimeline";
 import { useEventStore } from "../store/eventStore";
 
 vi.mock("../components/evidence/EvidenceDrawer", () => ({
@@ -10,7 +11,7 @@ vi.mock("../components/evidence/EvidenceDrawer", () => ({
     subject,
     onClose,
   }: {
-    subject: { kind: string; id: string } | null;
+    subject: EvidenceSubject;
     onClose: () => void;
   }) =>
     subject ? (
@@ -84,7 +85,9 @@ describe("ClaimsFeed", () => {
       expect(screen.getByText("policy-alp…")).toBeInTheDocument(),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /^evidence$/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /view evidence for claim c1/i }),
+    );
 
     expect(screen.getByTestId("evidence-drawer")).toHaveTextContent(
       "claim:c1",

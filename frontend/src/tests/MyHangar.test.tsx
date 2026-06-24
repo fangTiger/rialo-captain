@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { SWRConfig } from "swr";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { EvidenceSubject } from "../hooks/useEvidenceTimeline";
 import { MyHangar } from "../routes/MyHangar";
 import { useEventStore } from "../store/eventStore";
 
@@ -10,7 +11,7 @@ vi.mock("../components/evidence/EvidenceDrawer", () => ({
     subject,
     onClose,
   }: {
-    subject: { kind: string; id: string } | null;
+    subject: EvidenceSubject;
     onClose: () => void;
   }) =>
     subject ? (
@@ -123,7 +124,9 @@ describe("MyHangar", () => {
       expect(screen.getByText("BA178-20260614")).toBeInTheDocument(),
     );
 
-    fireEvent.click(screen.getAllByRole("button", { name: /^evidence$/i })[0]);
+    fireEvent.click(
+      screen.getByRole("button", { name: /view evidence for policy p1/i }),
+    );
 
     expect(screen.getByTestId("evidence-drawer")).toHaveTextContent(
       "policy:p1",

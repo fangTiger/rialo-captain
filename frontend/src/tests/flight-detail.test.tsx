@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { SWRConfig } from "swr";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { EvidenceSubject } from "../hooks/useEvidenceTimeline";
 import { FlightDetail } from "../routes/FlightDetail";
 
 vi.mock("../routes/TowerShell", () => ({
@@ -17,7 +18,7 @@ vi.mock("../components/evidence/EvidenceDrawer", () => ({
     subject,
     onClose,
   }: {
-    subject: { kind: string; id: string } | null;
+    subject: EvidenceSubject;
     onClose: () => void;
   }) =>
     subject ? (
@@ -259,7 +260,9 @@ describe("FlightDetail", () => {
     }
 
     fireEvent.click(
-      within(policiesSection).getByRole("button", { name: /^evidence$/i }),
+      within(policiesSection).getByRole("button", {
+        name: /view evidence for policy paid-policy/i,
+      }),
     );
 
     expect(screen.getByTestId("evidence-drawer")).toHaveTextContent(
@@ -270,7 +273,9 @@ describe("FlightDetail", () => {
     );
 
     fireEvent.click(
-      within(claimsSection).getByRole("button", { name: /^evidence$/i }),
+      within(claimsSection).getByRole("button", {
+        name: /view evidence for claim claim-one/i,
+      }),
     );
 
     expect(screen.getByTestId("evidence-drawer")).toHaveTextContent(
