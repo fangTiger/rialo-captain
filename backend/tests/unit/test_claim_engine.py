@@ -601,9 +601,21 @@ async def test_run_once_keeps_successful_settlement_when_evidence_write_fails(
         now=_now,
     )
 
-    async def fail_record_event(self, **kwargs):
-        raise RuntimeError("evidence boom")
+    original_record_event = EvidenceService.record_event
+    begin_nested_called = False
+    original_begin_nested = AsyncSession.begin_nested
 
+    def track_begin_nested(self, *args, **kwargs):
+        nonlocal begin_nested_called
+        begin_nested_called = True
+        return original_begin_nested(self, *args, **kwargs)
+
+    async def fail_record_event(self, *, event_type: str, **kwargs):
+        if event_type in {"claim.settled", "balance.credited", "flight.landed"}:
+            raise RuntimeError("evidence boom")
+        return await original_record_event(self, event_type=event_type, **kwargs)
+
+    monkeypatch.setattr(AsyncSession, "begin_nested", track_begin_nested)
     monkeypatch.setattr(EvidenceService, "record_event", fail_record_event)
 
     with caplog.at_level(logging.ERROR, logger="backend.claims.engine"):
@@ -613,6 +625,7 @@ async def test_run_once_keeps_successful_settlement_when_evidence_write_fails(
     assert summary.triggered == 1
     assert summary.failed == 0
     assert "证据事件写入失败" in caplog.text
+    assert begin_nested_called is True
 
     policy_after = await db_session.get(Policy, policy_id)
     user_after = await db_session.get(User, user_id)
@@ -625,3 +638,10 @@ async def test_run_once_keeps_successful_settlement_when_evidence_write_fails(
 
     claims = (await db_session.execute(select(Claim))).scalars().all()
     assert len(claims) == 1
+
+    events = await _policy_events(db_session, policy_id)
+    assert [event.event_type for event in events] == [
+        "observation.received",
+        "condition.matched",
+        "claim.triggered",
+    ]

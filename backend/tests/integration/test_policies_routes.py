@@ -8,8 +8,9 @@ from backend.app import create_app
 from backend.auth import google
 from backend.auth.google import GoogleProfile
 from backend.db import Base, get_engine, get_session_factory
+from backend.evidence.service import EvidenceService
 from backend.flights.opensky import FlightState
-from backend.models import Flight, Policy, PolicyEvent
+from backend.models import Flight, Policy, PolicyEvent, User
 from backend.policies.routes import _policy_created_payload
 
 
@@ -98,6 +99,7 @@ async def app_client(monkeypatch, tmp_path):
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="https://test") as client:
         client._test_broadcaster = broadcaster
+        client._test_app = app
         await client.post("/auth/google", json={"id_token": "v"})
         yield client
 
@@ -217,6 +219,46 @@ async def test_create_policy_records_evidence_events_without_changing_response_s
         "contract_ref": body["contract_ref"],
         "adapter_mode": "mock",
     }
+
+
+@pytest.mark.asyncio
+async def test_create_policy_rolls_back_when_opening_evidence_write_fails(
+    app_client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    original_record_event = EvidenceService.record_event
+
+    async def fail_opening_event(self, *, event_type: str, **kwargs):
+        if event_type == "policy.created":
+            raise RuntimeError("evidence boom")
+        return await original_record_event(self, event_type=event_type, **kwargs)
+
+    monkeypatch.setattr(EvidenceService, "record_event", fail_opening_event)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app_client._test_app, raise_app_exceptions=False),
+        base_url="https://test",
+        cookies=app_client.cookies,
+    ) as failing_client:
+        res = await failing_client.post(
+            "/policies",
+            json={
+                "flight_id": "BA178-20260614",
+                "premium": 10,
+            },
+        )
+
+    assert res.status_code != 201
+
+    async with get_session_factory()() as session:
+        policies = (await session.execute(select(Policy))).scalars().all()
+        events = (await session.execute(select(PolicyEvent))).scalars().all()
+        user = (await session.execute(select(User).where(User.email == "x@y.com"))).scalar_one()
+
+    assert policies == []
+    assert events == []
+    assert user.balance == 1000
+    assert app_client._test_broadcaster.messages == []
 
 
 def test_policy_created_payload_omits_coordinates_when_unavailable():
