@@ -73,6 +73,20 @@ class Claim(Base):
     settle_duration_ms: Mapped[int] = mapped_column(Integer, default=0)
 
 
+class PolicyEvent(Base):
+    __tablename__ = "policy_events"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    policy_id: Mapped[str] = mapped_column(ForeignKey("policies.id"))
+    flight_id: Mapped[str] = mapped_column(ForeignKey("flights.id"))
+    claim_id: Mapped[str | None] = mapped_column(ForeignKey("claims.id"), nullable=True)
+    event_type: Mapped[str] = mapped_column(String(64))
+    title: Mapped[str] = mapped_column(String(128))
+    source: Mapped[str] = mapped_column(String(32))
+    payload_json: Mapped[str] = mapped_column(Text, default="{}")
+    created_at: Mapped[int] = mapped_column(Integer, default=_now)
+
+
 class FailedTrigger(Base):
     __tablename__ = "failed_triggers"
 
