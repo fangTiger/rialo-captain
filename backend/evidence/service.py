@@ -2,7 +2,7 @@ import json
 from json import JSONDecodeError
 from typing import Any, Mapping
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.evidence.schemas import (
@@ -10,10 +10,14 @@ from backend.evidence.schemas import (
     EvidenceSubjectPublic,
     EvidenceTimelinePublic,
 )
-from backend.models import Policy, PolicyEvent, User
+from backend.models import Claim, Policy, PolicyEvent, User
 
 
 class EvidenceNotFoundError(Exception):
+    pass
+
+
+class EvidenceIntegrityError(Exception):
     pass
 
 
@@ -32,6 +36,18 @@ class EvidenceService:
         payload: Mapping[str, Any] | None = None,
         claim_id: str | None = None,
     ) -> PolicyEvent:
+        policy = await self._get_policy(policy_id)
+        if policy is None:
+            raise EvidenceNotFoundError("policy not found")
+        if flight_id != policy.flight_id:
+            raise EvidenceIntegrityError("flight does not match policy")
+        if claim_id is not None:
+            claim = await self._get_claim(claim_id)
+            if claim is None:
+                raise EvidenceIntegrityError("claim not found")
+            if claim.policy_id != policy.id:
+                raise EvidenceIntegrityError("claim does not belong to policy")
+
         event = PolicyEvent(
             policy_id=policy_id,
             flight_id=flight_id,
@@ -40,6 +56,7 @@ class EvidenceService:
             title=title,
             source=source,
             payload_json=json.dumps(payload or {}, ensure_ascii=False),
+            event_sequence=await self._next_event_sequence(policy.id),
         )
         self._session.add(event)
         await self._session.flush()
@@ -61,7 +78,11 @@ class EvidenceService:
             await self._session.execute(
                 select(PolicyEvent)
                 .where(PolicyEvent.policy_id == policy.id)
-                .order_by(PolicyEvent.created_at.asc(), PolicyEvent.id.asc())
+                .order_by(
+                    PolicyEvent.created_at.asc(),
+                    PolicyEvent.event_sequence.asc(),
+                    PolicyEvent.id.asc(),
+                )
             )
         ).scalars().all()
 
@@ -95,3 +116,23 @@ class EvidenceService:
         if isinstance(payload, dict):
             return payload
         return {}
+
+    async def _get_policy(self, policy_id: str) -> Policy | None:
+        return (
+            await self._session.execute(select(Policy).where(Policy.id == policy_id))
+        ).scalar_one_or_none()
+
+    async def _get_claim(self, claim_id: str) -> Claim | None:
+        return (
+            await self._session.execute(select(Claim).where(Claim.id == claim_id))
+        ).scalar_one_or_none()
+
+    async def _next_event_sequence(self, policy_id: str) -> int:
+        current_max = (
+            await self._session.execute(
+                select(func.max(PolicyEvent.event_sequence)).where(PolicyEvent.policy_id == policy_id)
+            )
+        ).scalar_one()
+        if current_max is None:
+            return 1
+        return current_max + 1

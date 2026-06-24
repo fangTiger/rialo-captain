@@ -2,7 +2,7 @@ import enum
 import time
 import uuid
 
-from sqlalchemy import Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import Enum, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.db import Base
@@ -14,6 +14,10 @@ def _now() -> int:
 
 def _uuid() -> str:
     return uuid.uuid4().hex[:16]
+
+
+def _now_ns() -> int:
+    return time.time_ns()
 
 
 class PolicyStatus(str, enum.Enum):
@@ -75,6 +79,15 @@ class Claim(Base):
 
 class PolicyEvent(Base):
     __tablename__ = "policy_events"
+    __table_args__ = (
+        Index(
+            "ix_policy_events_policy_timeline",
+            "policy_id",
+            "created_at",
+            "event_sequence",
+            "id",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
     policy_id: Mapped[str] = mapped_column(ForeignKey("policies.id"))
@@ -85,6 +98,7 @@ class PolicyEvent(Base):
     source: Mapped[str] = mapped_column(String(32))
     payload_json: Mapped[str] = mapped_column(Text, default="{}")
     created_at: Mapped[int] = mapped_column(Integer, default=_now)
+    event_sequence: Mapped[int] = mapped_column(Integer, default=_now_ns)
 
 
 class FailedTrigger(Base):
