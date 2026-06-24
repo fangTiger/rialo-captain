@@ -247,30 +247,6 @@ class ClaimEngine:
             persistent = await session.get(Policy, policy.id)
             if persistent is None or persistent.status != PolicyStatus.ACTIVE:
                 return
-            flight = await session.get(Flight, persistent.flight_id)
-            await self._record_side_effect_evidence_event(
-                policy_id=persistent.id,
-                flight_id=persistent.flight_id,
-                event_type="claim.triggered",
-                title="赔付已触发",
-                source="engine",
-                payload={
-                    "delay_minutes": payload.delay_minutes,
-                },
-            )
-            logger.info("triggered policy=%s delay=%s", persistent.id, payload.delay_minutes)
-            if self._broadcaster is not None:
-                await self._broadcaster.broadcast(
-                    {
-                        "type": EventType.CLAIM_TRIGGERED.value,
-                        "payload": self._claim_triggered_payload(
-                            policy=persistent,
-                            flight=flight,
-                            delay_minutes=payload.delay_minutes,
-                            observation=observation,
-                        ),
-                    }
-                )
 
         tx = await self._adapter.trigger_claim(contract_ref, payload)
         signature = await self._adapter.get_signature(tx)
@@ -283,6 +259,35 @@ class ClaimEngine:
             persistent = await session.get(Policy, policy.id)
             if persistent is None or persistent.status != PolicyStatus.ACTIVE:
                 return
+            flight = await session.get(Flight, persistent.flight_id)
+            claim_triggered_payload = self._claim_triggered_payload(
+                policy=persistent,
+                flight=flight,
+                delay_minutes=payload.delay_minutes,
+                observation=observation,
+            )
+            logger.info("triggered policy=%s delay=%s", persistent.id, payload.delay_minutes)
+            if self._broadcaster is not None:
+                await self._broadcaster.broadcast(
+                    {
+                        "type": EventType.CLAIM_TRIGGERED.value,
+                        "payload": claim_triggered_payload,
+                    }
+                )
+            try:
+                async with session.begin_nested():
+                    await EvidenceService(session).record_event(
+                        policy_id=persistent.id,
+                        flight_id=persistent.flight_id,
+                        event_type="claim.triggered",
+                        title="赔付已触发",
+                        source="engine",
+                        payload={
+                            "delay_minutes": payload.delay_minutes,
+                        },
+                    )
+            except Exception:
+                logger.exception("证据事件写入失败: policy=%s event=claim.triggered", persistent.id)
             claim = await ClaimsService(session).create_claim(
                 policy=persistent,
                 payout=persistent.payout,

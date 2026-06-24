@@ -281,6 +281,56 @@ async def test_run_once_isolates_single_failure(db_session: AsyncSession):
 
 
 @pytest.mark.asyncio
+async def test_run_once_keeps_precondition_evidence_but_not_claim_triggered_when_trigger_claim_fails(
+    db_session: AsyncSession,
+):
+    policy = await _seed_policy(db_session, callsign="BA178")
+    policy_id = policy.id
+    await db_session.commit()
+
+    class TriggerFailAdapter(FakeAdapter):
+        async def trigger_claim(self, contract_ref, payload):
+            self.trigger_calls.append((contract_ref, payload))
+            raise RuntimeError("chain down")
+
+    adapter = TriggerFailAdapter(observation={"delay_minutes": 45, "source": "opensky"})
+    engine = ClaimEngine(
+        adapter=adapter,
+        session_factory=_session_factory(db_session),
+        observe_url=lambda fid: f"https://opensky.test/state/{fid}",
+        now=_now,
+    )
+
+    summary = await engine.run_once()
+
+    assert summary.checked == 1
+    assert summary.triggered == 0
+    assert summary.failed == 1
+
+    policy_after = await db_session.get(Policy, policy_id)
+    assert policy_after is not None
+    await db_session.refresh(policy_after)
+    assert policy_after.status == PolicyStatus.ACTIVE
+
+    claims = (await db_session.execute(select(Claim))).scalars().all()
+    assert claims == []
+
+    events = await _policy_events(db_session, policy_id)
+    assert [event.event_type for event in events] == [
+        "observation.received",
+        "condition.matched",
+    ]
+
+    failed = (
+        await db_session.execute(
+            select(FailedTrigger).where(FailedTrigger.policy_id == policy_id)
+        )
+    ).scalars().all()
+    assert len(failed) == 1
+    assert failed[0].error_text == "chain down"
+
+
+@pytest.mark.asyncio
 async def test_run_once_broadcasts_flare_when_triggered(db_session: AsyncSession):
     policy = await _seed_policy(db_session)
     await db_session.commit()
