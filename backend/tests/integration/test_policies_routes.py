@@ -1,12 +1,15 @@
+import json
+
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 
 from backend.app import create_app
 from backend.auth import google
 from backend.auth.google import GoogleProfile
-from backend.db import Base, get_engine
+from backend.db import Base, get_engine, get_session_factory
 from backend.flights.opensky import FlightState
-from backend.models import Flight, Policy
+from backend.models import Flight, Policy, PolicyEvent
 from backend.policies.routes import _policy_created_payload
 
 
@@ -153,6 +156,67 @@ async def test_create_policy_broadcasts_policy_created_without_changing_response
     assert payload["callsign"] == "BA178"
     assert payload["longitude"] == -0.4
     assert payload["latitude"] == 51.4
+
+
+@pytest.mark.asyncio
+async def test_create_policy_records_evidence_events_without_changing_response_schema(
+    app_client: AsyncClient,
+):
+    res = await app_client.post(
+        "/policies",
+        json={
+            "flight_id": "BA178-20260614",
+            "premium": 10,
+        },
+    )
+    assert res.status_code == 201, res.text
+    body = res.json()
+    assert set(body) == {
+        "id",
+        "flight_id",
+        "premium",
+        "payout",
+        "status",
+        "contract_ref",
+        "created_at",
+    }
+
+    async with get_session_factory()() as session:
+        events = (
+            await session.execute(
+                select(PolicyEvent)
+                .where(PolicyEvent.policy_id == body["id"])
+                .order_by(
+                    PolicyEvent.created_at.asc(),
+                    PolicyEvent.event_sequence.asc(),
+                    PolicyEvent.id.asc(),
+                )
+            )
+        ).scalars().all()
+
+    assert [event.event_type for event in events] == [
+        "policy.created",
+        "contract.watched",
+    ]
+
+    created_event, watched_event = events
+    assert created_event.source == "user"
+    assert created_event.title == "保单已创建"
+    assert watched_event.source == "contract"
+    assert watched_event.title == "合约监听已建立"
+
+    assert created_event.payload_json is not None
+    assert watched_event.payload_json is not None
+    created_payload = json.loads(created_event.payload_json)
+    watched_payload = json.loads(watched_event.payload_json)
+    assert created_payload["premium"] == body["premium"]
+    assert created_payload["payout"] == body["payout"]
+    assert created_payload["flight_id"] == body["flight_id"]
+    assert "delay_rate" in created_payload
+    assert watched_payload == {
+        "contract_ref": body["contract_ref"],
+        "adapter_mode": "mock",
+    }
 
 
 def test_policy_created_payload_omits_coordinates_when_unavailable():

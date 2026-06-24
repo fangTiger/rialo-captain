@@ -1,4 +1,5 @@
 import json
+import logging
 from collections.abc import Iterable
 from typing import Annotated
 
@@ -7,8 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth.deps import CurrentUser
 from backend.auth.service import InsufficientBalanceError
-from backend.contracts.base import Condition, ConditionType
-from backend.db import get_session
+from backend.contracts.base import Condition, ConditionType, ContractRef
+from backend.db import get_session, get_session_factory
+from backend.evidence.service import EvidenceService
 from backend.flights.service import FlightService
 from backend.flights.opensky import FlightState
 from backend.models import Flight, Policy
@@ -18,6 +20,7 @@ from backend.ws.broadcaster import EventType
 
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _valid_coordinate(longitude: object, latitude: object) -> tuple[float, float] | None:
@@ -89,6 +92,46 @@ def _cached_flight_states(request: Request) -> Iterable[FlightState]:
     return flight_cache.get().states
 
 
+async def _record_policy_evidence(
+    *,
+    policy: Policy,
+    flight: Flight,
+    delay_rate: float,
+    contract_ref: ContractRef,
+) -> None:
+    async with get_session_factory()() as evidence_session:
+        try:
+            service = EvidenceService(evidence_session)
+            await service.record_event(
+                policy_id=policy.id,
+                flight_id=flight.id,
+                event_type="policy.created",
+                title="保单已创建",
+                source="user",
+                payload={
+                    "premium": policy.premium,
+                    "payout": policy.payout,
+                    "flight_id": policy.flight_id,
+                    "delay_rate": delay_rate,
+                },
+            )
+            await service.record_event(
+                policy_id=policy.id,
+                flight_id=flight.id,
+                event_type="contract.watched",
+                title="合约监听已建立",
+                source="contract",
+                payload={
+                    "contract_ref": contract_ref.id,
+                    "adapter_mode": contract_ref.mode,
+                },
+            )
+            await evidence_session.commit()
+        except Exception:
+            await evidence_session.rollback()
+            logger.exception("写入保单证据事件失败: policy=%s", policy.id)
+
+
 @router.post("/policies", response_model=PolicyPublic, status_code=status.HTTP_201_CREATED)
 async def create_policy(
     body: CreatePolicyRequest,
@@ -119,6 +162,12 @@ async def create_policy(
     ref = await adapter.watch(policy_id=policy.id, flight_id=flight.id, condition=condition)
     await PolicyService(session).attach_contract_ref(policy, ref.id)
     await session.commit()
+    await _record_policy_evidence(
+        policy=policy,
+        flight=flight,
+        delay_rate=stats.delay_rate,
+        contract_ref=ref,
+    )
     await _broadcast_policy_created(
         request,
         _policy_created_payload(
