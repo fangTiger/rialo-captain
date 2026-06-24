@@ -294,7 +294,6 @@ class ClaimEngine:
                 await session.execute(select(User).where(User.id == persistent.user_id))
             ).scalar_one()
             balance_after = user.balance
-            await session.commit()
             tx_hash = self._mock_tx_hash(
                 claim_id=claim.id,
                 policy_id=persistent.id,

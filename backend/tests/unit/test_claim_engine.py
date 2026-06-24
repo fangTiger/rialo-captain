@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from backend.auth.google import GoogleProfile
 from backend.auth.service import UserService
 from backend.claims.engine import ClaimEngine
+from backend.claims.service import ClaimsService
 from backend.contracts.base import (
     ClaimPayload,
     ContractRef,
@@ -645,3 +646,52 @@ async def test_run_once_keeps_successful_settlement_when_evidence_write_fails(
         "condition.matched",
         "claim.triggered",
     ]
+
+
+@pytest.mark.asyncio
+async def test_run_once_writes_settlement_evidence_before_first_post_claim_commit(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    await _seed_policy(db_session)
+    await db_session.commit()
+    adapter = FakeAdapter(observation={"delay_minutes": 45, "source": "opensky"})
+    engine = ClaimEngine(
+        adapter=adapter,
+        session_factory=_session_factory(db_session),
+        observe_url=lambda fid: f"https://opensky.test/state/{fid}",
+        now=_now,
+    )
+
+    order: list[str] = []
+    original_create_claim = ClaimsService.create_claim
+    original_commit = AsyncSession.commit
+    original_record_event = EvidenceService.record_event
+
+    async def track_create_claim(self, *args, **kwargs):
+        claim = await original_create_claim(self, *args, **kwargs)
+        order.append("claim-created")
+        return claim
+
+    async def track_commit(self, *args, **kwargs):
+        order.append("commit")
+        return await original_commit(self, *args, **kwargs)
+
+    async def track_record_event(self, *, event_type: str, **kwargs):
+        if event_type in {"claim.settled", "balance.credited", "flight.landed"}:
+            order.append(event_type)
+        return await original_record_event(self, event_type=event_type, **kwargs)
+
+    monkeypatch.setattr(ClaimsService, "create_claim", track_create_claim)
+    monkeypatch.setattr(AsyncSession, "commit", track_commit)
+    monkeypatch.setattr(EvidenceService, "record_event", track_record_event)
+
+    summary = await engine.run_once()
+
+    assert summary.triggered == 1
+    claim_created_index = order.index("claim-created")
+    first_post_claim_commit_index = next(
+        index for index in range(claim_created_index + 1, len(order)) if order[index] == "commit"
+    )
+    claim_settled_index = order.index("claim.settled")
+    assert claim_settled_index < first_post_claim_commit_index
