@@ -1,8 +1,27 @@
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Claim } from "../../hooks/useClaims";
+import type { EvidenceSubject } from "../../hooks/useEvidenceTimeline";
 
-export function ClaimRow({ c }: { c: Claim }) {
+interface ClaimRowProps {
+  c: Claim;
+  onEvidence?: (subject: NonNullable<EvidenceSubject>) => void;
+}
+
+const evidenceButtonStyle: CSSProperties = {
+  justifySelf: "end",
+  padding: "6px 10px",
+  border: "1px solid var(--border-emphasis)",
+  borderRadius: 999,
+  background: "var(--surface-2)",
+  color: "var(--text-primary)",
+  fontFamily: "var(--font-mono)",
+  fontSize: 11,
+  lineHeight: 1,
+  cursor: "pointer",
+};
+
+export function ClaimRow({ c, onEvidence }: ClaimRowProps) {
   const navigate = useNavigate();
   const [isActive, setIsActive] = useState(false);
 
@@ -11,11 +30,13 @@ export function ClaimRow({ c }: { c: Claim }) {
   };
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       aria-label={`Open flight ${c.flight_id} for policy ${c.policy_id}`}
       onClick={goToFlight}
       onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
         if (event.key !== "Enter" && event.key !== " ") return;
         event.preventDefault();
         goToFlight();
@@ -26,10 +47,9 @@ export function ClaimRow({ c }: { c: Claim }) {
       onBlur={() => setIsActive(false)}
       style={{
         display: "grid",
-        gridTemplateColumns: "120px 1fr 100px 100px 200px",
+        gridTemplateColumns: "120px minmax(0, 1fr) 100px 100px minmax(0, 200px) auto",
         padding: "14px 24px",
         width: "100%",
-        border: 0,
         borderLeft: `2px solid ${isActive ? "var(--accent-radar)" : "transparent"}`,
         borderBottom: "1px solid var(--border-subtle)",
         background: isActive ? "var(--surface-2)" : "var(--surface-1)",
@@ -50,6 +70,22 @@ export function ClaimRow({ c }: { c: Claim }) {
       <div style={{ color: "var(--text-tertiary)" }}>
         {c.signature.slice(0, 18)}… ({c.settle_duration_ms}ms)
       </div>
-    </button>
+      <button
+        type="button"
+        style={evidenceButtonStyle}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onEvidence?.({ kind: "claim", id: c.id });
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.stopPropagation();
+          }
+        }}
+      >
+        Evidence
+      </button>
+    </div>
   );
 }

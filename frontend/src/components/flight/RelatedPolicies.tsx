@@ -1,11 +1,13 @@
 import { HangarSlot } from "../hangar/HangarSlot";
 import { usePolicies } from "../../hooks/usePolicies";
+import type { EvidenceSubject } from "../../hooks/useEvidenceTimeline";
 
 interface Props {
   flightId: string;
+  onEvidence?: (subject: NonNullable<EvidenceSubject>) => void;
 }
 
-export function RelatedPolicies({ flightId }: Props) {
+export function RelatedPolicies({ flightId, onEvidence }: Props) {
   const { policies, isLoading } = usePolicies();
   const related = policies.filter((policy) => policy.flight_id === flightId);
 
@@ -45,7 +47,9 @@ export function RelatedPolicies({ flightId }: Props) {
           No policies on this flight
         </div>
       ) : (
-        related.map((policy) => <HangarSlot key={policy.id} p={policy} />)
+        related.map((policy) => (
+          <HangarSlot key={policy.id} p={policy} onEvidence={onEvidence} />
+        ))
       )}
     </section>
   );

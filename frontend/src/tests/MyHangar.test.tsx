@@ -1,9 +1,32 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { SWRConfig } from "swr";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MyHangar } from "../routes/MyHangar";
 import { useEventStore } from "../store/eventStore";
+
+vi.mock("../components/evidence/EvidenceDrawer", () => ({
+  EvidenceDrawer: ({
+    subject,
+    onClose,
+  }: {
+    subject: { kind: string; id: string } | null;
+    onClose: () => void;
+  }) =>
+    subject ? (
+      <div data-testid="evidence-drawer">
+        <span>{`${subject.kind}:${subject.id}`}</span>
+        <button type="button" onClick={onClose}>
+          Close evidence drawer
+        </button>
+      </div>
+    ) : null,
+}));
+
+function LocationProbe() {
+  const location = useLocation();
+  return <div data-testid="location-path">{location.pathname}</div>;
+}
 
 describe("MyHangar", () => {
   beforeEach(() => {
@@ -71,5 +94,40 @@ describe("MyHangar", () => {
     expect(screen.getByText("UA200-20260614")).toBeInTheDocument();
     expect(screen.getByText("10 RIA")).toBeInTheDocument();
     expect(screen.getByText("120 RIA")).toBeInTheDocument();
+  });
+
+  it("opens policy evidence without changing the current route", async () => {
+    render(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <MemoryRouter
+          initialEntries={["/policies"]}
+          future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+        >
+          <Routes>
+            <Route
+              path="/policies"
+              element={
+                <>
+                  <LocationProbe />
+                  <MyHangar />
+                </>
+              }
+            />
+            <Route path="/flight/:id" element={<LocationProbe />} />
+          </Routes>
+        </MemoryRouter>
+      </SWRConfig>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByText("BA178-20260614")).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getAllByRole("button", { name: /^evidence$/i })[0]);
+
+    expect(screen.getByTestId("evidence-drawer")).toHaveTextContent(
+      "policy:p1",
+    );
+    expect(screen.getByTestId("location-path")).toHaveTextContent("/policies");
   });
 });

@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { ApiError } from "../api/client";
+import { EvidenceDrawer } from "../components/evidence/EvidenceDrawer";
 import { Breadcrumb } from "../components/flight/Breadcrumb";
 import { FlightHero } from "../components/flight/FlightHero";
 import { FlightKPIBand } from "../components/flight/FlightKPIBand";
@@ -9,6 +11,7 @@ import { RelatedPolicies } from "../components/flight/RelatedPolicies";
 import { multiplierFor } from "../components/flight/multiplier";
 import { DelayHistogram } from "../components/drawer/DelayHistogram";
 import { useFlight } from "../hooks/useFlight";
+import type { EvidenceSubject } from "../hooks/useEvidenceTimeline";
 import { usePolicies } from "../hooks/usePolicies";
 
 function statusFor(liveDelayMinutes: number | null) {
@@ -19,6 +22,7 @@ function statusFor(liveDelayMinutes: number | null) {
 export function FlightDetail() {
   const { id } = useParams();
   const flightId = id ?? "";
+  const [evidenceSubject, setEvidenceSubject] = useState<EvidenceSubject>(null);
   const { flight, error, isLoading } = useFlight(flightId);
   const { policies } = usePolicies();
   const isNotFound = error instanceof ApiError && error.status === 404;
@@ -105,9 +109,16 @@ export function FlightDetail() {
           alignItems: "start",
         }}
       >
-        <RelatedPolicies flightId={flightId} />
-        <RelatedClaims flightId={flightId} />
+        <RelatedPolicies
+          flightId={flightId}
+          onEvidence={setEvidenceSubject}
+        />
+        <RelatedClaims flightId={flightId} onEvidence={setEvidenceSubject} />
       </div>
+      <EvidenceDrawer
+        subject={evidenceSubject}
+        onClose={() => setEvidenceSubject(null)}
+      />
     </main>
   );
 }

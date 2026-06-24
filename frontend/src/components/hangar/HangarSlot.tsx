@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Policy } from "../../hooks/usePolicies";
+import type { EvidenceSubject } from "../../hooks/useEvidenceTimeline";
 
 const STATUS_COLOR: Record<Policy["status"], string> = {
   active: "var(--accent-radar)",
@@ -8,7 +9,24 @@ const STATUS_COLOR: Record<Policy["status"], string> = {
   expired: "var(--text-tertiary)",
 };
 
-export function HangarSlot({ p }: { p: Policy }) {
+interface HangarSlotProps {
+  p: Policy;
+  onEvidence?: (subject: NonNullable<EvidenceSubject>) => void;
+}
+
+const evidenceButtonStyle: CSSProperties = {
+  padding: "6px 10px",
+  border: "1px solid var(--border-emphasis)",
+  borderRadius: 999,
+  background: "var(--surface-2)",
+  color: "var(--text-primary)",
+  fontFamily: "var(--font-mono)",
+  fontSize: 11,
+  lineHeight: 1,
+  cursor: "pointer",
+};
+
+export function HangarSlot({ p, onEvidence }: HangarSlotProps) {
   const navigate = useNavigate();
   const [isActive, setIsActive] = useState(false);
 
@@ -17,11 +35,13 @@ export function HangarSlot({ p }: { p: Policy }) {
   };
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       aria-label={`Open flight ${p.flight_id}`}
       onClick={goToFlight}
       onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
         if (event.key !== "Enter" && event.key !== " ") return;
         event.preventDefault();
         goToFlight();
@@ -62,17 +82,41 @@ export function HangarSlot({ p }: { p: Policy }) {
         </span>
         <span
           style={{
-            padding: "2px 8px",
-            borderRadius: 999,
-            background: "var(--surface-2)",
-            fontFamily: "var(--font-mono)",
-            fontSize: 10,
-            letterSpacing: "0.18em",
-            textTransform: "uppercase",
-            color: STATUS_COLOR[p.status],
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
           }}
         >
-          {p.status}
+          <span
+            style={{
+              padding: "2px 8px",
+              borderRadius: 999,
+              background: "var(--surface-2)",
+              fontFamily: "var(--font-mono)",
+              fontSize: 10,
+              letterSpacing: "0.18em",
+              textTransform: "uppercase",
+              color: STATUS_COLOR[p.status],
+            }}
+          >
+            {p.status}
+          </span>
+          <button
+            type="button"
+            style={evidenceButtonStyle}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onEvidence?.({ kind: "policy", id: p.id });
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.stopPropagation();
+              }
+            }}
+          >
+            Evidence
+          </button>
         </span>
       </div>
       <div
@@ -125,6 +169,6 @@ export function HangarSlot({ p }: { p: Policy }) {
           </div>
         </div>
       </div>
-    </button>
+    </div>
   );
 }
