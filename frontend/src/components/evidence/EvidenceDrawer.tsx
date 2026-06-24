@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useId, useRef } from "react";
 import {
   useEvidenceTimeline,
   type EvidenceEvent,
@@ -19,26 +19,115 @@ const timeFormatter = new Intl.DateTimeFormat(undefined, {
   second: "2-digit",
 });
 
+const focusableSelector = [
+  'button:not([disabled])',
+  '[href]',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(", ");
+
 export function EvidenceDrawer({
   subject,
   onClose,
 }: EvidenceDrawerProps) {
   const { timeline, events, error, isLoading } = useEvidenceTimeline(subject);
+  const dialogRef = useRef<HTMLElement | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const titleId = useId();
+  const drawerKey = subject ? `${subject.kind}:${subject.id}` : null;
 
   useEffect(() => {
-    if (!subject) {
+    if (!drawerKey) {
+      return;
+    }
+
+    previousFocusRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+    const initialFocusTarget = closeButtonRef.current ?? dialogRef.current;
+    initialFocusTarget?.focus();
+
+    return () => {
+      const previousFocus = previousFocusRef.current;
+      previousFocusRef.current = null;
+
+      if (previousFocus && document.contains(previousFocus)) {
+        previousFocus.focus();
+      }
+    };
+  }, [drawerKey]);
+
+  useEffect(() => {
+    if (!drawerKey) {
       return;
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      const dialog = dialogRef.current;
+      if (!dialog) {
+        return;
+      }
+
       if (event.key === "Escape") {
+        event.preventDefault();
         onClose();
+        return;
+      }
+
+      if (event.key !== "Tab") {
+        return;
+      }
+
+      const focusableElements = Array.from(
+        dialog.querySelectorAll<HTMLElement>(focusableSelector),
+      ).filter(
+        (element) =>
+          !element.hasAttribute("disabled") &&
+          element.getAttribute("aria-hidden") !== "true",
+      );
+
+      const activeElement =
+        document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+      if (!activeElement || !dialog.contains(activeElement)) {
+        event.preventDefault();
+        (event.shiftKey ? dialog : focusableElements[0] ?? dialog).focus();
+        return;
+      }
+
+      const firstFocusable = focusableElements[0] ?? dialog;
+      const lastFocusable =
+        focusableElements.length > 0
+          ? focusableElements[focusableElements.length - 1]
+          : dialog;
+
+      if (event.shiftKey) {
+        if (activeElement === dialog || activeElement === firstFocusable) {
+          event.preventDefault();
+          dialog.focus();
+          if (activeElement === dialog) {
+            lastFocusable.focus();
+          }
+        }
+        return;
+      }
+
+      if (activeElement === dialog || activeElement === lastFocusable) {
+        event.preventDefault();
+        if (activeElement === dialog) {
+          firstFocusable.focus();
+        } else {
+          dialog.focus();
+        }
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose, subject]);
+  }, [drawerKey, onClose]);
 
   if (!subject) {
     return null;
@@ -60,7 +149,11 @@ export function EvidenceDrawer({
         }}
       />
       <aside
-        aria-label={title}
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
         style={{
           position: "fixed",
           top: 0,
@@ -92,15 +185,17 @@ export function EvidenceDrawer({
           >
             Evidence Timeline
           </div>
-          <div
+          <h2
+            id={titleId}
             style={{
               marginTop: 6,
+              marginBottom: 0,
               fontSize: 24,
               color: "var(--text-primary)",
             }}
           >
             {title}
-          </div>
+          </h2>
           <div
             style={{
               marginTop: 8,
@@ -171,6 +266,7 @@ export function EvidenceDrawer({
         </div>
 
         <button
+          ref={closeButtonRef}
           type="button"
           aria-label="Close evidence drawer"
           onClick={onClose}

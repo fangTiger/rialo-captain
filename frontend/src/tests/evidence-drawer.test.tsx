@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EvidenceDrawer } from "../components/evidence/EvidenceDrawer";
 import {
@@ -36,6 +36,14 @@ function makeHookState(
     refresh: vi.fn(),
     ...overrides,
   };
+}
+
+function appendLauncher() {
+  const launcher = document.createElement("button");
+  launcher.type = "button";
+  launcher.textContent = "Open evidence";
+  document.body.appendChild(launcher);
+  return launcher;
 }
 
 describe("EvidenceDrawer", () => {
@@ -94,6 +102,22 @@ describe("EvidenceDrawer", () => {
     expect(screen.getByText(/0xabc123/i)).toBeInTheDocument();
   });
 
+  it("renders modal dialog semantics and moves focus into the drawer", async () => {
+    vi.mocked(useEvidenceTimeline).mockReturnValue(makeHookState());
+
+    render(<EvidenceDrawer subject={subject} onClose={() => {}} />);
+
+    const dialog = screen.getByRole("dialog", { name: /claim evidence/i });
+    const title = screen.getByRole("heading", { name: "Claim Evidence" });
+    const closeButton = screen.getByRole("button", {
+      name: /close evidence drawer/i,
+    });
+
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(dialog).toHaveAttribute("aria-labelledby", title.id);
+    await waitFor(() => expect(closeButton).toHaveFocus());
+  });
+
   it("renders the empty state copy", () => {
     vi.mocked(useEvidenceTimeline).mockReturnValue(
       makeHookState({
@@ -141,5 +165,94 @@ describe("EvidenceDrawer", () => {
     fireEvent.keyDown(window, { key: "Escape" });
 
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not render or bind keyboard handling when subject is null", () => {
+    const onClose = vi.fn();
+    vi.mocked(useEvidenceTimeline).mockReturnValue(makeHookState());
+
+    render(<EvidenceDrawer subject={null} onClose={onClose} />);
+
+    expect(
+      screen.queryByRole("dialog", { name: /claim evidence/i }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("traps Shift+Tab and Tab inside the drawer", async () => {
+    vi.mocked(useEvidenceTimeline).mockReturnValue(makeHookState());
+
+    render(<EvidenceDrawer subject={subject} onClose={() => {}} />);
+
+    const dialog = screen.getByRole("dialog", { name: /claim evidence/i });
+    const closeButton = screen.getByRole("button", {
+      name: /close evidence drawer/i,
+    });
+
+    await waitFor(() => expect(closeButton).toHaveFocus());
+
+    fireEvent.keyDown(window, { key: "Tab", shiftKey: true });
+    expect(dialog).toHaveFocus();
+
+    fireEvent.keyDown(window, { key: "Tab" });
+    expect(closeButton).toHaveFocus();
+  });
+
+  it("restores focus and removes key listeners when subject becomes null", async () => {
+    const onClose = vi.fn();
+    const launcher = appendLauncher();
+    launcher.focus();
+    vi.mocked(useEvidenceTimeline).mockReturnValue(makeHookState());
+
+    const { rerender } = render(
+      <EvidenceDrawer subject={subject} onClose={onClose} />,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /close evidence drawer/i }),
+      ).toHaveFocus(),
+    );
+
+    rerender(<EvidenceDrawer subject={null} onClose={onClose} />);
+
+    expect(
+      screen.queryByRole("dialog", { name: /claim evidence/i }),
+    ).not.toBeInTheDocument();
+    await waitFor(() => expect(launcher).toHaveFocus());
+
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    expect(onClose).not.toHaveBeenCalled();
+    launcher.remove();
+  });
+
+  it("restores focus and removes key listeners on unmount", async () => {
+    const onClose = vi.fn();
+    const launcher = appendLauncher();
+    launcher.focus();
+    vi.mocked(useEvidenceTimeline).mockReturnValue(makeHookState());
+
+    const { unmount } = render(
+      <EvidenceDrawer subject={subject} onClose={onClose} />,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /close evidence drawer/i }),
+      ).toHaveFocus(),
+    );
+
+    unmount();
+
+    await waitFor(() => expect(launcher).toHaveFocus());
+
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    expect(onClose).not.toHaveBeenCalled();
+    launcher.remove();
   });
 });
