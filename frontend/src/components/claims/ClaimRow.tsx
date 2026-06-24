@@ -37,9 +37,9 @@ export function ClaimRow({ c, onEvidence }: ClaimRowProps) {
       onClick={goToFlight}
       onKeyDown={(event) => {
         if (event.target !== event.currentTarget) return;
-        if (event.repeat) return;
         if (event.key !== "Enter" && event.key !== " ") return;
         event.preventDefault();
+        if (event.repeat) return;
         goToFlight();
       }}
       onMouseEnter={() => setIsActive(true)}

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { createEvent, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ClaimRow } from "../components/claims/ClaimRow";
@@ -72,13 +72,15 @@ describe("ClaimRow", () => {
     expect(navigateMock).not.toHaveBeenCalled();
   });
 
-  it("ignores repeated Enter and Space keydown events on the row container", () => {
+  it("cancels repeated Enter and Space keydown events on the row container without navigating", () => {
     const row = renderClaimRow();
 
     fireEvent.keyDown(row, { key: "Enter" });
-    fireEvent.keyDown(row, { key: "Enter", repeat: true });
+    const repeatedEnter = createEvent.keyDown(row, { key: "Enter", repeat: true });
+    fireEvent(row, repeatedEnter);
     fireEvent.keyDown(row, { key: " " });
-    fireEvent.keyDown(row, { key: " ", repeat: true });
+    const repeatedSpace = createEvent.keyDown(row, { key: " ", repeat: true });
+    fireEvent(row, repeatedSpace);
 
     expect(navigateMock).toHaveBeenNthCalledWith(1, "/flight/BA178-20260614", {
       state: { from: "/claims" },
@@ -87,6 +89,8 @@ describe("ClaimRow", () => {
       state: { from: "/claims" },
     });
     expect(navigateMock).toHaveBeenCalledTimes(2);
+    expect(repeatedEnter.defaultPrevented).toBe(true);
+    expect(repeatedSpace.defaultPrevented).toBe(true);
   });
 
   it("does not trigger row navigation when the Evidence button receives keyboard input", () => {

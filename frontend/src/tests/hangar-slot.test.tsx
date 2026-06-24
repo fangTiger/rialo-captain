@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { createEvent, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { HangarSlot } from "../components/hangar/HangarSlot";
@@ -73,13 +73,15 @@ describe("HangarSlot", () => {
     expect(navigateMock).not.toHaveBeenCalled();
   });
 
-  it("ignores repeated Enter and Space keydown events on the row container", () => {
+  it("cancels repeated Enter and Space keydown events on the row container without navigating", () => {
     const slot = renderHangarSlot();
 
     fireEvent.keyDown(slot, { key: "Enter" });
-    fireEvent.keyDown(slot, { key: "Enter", repeat: true });
+    const repeatedEnter = createEvent.keyDown(slot, { key: "Enter", repeat: true });
+    fireEvent(slot, repeatedEnter);
     fireEvent.keyDown(slot, { key: " " });
-    fireEvent.keyDown(slot, { key: " ", repeat: true });
+    const repeatedSpace = createEvent.keyDown(slot, { key: " ", repeat: true });
+    fireEvent(slot, repeatedSpace);
 
     expect(navigateMock).toHaveBeenNthCalledWith(1, "/flight/BA178-20260614", {
       state: { from: "/policies" },
@@ -88,6 +90,8 @@ describe("HangarSlot", () => {
       state: { from: "/policies" },
     });
     expect(navigateMock).toHaveBeenCalledTimes(2);
+    expect(repeatedEnter.defaultPrevented).toBe(true);
+    expect(repeatedSpace.defaultPrevented).toBe(true);
   });
 
   it("does not trigger row navigation when the Evidence button receives keyboard input", () => {
