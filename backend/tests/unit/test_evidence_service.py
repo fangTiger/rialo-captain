@@ -108,6 +108,8 @@ async def test_timeline_for_policy_orders_same_second_events_by_write_sequence(
     )
     monkeypatch.setattr(evidence_models.uuid, "uuid4", lambda: next(generated_ids))
     monkeypatch.setattr(evidence_models.time, "time", lambda: 200)
+    generated_ns = iter([1000, 1001])
+    monkeypatch.setattr(evidence_models.time, "time_ns", lambda: next(generated_ns))
 
     service = EvidenceService(db_session)
     first = await service.record_event(
@@ -138,7 +140,7 @@ async def test_timeline_for_policy_orders_same_second_events_by_write_sequence(
             .order_by(PolicyEvent.event_sequence.asc())
         )
     ).scalars().all()
-    assert [event.event_sequence for event in stored_events] == [1, 2]
+    assert [event.event_sequence for event in stored_events] == [1000, 1001]
 
 
 @pytest.mark.asyncio
@@ -166,6 +168,14 @@ async def test_timeline_for_policy_hides_other_users_policy_as_not_found(db_sess
 
     with pytest.raises(EvidenceNotFoundError):
         await EvidenceService(db_session).timeline_for_policy(viewer, policy.id)
+
+
+@pytest.mark.asyncio
+async def test_timeline_for_policy_raises_not_found_for_missing_policy(db_session: AsyncSession):
+    user = await make_user(db_session)
+
+    with pytest.raises(EvidenceNotFoundError):
+        await EvidenceService(db_session).timeline_for_policy(user, "missing-policy")
 
 
 @pytest.mark.asyncio

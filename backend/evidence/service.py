@@ -2,7 +2,7 @@ import json
 from json import JSONDecodeError
 from typing import Any, Mapping
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.evidence.schemas import (
@@ -56,7 +56,6 @@ class EvidenceService:
             title=title,
             source=source,
             payload_json=json.dumps(payload or {}, ensure_ascii=False),
-            event_sequence=await self._next_event_sequence(policy.id),
         )
         self._session.add(event)
         await self._session.flush()
@@ -126,13 +125,3 @@ class EvidenceService:
         return (
             await self._session.execute(select(Claim).where(Claim.id == claim_id))
         ).scalar_one_or_none()
-
-    async def _next_event_sequence(self, policy_id: str) -> int:
-        current_max = (
-            await self._session.execute(
-                select(func.max(PolicyEvent.event_sequence)).where(PolicyEvent.policy_id == policy_id)
-            )
-        ).scalar_one()
-        if current_max is None:
-            return 1
-        return current_max + 1
