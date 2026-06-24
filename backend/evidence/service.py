@@ -62,35 +62,44 @@ class EvidenceService:
         return event
 
     async def timeline_for_policy(self, user: User, policy_id: str) -> EvidenceTimelinePublic:
-        policy = (
-            await self._session.execute(
-                select(Policy).where(
-                    Policy.id == policy_id,
-                    Policy.user_id == user.id,
-                )
-            )
-        ).scalar_one_or_none()
+        policy = await self._owned_policy(user.id, policy_id)
         if policy is None:
             raise EvidenceNotFoundError("policy not found")
 
-        events = (
+        return await self._timeline_from_policy(policy)
+
+    async def timeline_for_claim(self, user: User, claim_id: str) -> EvidenceTimelinePublic:
+        row = (
             await self._session.execute(
-                select(PolicyEvent)
-                .where(PolicyEvent.policy_id == policy.id)
-                .order_by(
-                    PolicyEvent.created_at.asc(),
-                    PolicyEvent.event_sequence.asc(),
-                    PolicyEvent.id.asc(),
+                select(Claim, Policy)
+                .join(Policy, Claim.policy_id == Policy.id)
+                .where(
+                    Claim.id == claim_id,
+                    Policy.user_id == user.id,
                 )
             )
-        ).scalars().all()
+        ).one_or_none()
+        if row is None:
+            raise EvidenceNotFoundError("claim not found")
+        claim, policy = row
+        return await self._timeline_from_policy(policy, claim_id=claim.id)
 
-        claim_id = next((event.claim_id for event in events if event.claim_id is not None), None)
+    async def _timeline_from_policy(
+        self,
+        policy: Policy,
+        *,
+        claim_id: str | None = None,
+    ) -> EvidenceTimelinePublic:
+        events = await self._policy_events(policy.id)
+        subject_claim_id = claim_id or next(
+            (event.claim_id for event in events if event.claim_id is not None),
+            None,
+        )
         return EvidenceTimelinePublic(
             subject=EvidenceSubjectPublic(
                 policy_id=policy.id,
                 flight_id=policy.flight_id,
-                claim_id=claim_id,
+                claim_id=subject_claim_id,
             ),
             events=[self._to_public_event(event) for event in events],
         )
@@ -120,6 +129,29 @@ class EvidenceService:
         return (
             await self._session.execute(select(Policy).where(Policy.id == policy_id))
         ).scalar_one_or_none()
+
+    async def _owned_policy(self, user_id: str, policy_id: str) -> Policy | None:
+        return (
+            await self._session.execute(
+                select(Policy).where(
+                    Policy.id == policy_id,
+                    Policy.user_id == user_id,
+                )
+            )
+        ).scalar_one_or_none()
+
+    async def _policy_events(self, policy_id: str) -> list[PolicyEvent]:
+        return (
+            await self._session.execute(
+                select(PolicyEvent)
+                .where(PolicyEvent.policy_id == policy_id)
+                .order_by(
+                    PolicyEvent.created_at.asc(),
+                    PolicyEvent.event_sequence.asc(),
+                    PolicyEvent.id.asc(),
+                )
+            )
+        ).scalars().all()
 
     async def _get_claim(self, claim_id: str) -> Claim | None:
         return (

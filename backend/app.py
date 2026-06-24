@@ -12,6 +12,7 @@ from backend.claims.routes import router as claims_router
 from backend.contracts.factory import get_contract_adapter
 from backend.contracts.mock_rialo import MockRialoAdapter
 from backend.db import get_session_factory, init_db
+from backend.evidence.routes import router as evidence_router
 from backend.config import get_settings
 from backend.flights.cache import FlightCache
 from backend.flights.fetcher import FlightFetcher
@@ -128,6 +129,7 @@ def create_app() -> FastAPI:
     app.include_router(flights_router)
     app.include_router(policies_router)
     app.include_router(claims_router)
+    app.include_router(evidence_router)
     app.include_router(admin_router)
     app.include_router(ws_router)
     return app
