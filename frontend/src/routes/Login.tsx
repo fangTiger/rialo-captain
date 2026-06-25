@@ -101,7 +101,14 @@ export function Login() {
       <div className="login-shell" ref={shellRef}>
         <header className="login-nav">
           <div className="login-brand" aria-label="Rialo Captain">
-            <span className="login-brand-mark" aria-hidden="true" />
+            <span
+              className="login-brand-logo"
+              data-testid="rialo-logo-mark"
+              aria-hidden="true"
+            >
+              <span className="login-brand-logo__orbit" />
+              <span className="login-brand-logo__glyph">R</span>
+            </span>
             <span>Rialo Captain</span>
           </div>
           <div className="login-nav-links" aria-hidden="true">

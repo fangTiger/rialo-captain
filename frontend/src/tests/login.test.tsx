@@ -57,6 +57,20 @@ describe("Login", () => {
     expect(
       screen.getByText(/live tower access for flight cover and claims/i),
     ).toBeInTheDocument();
+    expect(screen.getByTestId("rialo-logo-mark")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+    expect(container.querySelector(".login-brand-mark")).toBeNull();
+    expect(screen.getByText("Live field")).toBeInTheDocument();
+    expect(screen.getByText("Ready latch")).toBeInTheDocument();
+    expect(screen.getByText("Warm relay")).toBeInTheDocument();
+    expect(
+      screen.getByText("Google-auth clearance into the active flight field."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Sweep live")).toBeInTheDocument();
+    expect(screen.getByText("Bind ready")).toBeInTheDocument();
+    expect(screen.getByText("Claims warm")).toBeInTheDocument();
     expect(
       screen.queryByRole("navigation", { name: "Login page sections" }),
     ).not.toBeInTheDocument();
