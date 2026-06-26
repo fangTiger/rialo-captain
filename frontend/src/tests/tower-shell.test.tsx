@@ -57,6 +57,33 @@ const trailHarness = vi.hoisted(() => ({
   }),
 }));
 
+const copilotHarness = vi.hoisted(() => ({
+  ask: vi.fn(),
+  stop: vi.fn(),
+  openPanel: vi.fn(),
+  isLoading: false,
+  connectionStatus: "idle",
+  activeSubjectType: "overview" as const,
+  response: null as
+    | {
+        status: "ok" | "unavailable";
+        answer: string;
+        sources: { type: string; id: string; label: string; href?: string }[];
+        suggested_prompts: string[];
+        confidence: number;
+        model: string;
+      }
+    | null,
+  errorMessage: null as string | null,
+  promptSuggestions: [
+    "What needs attention right now?",
+    "Which flights look payout-prone today?",
+    "Where is settlement risk building?",
+    "Which live flights are still uninsured?",
+    "What should I verify first in evidence?",
+  ],
+}));
+
 const keyMomentHarness = vi.hoisted(() => {
   const harness = {
     order: [] as string[],
@@ -290,6 +317,10 @@ vi.mock("../components/tower/DataStaleBadge", () => ({
   DataStaleBadge: () => <div>data stale</div>,
 }));
 
+vi.mock("../components/copilot/CopilotProvider", () => ({
+  useCopilot: () => copilotHarness,
+}));
+
 function FlightDetailProbe() {
   const { id } = useParams();
   return <div>flight detail {id}</div>;
@@ -323,6 +354,21 @@ describe("TowerShell", () => {
     keyMomentHarness.resetForProtagonist.mockClear();
     keyMomentHarness.useKeyMomentQueue.mockClear();
     towerHarness.providerMounts = 0;
+    copilotHarness.ask.mockReset();
+    copilotHarness.stop.mockReset();
+    copilotHarness.openPanel.mockReset();
+    copilotHarness.isLoading = false;
+    copilotHarness.connectionStatus = "idle";
+    copilotHarness.activeSubjectType = "overview";
+    copilotHarness.response = null;
+    copilotHarness.errorMessage = null;
+    copilotHarness.promptSuggestions = [
+      "What needs attention right now?",
+      "Which flights look payout-prone today?",
+      "Where is settlement risk building?",
+      "Which live flights are still uninsured?",
+      "What should I verify first in evidence?",
+    ];
     towerHarness.flights = [
       {
         icao24: "a1b2c3",
@@ -460,6 +506,547 @@ describe("TowerShell", () => {
         }),
       }),
     );
+  });
+
+  it("fills the AI Briefing textarea from a recommendation and only asks on submit", () => {
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("AI Briefing")).toBeInTheDocument();
+    expect(screen.queryByText("ANSWER")).not.toBeInTheDocument();
+    expect(screen.queryByText("ANSWER BUFFER")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Submit AI Briefing question" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "What needs attention right now?" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: "Which flights look payout-prone today?",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: "Where is settlement risk building?",
+      }),
+    ).toBeInTheDocument();
+
+    const textarea = screen.getByRole("textbox", {
+      name: "AI Briefing question",
+    });
+
+    expect(textarea).toHaveValue("");
+
+    fireEvent.click(screen.getByRole("button", { name: "What needs attention right now?" }));
+
+    expect(textarea).toHaveValue("What needs attention right now?");
+    expect(copilotHarness.ask).not.toHaveBeenCalled();
+    expect(copilotHarness.openPanel).not.toHaveBeenCalled();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Submit AI Briefing question" }),
+    );
+
+    expect(copilotHarness.ask).toHaveBeenCalledWith(
+      {
+        question: "What needs attention right now?",
+        subjectType: "overview",
+      },
+      { openPanel: false },
+    );
+    expect(copilotHarness.openPanel).not.toHaveBeenCalled();
+  });
+
+  it("collapses and re-expands AI Briefing during streaming without triggering copilot actions", () => {
+    copilotHarness.isLoading = true;
+    copilotHarness.connectionStatus = "streaming";
+    copilotHarness.response = {
+      status: "ok",
+      answer: "BA178 is building payout pressure right now.",
+      sources: [
+        {
+          type: "flight",
+          id: "BA178-20260614",
+          label: "Flight BA178 LHR->JFK",
+          href: "/flights/BA178-20260614",
+        },
+      ],
+      suggested_prompts: [],
+      confidence: 0,
+      model: "deepseek-v4-pro",
+    };
+
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const briefing = screen.getByTestId("ai-briefing");
+    const briefingBody = document.getElementById("ai-briefing-body");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "What needs attention right now?" }),
+    );
+
+    expect(briefing).toHaveAttribute("data-collapsed", "false");
+    expect(briefing).toHaveStyle({ width: "min(100%, 28rem)" });
+    expect(briefingBody).toBeInTheDocument();
+    expect(briefingBody).not.toHaveAttribute("hidden");
+    expect(
+      screen.getByRole("button", { name: "Collapse AI Briefing" }),
+    ).toHaveAttribute("aria-expanded", "true");
+    expect(
+      screen.getByRole("button", { name: "Collapse AI Briefing" }),
+    ).toHaveAttribute("aria-controls", "ai-briefing-body");
+    expect(
+      screen.getByRole("textbox", { name: "AI Briefing question" }),
+    ).toHaveValue("What needs attention right now?");
+    expect(
+      screen.getByText("BA178 is building payout pressure right now."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("ANSWER BUFFER")).toBeInTheDocument();
+    expect(screen.getByText("Receiving answer")).toBeInTheDocument();
+    expect(screen.getAllByText("streaming")).toHaveLength(2);
+    expect(
+      screen.getByRole("button", { name: "Stop AI Briefing stream" }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Collapse AI Briefing" }),
+    );
+
+    expect(copilotHarness.ask).not.toHaveBeenCalled();
+    expect(copilotHarness.stop).not.toHaveBeenCalled();
+    expect(copilotHarness.openPanel).not.toHaveBeenCalled();
+    expect(briefing).toHaveAttribute("data-collapsed", "true");
+    expect(briefing).toHaveStyle({ width: "fit-content" });
+    expect(screen.getByText("AI Briefing")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Expand AI Briefing" }),
+    ).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.getByRole("button", { name: "Expand AI Briefing" }),
+    ).toHaveAttribute("aria-controls", "ai-briefing-body");
+    expect(briefingBody).toHaveAttribute("hidden");
+    expect(
+      screen.queryByRole("textbox", { name: "AI Briefing question" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "What needs attention right now?" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("BA178 is building payout pressure right now."),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("ANSWER BUFFER")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Stop AI Briefing stream" }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Expand AI Briefing" }),
+    );
+
+    expect(copilotHarness.ask).not.toHaveBeenCalled();
+    expect(copilotHarness.stop).not.toHaveBeenCalled();
+    expect(copilotHarness.openPanel).not.toHaveBeenCalled();
+    expect(briefing).toHaveAttribute("data-collapsed", "false");
+    expect(briefingBody).not.toHaveAttribute("hidden");
+    expect(
+      screen.getByRole("button", { name: "Collapse AI Briefing" }),
+    ).toHaveAttribute("aria-expanded", "true");
+    expect(
+      screen.getByRole("textbox", { name: "AI Briefing question" }),
+    ).toHaveValue("What needs attention right now?");
+    expect(
+      screen.getByRole("button", { name: "What needs attention right now?" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("BA178 is building payout pressure right now."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("ANSWER BUFFER")).toBeInTheDocument();
+    expect(screen.getByText("Receiving answer")).toBeInTheDocument();
+    expect(screen.getAllByText("streaming")).toHaveLength(2);
+    expect(
+      screen.getByRole("button", { name: "Stop AI Briefing stream" }),
+    ).toBeInTheDocument();
+  });
+
+  it("submits AI Briefing inline without opening the panel", () => {
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.change(screen.getByRole("textbox", { name: "AI Briefing question" }), {
+      target: { value: "Where is settlement risk building?" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Submit AI Briefing question" }),
+    );
+
+    expect(copilotHarness.ask).toHaveBeenCalledWith(
+      {
+        question: "Where is settlement risk building?",
+        subjectType: "overview",
+      },
+      { openPanel: false },
+    );
+    expect(copilotHarness.openPanel).not.toHaveBeenCalled();
+  });
+
+  it("caps AI Briefing recommendations at five and shows inline answer buffer state while streaming", () => {
+    copilotHarness.isLoading = true;
+    copilotHarness.connectionStatus = "streaming";
+    copilotHarness.promptSuggestions = [
+      "Question 1",
+      "Question 2",
+      "Question 3",
+      "Question 4",
+      "Question 5",
+      "Question 6",
+    ];
+    copilotHarness.response = {
+      status: "ok",
+      answer: "Tower is already streaming BA178 risk.",
+      sources: [],
+      suggested_prompts: [
+        "Question 1",
+        "Question 2",
+        "Question 3",
+        "Question 4",
+        "Question 5",
+        "Question 6",
+      ],
+      confidence: 0,
+      model: "deepseek-v4-pro",
+    };
+
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByText("Tower is already streaming BA178 risk."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("ANSWER BUFFER")).toBeInTheDocument();
+    expect(screen.queryByText("ANSWER")).not.toBeInTheDocument();
+    expect(screen.getByText("Receiving answer")).toBeInTheDocument();
+    expect(screen.getByText("▌")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Stop AI Briefing stream" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Question 6" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Question 5" })).toBeInTheDocument();
+  });
+
+  it("shows ANSWER for a completed AI Briefing response instead of the streaming buffer label", () => {
+    copilotHarness.response = {
+      status: "ok",
+      answer: "Tower activity is elevated around BA178 and EK202 today.",
+      sources: [],
+      suggested_prompts: [],
+      confidence: 0,
+      model: "deepseek-v4-pro",
+    };
+
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByText("Tower activity is elevated around BA178 and EK202 today."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("ANSWER")).toBeInTheDocument();
+    expect(screen.queryByText("ANSWER BUFFER")).not.toBeInTheDocument();
+    expect(screen.queryByText("Receiving answer")).not.toBeInTheDocument();
+  });
+
+  it("renders completed AI Briefing answers inside a stable scroll container", () => {
+    copilotHarness.response = {
+      status: "ok",
+      answer:
+        "Tower activity is elevated around BA178 and EK202 today. BA178 has the stronger claim pressure signal while EK202 still needs manual evidence review.",
+      sources: [],
+      suggested_prompts: [],
+      confidence: 0,
+      model: "deepseek-v4-pro",
+    };
+
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const answerScroll = screen.getByTestId("ai-briefing-answer-scroll");
+
+    expect(answerScroll).toHaveClass("ai-briefing-answer-scroll");
+    expect(answerScroll).toHaveStyle({
+      overflowY: "auto",
+      maxHeight: "260px",
+    });
+  });
+
+  it("lets AI Briefing stop a streaming inline request without opening the panel", () => {
+    copilotHarness.isLoading = true;
+    copilotHarness.connectionStatus = "streaming";
+    copilotHarness.response = {
+      status: "ok",
+      answer: "Tower is already streaming BA178 risk.",
+      sources: [],
+      suggested_prompts: [],
+      confidence: 0,
+      model: "deepseek-v4-pro",
+    };
+
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Stop AI Briefing stream" }),
+    );
+
+    expect(copilotHarness.stop).toHaveBeenCalledTimes(1);
+    expect(copilotHarness.ask).not.toHaveBeenCalled();
+    expect(copilotHarness.openPanel).not.toHaveBeenCalled();
+  });
+
+  it("lets AI Briefing replace a streaming inline request from a recommendation without opening the panel", () => {
+    copilotHarness.isLoading = true;
+    copilotHarness.connectionStatus = "streaming";
+    copilotHarness.promptSuggestions = [
+      "Question 1",
+      "Question 2",
+      "Question 3",
+      "Question 4",
+      "Question 5",
+      "Question 6",
+    ];
+    copilotHarness.response = {
+      status: "ok",
+      answer: "Tower is already streaming BA178 risk.",
+      sources: [],
+      suggested_prompts: [
+        "Question 1",
+        "Question 2",
+        "Question 3",
+        "Question 4",
+        "Question 5",
+      ],
+      confidence: 0,
+      model: "deepseek-v4-pro",
+    };
+
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Question 2" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Submit AI Briefing question" }),
+    );
+
+    expect(copilotHarness.ask).toHaveBeenCalledWith(
+      {
+        question: "Question 2",
+        subjectType: "overview",
+      },
+      { openPanel: false },
+    );
+    expect(copilotHarness.stop).not.toHaveBeenCalled();
+    expect(copilotHarness.openPanel).not.toHaveBeenCalled();
+  });
+
+  it("shows AI Briefing evidence used only when the answer cites matching evidence", () => {
+    copilotHarness.response = {
+      status: "ok",
+      answer: "BA178 is the flight I would watch first right now.",
+      sources: [
+        {
+          type: "flight",
+          id: "BA178-20260614",
+          label: "Flight BA178 LHR->JFK",
+          href: "/flights/BA178-20260614",
+        },
+        {
+          type: "claim",
+          id: "claim-one",
+          label: "Claim claim-one",
+          href: "/claims/claim-one/timeline",
+        },
+      ],
+      suggested_prompts: [],
+      confidence: 0,
+      model: "deepseek-v4-pro",
+    };
+
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByText("BA178 is the flight I would watch first right now."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Evidence used")).toBeInTheDocument();
+    expect(screen.getByText("Flight BA178 LHR->JFK")).toBeInTheDocument();
+    expect(screen.queryByText("Claim claim-one")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sources")).not.toBeInTheDocument();
+  });
+
+  it("hides AI Briefing evidence when the answer does not cite any source", () => {
+    copilotHarness.response = {
+      status: "ok",
+      answer: "Tower activity is elevated today.",
+      sources: [
+        {
+          type: "flight",
+          id: "BA178-20260614",
+          label: "Flight BA178 LHR->JFK",
+          href: "/flights/BA178-20260614",
+        },
+      ],
+      suggested_prompts: [],
+      confidence: 0,
+      model: "deepseek-v4-pro",
+    };
+
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Tower activity is elevated today.")).toBeInTheDocument();
+    expect(screen.queryByText("Evidence used")).not.toBeInTheDocument();
+    expect(screen.queryByText("Flight BA178 LHR->JFK")).not.toBeInTheDocument();
+  });
+
+  it("keeps the AI Briefing partial answer on error without showing evidence used", () => {
+    copilotHarness.response = {
+      status: "unavailable",
+      answer: "BA178 is still the flight I would watch first right now.",
+      sources: [
+        {
+          type: "flight",
+          id: "BA178-20260614",
+          label: "Flight BA178 LHR->JFK",
+          href: "/flights/BA178-20260614",
+        },
+      ],
+      suggested_prompts: [],
+      confidence: 0,
+      model: "deepseek-v4-pro",
+    };
+    copilotHarness.errorMessage = "DeepSeek request timed out. Please try again.";
+
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByText("BA178 is still the flight I would watch first right now."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("DeepSeek request timed out. Please try again."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Recoverable error")).toBeInTheDocument();
+    expect(screen.queryByText("ANSWER")).not.toBeInTheDocument();
+    expect(screen.queryByText("ANSWER BUFFER")).not.toBeInTheDocument();
+    expect(screen.queryByText("Evidence used")).not.toBeInTheDocument();
+    expect(screen.queryByText("Flight BA178 LHR->JFK")).not.toBeInTheDocument();
+  });
+
+  it("uses the top-nav height token instead of a hard-coded offset", () => {
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId("cinema-provider").parentElement).toHaveStyle({
+      top: "var(--top-nav-height, 64px)",
+    });
   });
 
   it("clears active key moments before rendering the selected flight focus", () => {

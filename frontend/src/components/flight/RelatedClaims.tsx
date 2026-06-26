@@ -1,11 +1,13 @@
 import { ClaimRow } from "../claims/ClaimRow";
 import { useClaimsForFlight } from "../../hooks/useClaimsForFlight";
+import type { EvidenceSubject } from "../../hooks/useEvidenceTimeline";
 
 interface Props {
   flightId: string;
+  onEvidence?: (subject: NonNullable<EvidenceSubject>) => void;
 }
 
-export function RelatedClaims({ flightId }: Props) {
+export function RelatedClaims({ flightId, onEvidence }: Props) {
   const { claims, isLoading } = useClaimsForFlight(flightId);
 
   return (
@@ -46,7 +48,11 @@ export function RelatedClaims({ flightId }: Props) {
           }}
         >
           {claims.map((claim) => (
-            <ClaimRow key={claim.signature} c={claim} />
+            <ClaimRow
+              key={claim.signature}
+              c={claim}
+              onEvidence={onEvidence}
+            />
           ))}
         </div>
       )}

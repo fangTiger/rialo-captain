@@ -9,9 +9,11 @@ from backend.admin.routes import router as admin_router
 from backend.auth.routes import router as auth_router
 from backend.claims.engine import ClaimEngine
 from backend.claims.routes import router as claims_router
+from backend.copilot.routes import router as copilot_router
 from backend.contracts.factory import get_contract_adapter
 from backend.contracts.mock_rialo import MockRialoAdapter
 from backend.db import get_session_factory, init_db
+from backend.evidence.routes import router as evidence_router
 from backend.config import get_settings
 from backend.flights.cache import FlightCache
 from backend.flights.fetcher import FlightFetcher
@@ -88,8 +90,10 @@ async def lifespan(app: FastAPI):
                     await task
                 except asyncio.CancelledError:
                     pass
-        if _opensky_singleton is not None:
-            await _opensky_singleton.aclose()
+        opensky = _opensky_singleton
+        _opensky_singleton = None
+        if opensky is not None:
+            await opensky.aclose()
         if isinstance(adapter, MockRialoAdapter):
             await adapter.aclose()
 
@@ -125,9 +129,11 @@ def create_app() -> FastAPI:
         return {"status": "ok", "service": "rialo-captain"}
 
     app.include_router(auth_router)
+    app.include_router(copilot_router)
     app.include_router(flights_router)
     app.include_router(policies_router)
     app.include_router(claims_router)
+    app.include_router(evidence_router)
     app.include_router(admin_router)
     app.include_router(ws_router)
     return app

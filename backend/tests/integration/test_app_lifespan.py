@@ -83,6 +83,7 @@ async def test_lifespan_starts_flight_fetcher_by_default(monkeypatch, tmp_path):
 
         assert fetcher.stopped is True
         assert fetcher.cancelled is True
+        assert app_module._opensky_singleton is None
     finally:
         await _dispose_db()
 
@@ -101,5 +102,6 @@ async def test_lifespan_respects_flight_fetcher_enabled_false(monkeypatch, tmp_p
 
         assert fetcher.stopped is True
         assert fetcher.cancelled is False
+        assert app_module._opensky_singleton is None
     finally:
         await _dispose_db()

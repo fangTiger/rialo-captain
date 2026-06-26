@@ -3,18 +3,21 @@ import logging
 import re
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.auth.google import GoogleProfile
 from backend.auth.service import UserService
 from backend.claims.engine import ClaimEngine
+from backend.claims.service import ClaimsService
 from backend.contracts.base import (
     ClaimPayload,
     ContractRef,
     ReactiveContractAdapter,
     TxResult,
 )
-from backend.models import FailedTrigger, Policy, PolicyStatus
+from backend.evidence.service import EvidenceService
+from backend.models import Claim, FailedTrigger, Policy, PolicyEvent, PolicyStatus, User
 from backend.tests.factories import make_flight
 
 
@@ -46,6 +49,20 @@ def _now() -> int:
 
 def _session_factory(db_session: AsyncSession):
     return async_sessionmaker(db_session.bind, expire_on_commit=False)
+
+
+async def _policy_events(db_session: AsyncSession, policy_id: str) -> list[PolicyEvent]:
+    return (
+        await db_session.execute(
+            select(PolicyEvent)
+            .where(PolicyEvent.policy_id == policy_id)
+            .order_by(
+                PolicyEvent.created_at.asc(),
+                PolicyEvent.event_sequence.asc(),
+                PolicyEvent.id.asc(),
+            )
+        )
+    ).scalars().all()
 
 
 async def _seed_policy(db_session, callsign: str = "BA178") -> Policy:
@@ -261,6 +278,56 @@ async def test_run_once_isolates_single_failure(db_session: AsyncSession):
 
     failed = (await db_session.execute(select(FailedTrigger))).scalars().all()
     assert any("boom" in f.error_text for f in failed)
+
+
+@pytest.mark.asyncio
+async def test_run_once_keeps_precondition_evidence_but_not_claim_triggered_when_trigger_claim_fails(
+    db_session: AsyncSession,
+):
+    policy = await _seed_policy(db_session, callsign="BA178")
+    policy_id = policy.id
+    await db_session.commit()
+
+    class TriggerFailAdapter(FakeAdapter):
+        async def trigger_claim(self, contract_ref, payload):
+            self.trigger_calls.append((contract_ref, payload))
+            raise RuntimeError("chain down")
+
+    adapter = TriggerFailAdapter(observation={"delay_minutes": 45, "source": "opensky"})
+    engine = ClaimEngine(
+        adapter=adapter,
+        session_factory=_session_factory(db_session),
+        observe_url=lambda fid: f"https://opensky.test/state/{fid}",
+        now=_now,
+    )
+
+    summary = await engine.run_once()
+
+    assert summary.checked == 1
+    assert summary.triggered == 0
+    assert summary.failed == 1
+
+    policy_after = await db_session.get(Policy, policy_id)
+    assert policy_after is not None
+    await db_session.refresh(policy_after)
+    assert policy_after.status == PolicyStatus.ACTIVE
+
+    claims = (await db_session.execute(select(Claim))).scalars().all()
+    assert claims == []
+
+    events = await _policy_events(db_session, policy_id)
+    assert [event.event_type for event in events] == [
+        "observation.received",
+        "condition.matched",
+    ]
+
+    failed = (
+        await db_session.execute(
+            select(FailedTrigger).where(FailedTrigger.policy_id == policy_id)
+        )
+    ).scalars().all()
+    assert len(failed) == 1
+    assert failed[0].error_text == "chain down"
 
 
 @pytest.mark.asyncio
@@ -480,3 +547,201 @@ async def test_run_once_keeps_existing_settlement_event_payload_shapes(
         "landed_at",
         "source",
     }
+
+
+@pytest.mark.asyncio
+async def test_run_once_records_evidence_events_in_settlement_order(
+    db_session: AsyncSession,
+):
+    policy = await _seed_policy(db_session)
+    await db_session.commit()
+    adapter = FakeAdapter(observation={"delay_minutes": 45, "source": "opensky"})
+    engine = ClaimEngine(
+        adapter=adapter,
+        session_factory=_session_factory(db_session),
+        observe_url=lambda fid: f"https://opensky.test/state/{fid}",
+        now=_now,
+    )
+
+    summary = await engine.run_once()
+
+    assert summary.triggered == 1
+    events = await _policy_events(db_session, policy.id)
+    assert [event.event_type for event in events] == [
+        "observation.received",
+        "condition.matched",
+        "claim.triggered",
+        "claim.settled",
+        "balance.credited",
+        "flight.landed",
+    ]
+
+    observation_payload = json.loads(events[0].payload_json)
+    condition_payload = json.loads(events[1].payload_json)
+    triggered_payload = json.loads(events[2].payload_json)
+    settled_payload = json.loads(events[3].payload_json)
+    balance_payload = json.loads(events[4].payload_json)
+    landed_payload = json.loads(events[5].payload_json)
+
+    assert observation_payload == {
+        "delay_minutes": 45,
+        "source": "opensky",
+    }
+    assert condition_payload == {
+        "delay_minutes": 45,
+        "threshold_minutes": 30,
+    }
+    assert triggered_payload == {
+        "delay_minutes": 45,
+    }
+    assert events[3].claim_id is not None
+    assert settled_payload["payout"] == 80
+    assert settled_payload["signature"].startswith("0x")
+    assert re.fullmatch(r"0x[0-9a-f]{40}", settled_payload["tx_hash"])
+    assert settled_payload["settle_duration_ms"] == 42
+    assert balance_payload == {
+        "payout": 80,
+        "balance_after": 1080,
+    }
+    assert landed_payload == {
+        "landed_at": _now(),
+        "source": "mock",
+    }
+
+
+@pytest.mark.asyncio
+async def test_run_once_records_only_observation_evidence_below_threshold(
+    db_session: AsyncSession,
+):
+    policy = await _seed_policy(db_session)
+    await db_session.commit()
+    adapter = FakeAdapter(observation={"delay_minutes": 5, "source": "opensky"})
+    engine = ClaimEngine(
+        adapter=adapter,
+        session_factory=_session_factory(db_session),
+        observe_url=lambda fid: f"https://opensky.test/state/{fid}",
+        now=_now,
+    )
+
+    summary = await engine.run_once()
+
+    assert summary.triggered == 0
+    events = await _policy_events(db_session, policy.id)
+    assert [event.event_type for event in events] == ["observation.received"]
+    assert json.loads(events[0].payload_json) == {
+        "delay_minutes": 5,
+        "source": "opensky",
+    }
+
+
+@pytest.mark.asyncio
+async def test_run_once_keeps_successful_settlement_when_evidence_write_fails(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+):
+    policy = await _seed_policy(db_session)
+    policy_id = policy.id
+    user_id = policy.user_id
+    await db_session.commit()
+    adapter = FakeAdapter(observation={"delay_minutes": 45, "source": "opensky"})
+    engine = ClaimEngine(
+        adapter=adapter,
+        session_factory=_session_factory(db_session),
+        observe_url=lambda fid: f"https://opensky.test/state/{fid}",
+        now=_now,
+    )
+
+    original_record_event = EvidenceService.record_event
+    begin_nested_called = False
+    original_begin_nested = AsyncSession.begin_nested
+
+    def track_begin_nested(self, *args, **kwargs):
+        nonlocal begin_nested_called
+        begin_nested_called = True
+        return original_begin_nested(self, *args, **kwargs)
+
+    async def fail_record_event(self, *, event_type: str, **kwargs):
+        if event_type in {"claim.settled", "balance.credited", "flight.landed"}:
+            raise RuntimeError("evidence boom")
+        return await original_record_event(self, event_type=event_type, **kwargs)
+
+    monkeypatch.setattr(AsyncSession, "begin_nested", track_begin_nested)
+    monkeypatch.setattr(EvidenceService, "record_event", fail_record_event)
+
+    with caplog.at_level(logging.ERROR, logger="backend.claims.engine"):
+        summary = await engine.run_once()
+
+    assert summary.checked == 1
+    assert summary.triggered == 1
+    assert summary.failed == 0
+    assert "证据事件写入失败" in caplog.text
+    assert begin_nested_called is True
+
+    policy_after = await db_session.get(Policy, policy_id)
+    user_after = await db_session.get(User, user_id)
+    assert policy_after is not None
+    assert user_after is not None
+    await db_session.refresh(policy_after)
+    await db_session.refresh(user_after)
+    assert policy_after.status == PolicyStatus.PAID
+    assert user_after.balance == 1080
+
+    claims = (await db_session.execute(select(Claim))).scalars().all()
+    assert len(claims) == 1
+
+    events = await _policy_events(db_session, policy_id)
+    assert [event.event_type for event in events] == [
+        "observation.received",
+        "condition.matched",
+        "claim.triggered",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_run_once_writes_settlement_evidence_before_first_post_claim_commit(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    await _seed_policy(db_session)
+    await db_session.commit()
+    adapter = FakeAdapter(observation={"delay_minutes": 45, "source": "opensky"})
+    engine = ClaimEngine(
+        adapter=adapter,
+        session_factory=_session_factory(db_session),
+        observe_url=lambda fid: f"https://opensky.test/state/{fid}",
+        now=_now,
+    )
+
+    order: list[str] = []
+    original_create_claim = ClaimsService.create_claim
+    original_commit = AsyncSession.commit
+    original_record_event = EvidenceService.record_event
+
+    async def track_create_claim(self, *args, **kwargs):
+        claim = await original_create_claim(self, *args, **kwargs)
+        order.append("claim-created")
+        return claim
+
+    async def track_commit(self, *args, **kwargs):
+        order.append("commit")
+        return await original_commit(self, *args, **kwargs)
+
+    async def track_record_event(self, *, event_type: str, **kwargs):
+        if event_type in {"claim.settled", "balance.credited", "flight.landed"}:
+            order.append(event_type)
+        return await original_record_event(self, event_type=event_type, **kwargs)
+
+    monkeypatch.setattr(ClaimsService, "create_claim", track_create_claim)
+    monkeypatch.setattr(AsyncSession, "commit", track_commit)
+    monkeypatch.setattr(EvidenceService, "record_event", track_record_event)
+
+    summary = await engine.run_once()
+
+    assert summary.triggered == 1
+    claim_created_index = order.index("claim-created")
+    first_post_claim_commit_index = next(
+        index for index in range(claim_created_index + 1, len(order)) if order[index] == "commit"
+    )
+    claim_settled_index = order.index("claim.settled")
+    assert claim_settled_index < first_post_claim_commit_index

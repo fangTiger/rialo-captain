@@ -7,15 +7,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth.deps import CurrentUser
 from backend.auth.service import InsufficientBalanceError
-from backend.contracts.base import Condition, ConditionType
+from backend.contracts.base import Condition, ConditionType, ContractRef
 from backend.db import get_session
+from backend.evidence.service import EvidenceService
 from backend.flights.service import FlightService
 from backend.flights.opensky import FlightState
 from backend.models import Flight, Policy
 from backend.policies.schemas import CreatePolicyRequest, PolicyPublic
 from backend.policies.service import InvalidPremiumError, PolicyService
 from backend.ws.broadcaster import EventType
-
 
 router = APIRouter()
 
@@ -89,6 +89,40 @@ def _cached_flight_states(request: Request) -> Iterable[FlightState]:
     return flight_cache.get().states
 
 
+async def _record_policy_evidence(
+    service: EvidenceService,
+    *,
+    policy: Policy,
+    flight: Flight,
+    delay_rate: float,
+    contract_ref: ContractRef,
+) -> None:
+    await service.record_event(
+        policy_id=policy.id,
+        flight_id=flight.id,
+        event_type="policy.created",
+        title="保单已创建",
+        source="user",
+        payload={
+            "premium": policy.premium,
+            "payout": policy.payout,
+            "flight_id": policy.flight_id,
+            "delay_rate": delay_rate,
+        },
+    )
+    await service.record_event(
+        policy_id=policy.id,
+        flight_id=flight.id,
+        event_type="contract.watched",
+        title="合约监听已建立",
+        source="contract",
+        payload={
+            "contract_ref": contract_ref.id,
+            "adapter_mode": contract_ref.mode,
+        },
+    )
+
+
 @router.post("/policies", response_model=PolicyPublic, status_code=status.HTTP_201_CREATED)
 async def create_policy(
     body: CreatePolicyRequest,
@@ -118,6 +152,13 @@ async def create_policy(
     adapter = request.app.state.contract_adapter
     ref = await adapter.watch(policy_id=policy.id, flight_id=flight.id, condition=condition)
     await PolicyService(session).attach_contract_ref(policy, ref.id)
+    await _record_policy_evidence(
+        EvidenceService(session),
+        policy=policy,
+        flight=flight,
+        delay_rate=stats.delay_rate,
+        contract_ref=ref,
+    )
     await session.commit()
     await _broadcast_policy_created(
         request,

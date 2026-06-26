@@ -1,9 +1,17 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ClaimRow } from "../components/claims/ClaimRow";
 import { ClaimsHeroCounter } from "../components/claims/ClaimsHeroCounter";
 import type { Claim } from "../hooks/useClaims";
+
+const copilotHarness = vi.hoisted(() => ({
+  ask: vi.fn(),
+}));
+
+vi.mock("../components/copilot/CopilotProvider", () => ({
+  useCopilot: () => copilotHarness,
+}));
 
 const claims: Claim[] = [
   {
@@ -29,6 +37,10 @@ const claims: Claim[] = [
 ];
 
 describe("claims components", () => {
+  beforeEach(() => {
+    copilotHarness.ask.mockReset();
+  });
+
   it("summarizes session payout and claim count in the hero counter", () => {
     render(<ClaimsHeroCounter claims={claims} />);
 

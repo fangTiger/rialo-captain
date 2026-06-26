@@ -1,12 +1,14 @@
 import type { Policy } from "../../hooks/usePolicies";
+import type { EvidenceSubject } from "../../hooks/useEvidenceTimeline";
 import { HangarSlot } from "./HangarSlot";
 
 interface Props {
   title: string;
   policies: Policy[];
+  onEvidence?: (subject: NonNullable<EvidenceSubject>) => void;
 }
 
-export function HangarLane({ title, policies }: Props) {
+export function HangarLane({ title, policies, onEvidence }: Props) {
   return (
     <section style={{ display: "grid", gap: 12 }}>
       <h2
@@ -35,7 +37,9 @@ export function HangarLane({ title, policies }: Props) {
           none
         </div>
       ) : (
-        policies.map((p) => <HangarSlot key={p.id} p={p} />)
+        policies.map((p) => (
+          <HangarSlot key={p.id} p={p} onEvidence={onEvidence} />
+        ))
       )}
     </section>
   );

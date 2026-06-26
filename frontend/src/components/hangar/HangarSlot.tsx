@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Policy } from "../../hooks/usePolicies";
+import type { EvidenceSubject } from "../../hooks/useEvidenceTimeline";
+import { CopilotPromptChip } from "../copilot/CopilotPromptChip";
 
 const STATUS_COLOR: Record<Policy["status"], string> = {
   active: "var(--accent-radar)",
@@ -8,7 +10,24 @@ const STATUS_COLOR: Record<Policy["status"], string> = {
   expired: "var(--text-tertiary)",
 };
 
-export function HangarSlot({ p }: { p: Policy }) {
+interface HangarSlotProps {
+  p: Policy;
+  onEvidence?: (subject: NonNullable<EvidenceSubject>) => void;
+}
+
+const evidenceButtonStyle: CSSProperties = {
+  padding: "6px 10px",
+  border: "1px solid var(--border-emphasis)",
+  borderRadius: 999,
+  background: "var(--surface-2)",
+  color: "var(--text-primary)",
+  fontFamily: "var(--font-mono)",
+  fontSize: 11,
+  lineHeight: 1,
+  cursor: "pointer",
+};
+
+export function HangarSlot({ p, onEvidence }: HangarSlotProps) {
   const navigate = useNavigate();
   const [isActive, setIsActive] = useState(false);
 
@@ -17,13 +36,16 @@ export function HangarSlot({ p }: { p: Policy }) {
   };
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       aria-label={`Open flight ${p.flight_id}`}
       onClick={goToFlight}
       onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
         if (event.key !== "Enter" && event.key !== " ") return;
         event.preventDefault();
+        if (event.repeat) return;
         goToFlight();
       }}
       onMouseEnter={() => setIsActive(true)}
@@ -48,7 +70,9 @@ export function HangarSlot({ p }: { p: Policy }) {
         style={{
           display: "flex",
           justifyContent: "space-between",
-          alignItems: "center",
+          alignItems: "flex-start",
+          gap: 12,
+          flexWrap: "wrap",
         }}
       >
         <span
@@ -62,17 +86,59 @@ export function HangarSlot({ p }: { p: Policy }) {
         </span>
         <span
           style={{
-            padding: "2px 8px",
-            borderRadius: 999,
-            background: "var(--surface-2)",
-            fontFamily: "var(--font-mono)",
-            fontSize: 10,
-            letterSpacing: "0.18em",
-            textTransform: "uppercase",
-            color: STATUS_COLOR[p.status],
+            display: "grid",
+            justifyItems: "end",
+            gap: 8,
           }}
         >
-          {p.status}
+          <span
+            style={{
+              padding: "2px 8px",
+              borderRadius: 999,
+              background: "var(--surface-2)",
+              fontFamily: "var(--font-mono)",
+              fontSize: 10,
+              letterSpacing: "0.18em",
+              textTransform: "uppercase",
+              color: STATUS_COLOR[p.status],
+            }}
+          >
+            {p.status}
+          </span>
+          <span
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              justifyContent: "flex-end",
+              gap: 8,
+            }}
+          >
+            <CopilotPromptChip
+              label="Explain this policy"
+              subjectType="policy"
+              subjectId={p.id}
+            />
+            <button
+              type="button"
+              aria-label={`View evidence for policy ${p.id} on flight ${p.flight_id}`}
+              style={evidenceButtonStyle}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onEvidence?.({ kind: "policy", id: p.id });
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.stopPropagation();
+                  if (event.repeat) {
+                    event.preventDefault();
+                  }
+                }
+              }}
+            >
+              Evidence
+            </button>
+          </span>
         </span>
       </div>
       <div
@@ -125,6 +191,6 @@ export function HangarSlot({ p }: { p: Policy }) {
           </div>
         </div>
       </div>
-    </button>
+    </div>
   );
 }

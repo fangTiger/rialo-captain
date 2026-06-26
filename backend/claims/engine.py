@@ -19,7 +19,8 @@ from backend.contracts.base import (
     ContractRef,
     ReactiveContractAdapter,
 )
-from backend.models import FailedTrigger, Flight, Policy, PolicyStatus
+from backend.evidence.service import EvidenceService
+from backend.models import Claim, FailedTrigger, Flight, Policy, PolicyStatus, User
 from backend.ws.broadcaster import EventType
 
 logger = logging.getLogger(__name__)
@@ -73,6 +74,94 @@ class ClaimEngine:
         self._block_height += 1
         return self._block_height
 
+    async def _record_side_effect_evidence_event(
+        self,
+        *,
+        policy_id: str,
+        flight_id: str,
+        event_type: str,
+        title: str,
+        source: str,
+        payload: dict | None = None,
+        claim_id: str | None = None,
+    ) -> None:
+        async with self._session_factory() as session:
+            try:
+                await EvidenceService(session).record_event(
+                    policy_id=policy_id,
+                    flight_id=flight_id,
+                    claim_id=claim_id,
+                    event_type=event_type,
+                    title=title,
+                    source=source,
+                    payload=payload,
+                )
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                logger.exception("证据事件写入失败: policy=%s event=%s", policy_id, event_type)
+
+    async def _record_settlement_evidence_events(
+        self,
+        *,
+        session,
+        policy: Policy,
+        claim: Claim,
+        contract_ref: ContractRef,
+        signature: str,
+        tx_hash: str,
+        settle_duration_ms: int,
+        balance_after: int,
+        landed_at: int,
+    ) -> None:
+        try:
+            async with session.begin_nested():
+                service = EvidenceService(session)
+                await service.record_event(
+                    policy_id=policy.id,
+                    flight_id=policy.flight_id,
+                    claim_id=claim.id,
+                    event_type="claim.settled",
+                    title="赔付已结算",
+                    source=self._settlement_source(contract_ref.mode),
+                    payload={
+                        "payout": policy.payout,
+                        "signature": signature,
+                        "tx_hash": tx_hash,
+                        "settle_duration_ms": settle_duration_ms,
+                    },
+                )
+                await service.record_event(
+                    policy_id=policy.id,
+                    flight_id=policy.flight_id,
+                    claim_id=claim.id,
+                    event_type="balance.credited",
+                    title="余额已到账",
+                    source="system",
+                    payload={
+                        "payout": policy.payout,
+                        "balance_after": balance_after,
+                    },
+                )
+                await service.record_event(
+                    policy_id=policy.id,
+                    flight_id=policy.flight_id,
+                    claim_id=claim.id,
+                    event_type="flight.landed",
+                    title="航班已落地",
+                    source="system",
+                    payload={
+                        "landed_at": landed_at,
+                        "source": contract_ref.mode,
+                    },
+                )
+        except Exception:
+            logger.exception("证据事件写入失败: policy=%s event=settlement.core", policy.id)
+
+    @staticmethod
+    def _settlement_source(mode: str) -> str:
+        return "mock-chain" if mode == "mock" else f"{mode}-chain"
+
     async def run_once(self) -> RunSummary:
         async with self._run_lock:
             async with self._session_factory() as session:
@@ -121,12 +210,36 @@ class ClaimEngine:
         else:
             # 外部 observation 关闭且无 admin 注入: 跳过, 避免不必要的外部请求
             return
+        delay_minutes = int(observation.get("delay_minutes", 0))
+        observation_source = str(observation.get("source", "mock"))
+        await self._record_side_effect_evidence_event(
+            policy_id=policy.id,
+            flight_id=policy.flight_id,
+            event_type="observation.received",
+            title="收到延误观测",
+            source="engine",
+            payload={
+                "delay_minutes": delay_minutes,
+                "source": observation_source,
+            },
+        )
         if not condition.is_triggered(observation):
             return
+        await self._record_side_effect_evidence_event(
+            policy_id=policy.id,
+            flight_id=policy.flight_id,
+            event_type="condition.matched",
+            title="赔付条件已命中",
+            source="engine",
+            payload={
+                "delay_minutes": delay_minutes,
+                "threshold_minutes": condition.threshold_min,
+            },
+        )
 
         contract_ref = ContractRef(id=policy.contract_ref or f"mock-{policy.id}", mode="mock")
         payload = ClaimPayload(
-            delay_minutes=int(observation.get("delay_minutes", 0)),
+            delay_minutes=delay_minutes,
             observed_at=self._now(),
         )
 
@@ -134,30 +247,47 @@ class ClaimEngine:
             persistent = await session.get(Policy, policy.id)
             if persistent is None or persistent.status != PolicyStatus.ACTIVE:
                 return
-            flight = await session.get(Flight, persistent.flight_id)
-            logger.info("triggered policy=%s delay=%s", persistent.id, payload.delay_minutes)
-            if self._broadcaster is not None:
-                await self._broadcaster.broadcast(
-                    {
-                        "type": EventType.CLAIM_TRIGGERED.value,
-                        "payload": self._claim_triggered_payload(
-                            policy=persistent,
-                            flight=flight,
-                            delay_minutes=payload.delay_minutes,
-                            observation=observation,
-                        ),
-                    }
-                )
 
         tx = await self._adapter.trigger_claim(contract_ref, payload)
         signature = await self._adapter.get_signature(tx)
         if not signature:
             signature = build_signature(policy_id=policy.id, timestamp=self._now(), nonce=0)
 
+        balance_after = 0
+        landed_at = self._now()
         async with self._session_factory() as session:
             persistent = await session.get(Policy, policy.id)
             if persistent is None or persistent.status != PolicyStatus.ACTIVE:
                 return
+            flight = await session.get(Flight, persistent.flight_id)
+            claim_triggered_payload = self._claim_triggered_payload(
+                policy=persistent,
+                flight=flight,
+                delay_minutes=payload.delay_minutes,
+                observation=observation,
+            )
+            logger.info("triggered policy=%s delay=%s", persistent.id, payload.delay_minutes)
+            if self._broadcaster is not None:
+                await self._broadcaster.broadcast(
+                    {
+                        "type": EventType.CLAIM_TRIGGERED.value,
+                        "payload": claim_triggered_payload,
+                    }
+                )
+            try:
+                async with session.begin_nested():
+                    await EvidenceService(session).record_event(
+                        policy_id=persistent.id,
+                        flight_id=persistent.flight_id,
+                        event_type="claim.triggered",
+                        title="赔付已触发",
+                        source="engine",
+                        payload={
+                            "delay_minutes": payload.delay_minutes,
+                        },
+                    )
+            except Exception:
+                logger.exception("证据事件写入失败: policy=%s event=claim.triggered", persistent.id)
             claim = await ClaimsService(session).create_claim(
                 policy=persistent,
                 payout=persistent.payout,
@@ -165,12 +295,27 @@ class ClaimEngine:
                 signature=signature,
                 settle_duration_ms=tx.settle_duration_ms,
             )
-            await session.commit()
+            user = (
+                await session.execute(select(User).where(User.id == persistent.user_id))
+            ).scalar_one()
+            balance_after = user.balance
             tx_hash = self._mock_tx_hash(
                 claim_id=claim.id,
                 policy_id=persistent.id,
                 signature=signature,
             )
+            await self._record_settlement_evidence_events(
+                session=session,
+                policy=persistent,
+                claim=claim,
+                contract_ref=contract_ref,
+                signature=signature,
+                tx_hash=tx_hash,
+                settle_duration_ms=tx.settle_duration_ms,
+                balance_after=balance_after,
+                landed_at=landed_at,
+            )
+            await session.commit()
             logger.info("settled policy=%s tx=%s", persistent.id, tx_hash)
             if self._broadcaster is not None:
                 block_height = self._next_block_height()
@@ -210,7 +355,7 @@ class ClaimEngine:
                         "payload": {
                             "flight_id": persistent.flight_id,
                             "policy_id": persistent.id,
-                            "landed_at": self._now(),
+                            "landed_at": landed_at,
                             "source": "mock",
                         },
                     }

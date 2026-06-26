@@ -14,6 +14,16 @@ import { ModeIndicator } from "../components/cinema/ModeIndicator";
 import { chooseDemoProtagonist } from "../components/cinema/protagonist";
 import { useEventStore } from "../store/eventStore";
 
+vi.mock("../config/deployment", () => ({
+  resolvePublicDeployConfig: () => ({
+    apiBaseUrl: "",
+    devLoginEnabled: true,
+    googleClientId: "",
+    mapboxToken: "",
+    wsBaseUrl: "",
+  }),
+}));
+
 vi.mock("../api/client", () => ({
   apiFetch: vi.fn(),
 }));

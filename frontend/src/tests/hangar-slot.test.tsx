@@ -1,10 +1,14 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { createEvent, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { HangarSlot } from "../components/hangar/HangarSlot";
 import type { Policy } from "../hooks/usePolicies";
+import type { EvidenceSubject } from "../hooks/useEvidenceTimeline";
 
 const navigateMock = vi.hoisted(() => vi.fn());
+const copilotHarness = vi.hoisted(() => ({
+  ask: vi.fn(),
+}));
 
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual<typeof import("react-router-dom")>(
@@ -16,6 +20,10 @@ vi.mock("react-router-dom", async () => {
   };
 });
 
+vi.mock("../components/copilot/CopilotProvider", () => ({
+  useCopilot: () => copilotHarness,
+}));
+
 const policy: Policy = {
   id: "p1",
   flight_id: "BA178-20260614",
@@ -26,18 +34,27 @@ const policy: Policy = {
   created_at: 1,
 };
 
-function renderHangarSlot() {
+function renderHangarSlot(
+  onEvidence?: (subject: NonNullable<EvidenceSubject>) => void,
+) {
   render(
     <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
-      <HangarSlot p={policy} />
+      <HangarSlot p={policy} onEvidence={onEvidence} />
     </MemoryRouter>,
   );
-  return screen.getByRole("button", { name: /BA178-20260614/i });
+  return screen.getByRole("button", { name: /^open flight BA178-20260614$/i });
+}
+
+function getEvidenceButton() {
+  return screen.getByRole("button", {
+    name: /view evidence for policy p1/i,
+  });
 }
 
 describe("HangarSlot", () => {
   beforeEach(() => {
     navigateMock.mockClear();
+    copilotHarness.ask.mockReset();
   });
 
   it("navigates to the policy flight with hangar breadcrumb state when clicked", () => {
@@ -50,11 +67,29 @@ describe("HangarSlot", () => {
     });
   });
 
-  it("uses the same navigation for Enter and Space", () => {
+  it("calls the evidence handler without navigating when Evidence is clicked", () => {
+    const onEvidence = vi.fn();
+    renderHangarSlot(onEvidence);
+
+    const evidenceButton = getEvidenceButton();
+
+    expect(evidenceButton).toHaveTextContent("Evidence");
+
+    fireEvent.click(evidenceButton);
+
+    expect(onEvidence).toHaveBeenCalledWith({ kind: "policy", id: "p1" });
+    expect(navigateMock).not.toHaveBeenCalled();
+  });
+
+  it("cancels repeated Enter and Space keydown events on the row container without navigating", () => {
     const slot = renderHangarSlot();
 
     fireEvent.keyDown(slot, { key: "Enter" });
+    const repeatedEnter = createEvent.keyDown(slot, { key: "Enter", repeat: true });
+    fireEvent(slot, repeatedEnter);
     fireEvent.keyDown(slot, { key: " " });
+    const repeatedSpace = createEvent.keyDown(slot, { key: " ", repeat: true });
+    fireEvent(slot, repeatedSpace);
 
     expect(navigateMock).toHaveBeenNthCalledWith(1, "/flight/BA178-20260614", {
       state: { from: "/policies" },
@@ -62,5 +97,26 @@ describe("HangarSlot", () => {
     expect(navigateMock).toHaveBeenNthCalledWith(2, "/flight/BA178-20260614", {
       state: { from: "/policies" },
     });
+    expect(navigateMock).toHaveBeenCalledTimes(2);
+    expect(repeatedEnter.defaultPrevented).toBe(true);
+    expect(repeatedSpace.defaultPrevented).toBe(true);
+  });
+
+  it("does not trigger row navigation when the Evidence button receives keyboard input", () => {
+    const onEvidence = vi.fn();
+    renderHangarSlot(onEvidence);
+
+    const evidenceButton = getEvidenceButton();
+
+    fireEvent.keyDown(evidenceButton, { key: "Enter" });
+    fireEvent.keyDown(evidenceButton, { key: " " });
+
+    expect(navigateMock).not.toHaveBeenCalled();
+    expect(onEvidence).not.toHaveBeenCalled();
+
+    fireEvent.click(evidenceButton);
+
+    expect(onEvidence).toHaveBeenCalledWith({ kind: "policy", id: "p1" });
+    expect(navigateMock).not.toHaveBeenCalled();
   });
 });

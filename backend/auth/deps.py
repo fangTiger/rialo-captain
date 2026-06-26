@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import Cookie, Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth.jwt import JWTError, decode_session
@@ -11,9 +11,11 @@ from backend.models import User
 
 
 async def get_current_user(
+    request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
-    rialo_session: Annotated[str | None, Cookie()] = None,
 ) -> User:
+    settings = get_settings()
+    rialo_session = request.cookies.get(settings.jwt_cookie_name)
     if not rialo_session:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="not authenticated")
     try:
@@ -23,7 +25,6 @@ async def get_current_user(
     service = UserService(session)
     user = await service.get_by_id(payload["sub"])
     if user is None:
-        settings = get_settings()
         dev_email = payload.get("dev_email")
         if settings.dev_login_enabled and isinstance(dev_email, str) and dev_email:
             dev_name = payload.get("dev_name")

@@ -12,17 +12,20 @@ import { TopNav } from "./components/shell/TopNav";
 import { StatusBar } from "./components/shell/StatusBar";
 import { SearchHotkey } from "./components/search/SearchHotkey";
 import { ToastRenderer } from "./components/shell/ToastRenderer";
+import { CopilotProvider } from "./components/copilot/CopilotProvider";
+import { RialoCopilotPanel } from "./components/copilot/RialoCopilotPanel";
 import { useWebSocket } from "./hooks/useWebSocket";
 
 function AppShell({ children }: { children: ReactNode }) {
   useWebSocket("/ws");
 
   return (
-    <>
+    <CopilotProvider>
       <TopNav />
       {children}
+      <RialoCopilotPanel />
       <StatusBar />
-    </>
+    </CopilotProvider>
   );
 }
 

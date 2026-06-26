@@ -17,6 +17,17 @@ import { estimateLivePosition } from "../components/cinema/flightMotion";
 const globeHarness = vi.hoisted(() => ({
   size: { width: 1200, height: 720 },
 }));
+const copilotHarness = vi.hoisted(() => ({
+  activeSubjectType: "overview" as const,
+  ask: vi.fn(),
+  connectionStatus: "idle" as const,
+  errorMessage: null as string | null,
+  isLoading: false,
+  openPanel: vi.fn(),
+  promptSuggestions: [] as string[],
+  response: null,
+  stop: vi.fn(),
+}));
 
 class MockWebSocket {
   static instances: MockWebSocket[] = [];
@@ -109,6 +120,10 @@ vi.mock("../components/cinema/CinemaController", () => ({
   CinemaController: () => null,
 }));
 
+vi.mock("../components/copilot/CopilotProvider", () => ({
+  useCopilot: () => copilotHarness,
+}));
+
 vi.mock("../components/tower/GlobeMap", async () => {
   const React = await vi.importActual<typeof import("react")>("react");
   return {
@@ -191,6 +206,15 @@ describe("TowerShell C3 ambient integration", () => {
     vi.setSystemTime(new Date("2026-06-15T00:00:00.000Z"));
     globeHarness.size = { width: 1200, height: 720 };
     MockWebSocket.instances = [];
+    copilotHarness.ask.mockReset();
+    copilotHarness.openPanel.mockReset();
+    copilotHarness.stop.mockReset();
+    copilotHarness.activeSubjectType = "overview";
+    copilotHarness.connectionStatus = "idle";
+    copilotHarness.errorMessage = null;
+    copilotHarness.isLoading = false;
+    copilotHarness.promptSuggestions = [];
+    copilotHarness.response = null;
     useEventStore.setState({ flares: [], toasts: [], events: [], wsState: "idle" });
     vi.stubGlobal("WebSocket", MockWebSocket as unknown as typeof WebSocket);
   });
