@@ -19,8 +19,9 @@ export function MyHangar() {
       style={{
         padding: "32px 24px 64px",
         display: "grid",
-        gridTemplateColumns: "repeat(3, 1fr)",
+        gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
         gap: 24,
+        alignItems: "start",
         maxWidth: 1280,
         margin: "0 auto",
       }}

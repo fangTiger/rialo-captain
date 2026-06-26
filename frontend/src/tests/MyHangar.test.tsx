@@ -6,6 +6,11 @@ import type { EvidenceSubject } from "../hooks/useEvidenceTimeline";
 import { MyHangar } from "../routes/MyHangar";
 import { useEventStore } from "../store/eventStore";
 
+const copilotHarness = vi.hoisted(() => ({
+  ask: vi.fn(),
+  openPanel: vi.fn(),
+}));
+
 vi.mock("../components/evidence/EvidenceDrawer", () => ({
   EvidenceDrawer: ({
     subject,
@@ -22,6 +27,10 @@ vi.mock("../components/evidence/EvidenceDrawer", () => ({
         </button>
       </div>
     ) : null,
+}));
+
+vi.mock("../components/copilot/CopilotProvider", () => ({
+  useCopilot: () => copilotHarness,
 }));
 
 function LocationProbe() {
@@ -73,6 +82,8 @@ describe("MyHangar", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    copilotHarness.ask.mockReset();
+    copilotHarness.openPanel.mockReset();
   });
 
   it("groups policies into active, paid, and expired hangar lanes", async () => {
@@ -131,6 +142,45 @@ describe("MyHangar", () => {
     expect(screen.getByTestId("evidence-drawer")).toHaveTextContent(
       "policy:p1",
     );
+    expect(screen.getByTestId("location-path")).toHaveTextContent("/policies");
+  });
+
+  it("asks Rialo about a policy without opening the flight route", async () => {
+    render(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <MemoryRouter
+          initialEntries={["/policies"]}
+          future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+        >
+          <Routes>
+            <Route
+              path="/policies"
+              element={
+                <>
+                  <LocationProbe />
+                  <MyHangar />
+                </>
+              }
+            />
+            <Route path="/flight/:id" element={<LocationProbe />} />
+          </Routes>
+        </MemoryRouter>
+      </SWRConfig>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByText("BA178-20260614")).toBeInTheDocument(),
+    );
+
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Explain this policy" })[0],
+    );
+
+    expect(copilotHarness.ask).toHaveBeenCalledWith({
+      question: "Explain this policy",
+      subjectType: "policy",
+      subjectId: "p1",
+    });
     expect(screen.getByTestId("location-path")).toHaveTextContent("/policies");
   });
 });

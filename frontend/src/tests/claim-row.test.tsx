@@ -6,6 +6,9 @@ import type { Claim } from "../hooks/useClaims";
 import type { EvidenceSubject } from "../hooks/useEvidenceTimeline";
 
 const navigateMock = vi.hoisted(() => vi.fn());
+const copilotHarness = vi.hoisted(() => ({
+  ask: vi.fn(),
+}));
 
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual<typeof import("react-router-dom")>(
@@ -16,6 +19,10 @@ vi.mock("react-router-dom", async () => {
     useNavigate: () => navigateMock,
   };
 });
+
+vi.mock("../components/copilot/CopilotProvider", () => ({
+  useCopilot: () => copilotHarness,
+}));
 
 const claim: Claim = {
   id: "c1",
@@ -46,6 +53,7 @@ function getEvidenceButton() {
 describe("ClaimRow", () => {
   beforeEach(() => {
     navigateMock.mockClear();
+    copilotHarness.ask.mockReset();
   });
 
   it("navigates to the claim flight with claims breadcrumb state when clicked", () => {

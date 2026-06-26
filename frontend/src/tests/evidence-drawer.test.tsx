@@ -8,8 +8,17 @@ import {
   type EvidenceTimeline,
 } from "../hooks/useEvidenceTimeline";
 
+const copilotHarness = vi.hoisted(() => ({
+  ask: vi.fn(),
+  openPanel: vi.fn(),
+}));
+
 vi.mock("../hooks/useEvidenceTimeline", () => ({
   useEvidenceTimeline: vi.fn(),
+}));
+
+vi.mock("../components/copilot/CopilotProvider", () => ({
+  useCopilot: () => copilotHarness,
 }));
 
 const subject: EvidenceSubject = { kind: "claim", id: "claim-77" };
@@ -49,6 +58,8 @@ function appendLauncher() {
 describe("EvidenceDrawer", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    copilotHarness.ask.mockReset();
+    copilotHarness.openPanel.mockReset();
   });
 
   it("renders a loading state", () => {
@@ -254,5 +265,26 @@ describe("EvidenceDrawer", () => {
 
     expect(onClose).not.toHaveBeenCalled();
     launcher.remove();
+  });
+
+  it("asks Rialo about the current evidence chain", async () => {
+    vi.mocked(useEvidenceTimeline).mockReturnValue(
+      makeHookState({
+        timeline: makeTimeline([]),
+        events: [],
+      }),
+    );
+
+    render(<EvidenceDrawer subject={subject} onClose={() => {}} />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Explain this evidence chain" }),
+    );
+
+    expect(copilotHarness.ask).toHaveBeenCalledWith({
+      question: "Explain this evidence chain",
+      subjectType: "evidence",
+      subjectId: "claim-77",
+    });
   });
 });

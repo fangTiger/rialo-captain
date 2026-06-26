@@ -12,6 +12,18 @@ import { useWebSocket } from "../hooks/useWebSocket";
 import { useEventStore } from "../store/eventStore";
 import { apiFetch } from "../api/client";
 
+const copilotHarness = vi.hoisted(() => ({
+  activeSubjectType: "overview" as const,
+  ask: vi.fn(),
+  connectionStatus: "idle" as const,
+  errorMessage: null as string | null,
+  isLoading: false,
+  openPanel: vi.fn(),
+  promptSuggestions: [] as string[],
+  response: null,
+  stop: vi.fn(),
+}));
+
 class MockWebSocket {
   static instances: MockWebSocket[] = [];
   onmessage?: (event: { data: string }) => void;
@@ -120,6 +132,10 @@ vi.mock("../components/cinema/CinemaController", () => ({
   CinemaController: () => null,
 }));
 
+vi.mock("../components/copilot/CopilotProvider", () => ({
+  useCopilot: () => copilotHarness,
+}));
+
 vi.mock("../components/tower/GlobeMap", async () => {
   const React = await vi.importActual<typeof import("react")>("react");
   return {
@@ -225,6 +241,15 @@ describe("TowerShell C2 key moments integration", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-15T00:00:00.000Z"));
     MockWebSocket.instances = [];
+    copilotHarness.ask.mockReset();
+    copilotHarness.openPanel.mockReset();
+    copilotHarness.stop.mockReset();
+    copilotHarness.activeSubjectType = "overview";
+    copilotHarness.connectionStatus = "idle";
+    copilotHarness.errorMessage = null;
+    copilotHarness.isLoading = false;
+    copilotHarness.promptSuggestions = [];
+    copilotHarness.response = null;
     useEventStore.setState({ flares: [], toasts: [], events: [], wsState: "idle" });
     apiFetchMock.mockReset();
     apiFetchMock.mockImplementation(async (path, init) => {

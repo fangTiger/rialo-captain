@@ -6,6 +6,9 @@ import type { Policy } from "../hooks/usePolicies";
 import type { EvidenceSubject } from "../hooks/useEvidenceTimeline";
 
 const navigateMock = vi.hoisted(() => vi.fn());
+const copilotHarness = vi.hoisted(() => ({
+  ask: vi.fn(),
+}));
 
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual<typeof import("react-router-dom")>(
@@ -16,6 +19,10 @@ vi.mock("react-router-dom", async () => {
     useNavigate: () => navigateMock,
   };
 });
+
+vi.mock("../components/copilot/CopilotProvider", () => ({
+  useCopilot: () => copilotHarness,
+}));
 
 const policy: Policy = {
   id: "p1",
@@ -47,6 +54,7 @@ function getEvidenceButton() {
 describe("HangarSlot", () => {
   beforeEach(() => {
     navigateMock.mockClear();
+    copilotHarness.ask.mockReset();
   });
 
   it("navigates to the policy flight with hangar breadcrumb state when clicked", () => {

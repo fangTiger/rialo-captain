@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     cinema_autoseed_enabled: bool = True
     opensky_base_url: str = "https://opensky-network.org/api"
     opensky_enabled: bool = True
+    deepseek_api_key: str = ""
+    deepseek_model: str = "deepseek-v4-pro"
+    deepseek_base_url: str = "https://api.deepseek.com"
+    deepseek_timeout_seconds: float = 20.0
     log_level: str = "INFO"
 
 

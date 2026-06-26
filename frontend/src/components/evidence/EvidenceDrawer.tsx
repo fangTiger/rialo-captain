@@ -4,6 +4,7 @@ import {
   type EvidenceEvent,
   type EvidenceSubject,
 } from "../../hooks/useEvidenceTimeline";
+import { CopilotPromptChip } from "../copilot/CopilotPromptChip";
 
 interface EvidenceDrawerProps {
   subject: EvidenceSubject;
@@ -105,7 +106,11 @@ export function EvidenceDrawer({
           : dialog;
 
       if (event.shiftKey) {
-        if (activeElement === dialog || activeElement === firstFocusable) {
+        if (
+          activeElement === dialog ||
+          activeElement === firstFocusable ||
+          activeElement === lastFocusable
+        ) {
           event.preventDefault();
           dialog.focus();
           if (activeElement === dialog) {
@@ -169,10 +174,33 @@ export function EvidenceDrawer({
           animation: "evidence-slide-in 220ms cubic-bezier(0.22, 1, 0.36, 1)",
         }}
       >
+        <button
+          ref={closeButtonRef}
+          type="button"
+          aria-label="Close evidence drawer"
+          onClick={onClose}
+          style={{
+            position: "absolute",
+            top: 16,
+            right: 16,
+            width: 32,
+            height: 32,
+            border: "1px solid var(--border-subtle)",
+            borderRadius: "var(--radius-sharp)",
+            background: "var(--surface-2)",
+            color: "var(--text-secondary)",
+            fontFamily: "var(--font-mono)",
+            cursor: "pointer",
+          }}
+        >
+          X
+        </button>
         <header
           style={{
             padding: "20px 56px 14px 20px",
             borderBottom: "1px solid var(--border-subtle)",
+            display: "grid",
+            gap: 8,
           }}
         >
           <div
@@ -198,7 +226,6 @@ export function EvidenceDrawer({
           </h2>
           <div
             style={{
-              marginTop: 8,
               fontFamily: "var(--font-mono)",
               fontSize: 12,
               color: "var(--text-tertiary)",
@@ -206,6 +233,19 @@ export function EvidenceDrawer({
             }}
           >
             {subject.kind}: {subject.id}
+          </div>
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 8,
+            }}
+          >
+            <CopilotPromptChip
+              label="Explain this evidence chain"
+              subjectType="evidence"
+              subjectId={subject.id}
+            />
           </div>
         </header>
 
@@ -264,28 +304,6 @@ export function EvidenceDrawer({
             </ol>
           )}
         </div>
-
-        <button
-          ref={closeButtonRef}
-          type="button"
-          aria-label="Close evidence drawer"
-          onClick={onClose}
-          style={{
-            position: "absolute",
-            top: 16,
-            right: 16,
-            width: 32,
-            height: 32,
-            border: "1px solid var(--border-subtle)",
-            borderRadius: "var(--radius-sharp)",
-            background: "var(--surface-2)",
-            color: "var(--text-secondary)",
-            fontFamily: "var(--font-mono)",
-            cursor: "pointer",
-          }}
-        >
-          X
-        </button>
       </aside>
       <style>
         {`

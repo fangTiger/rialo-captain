@@ -47,6 +47,7 @@ import { RadarSweep } from "../components/tower/RadarSweep";
 import { EventFeedSidebar } from "../components/tower/EventFeedSidebar";
 import { KPIBand } from "../components/tower/KPIBand";
 import { DataStaleBadge } from "../components/tower/DataStaleBadge";
+import { AIBriefing } from "../components/copilot/AIBriefing";
 import {
   BuyDrawer,
   type PurchasedPolicy,
@@ -91,7 +92,29 @@ export function TowerShell() {
   }, [electedCallsign, flights]);
 
   return (
-    <div style={{ position: "absolute", inset: 0, top: 50, bottom: 32 }}>
+    <div
+      style={{
+        position: "absolute",
+        inset: 0,
+        top: "var(--top-nav-height, 64px)",
+        bottom: 32,
+      }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          top: 20,
+          left: 20,
+          right: 20,
+          zIndex: 18,
+          pointerEvents: "none",
+          display: "flex",
+        }}
+      >
+        <div style={{ pointerEvents: "auto", maxWidth: "min(100%, 28rem)" }}>
+          <AIBriefing />
+        </div>
+      </div>
       <CinemaProvider
         initialProtagonist={protagonist}
       >

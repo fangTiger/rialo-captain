@@ -2,6 +2,7 @@ import { useState, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Claim } from "../../hooks/useClaims";
 import type { EvidenceSubject } from "../../hooks/useEvidenceTimeline";
+import { CopilotPromptChip } from "../copilot/CopilotPromptChip";
 
 interface ClaimRowProps {
   c: Claim;
@@ -48,7 +49,8 @@ export function ClaimRow({ c, onEvidence }: ClaimRowProps) {
       onBlur={() => setIsActive(false)}
       style={{
         display: "grid",
-        gridTemplateColumns: "120px minmax(0, 1fr) 100px 100px minmax(0, 200px) auto",
+        gridTemplateColumns:
+          "120px minmax(0, 1fr) 100px 100px minmax(0, 200px) minmax(170px, 250px)",
         padding: "14px 24px",
         width: "100%",
         borderLeft: `2px solid ${isActive ? "var(--accent-radar)" : "transparent"}`,
@@ -71,26 +73,40 @@ export function ClaimRow({ c, onEvidence }: ClaimRowProps) {
       <div style={{ color: "var(--text-tertiary)" }}>
         {c.signature.slice(0, 18)}… ({c.settle_duration_ms}ms)
       </div>
-      <button
-        type="button"
-        aria-label={`View evidence for claim ${c.id} on flight ${c.flight_id}`}
-        style={evidenceButtonStyle}
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          onEvidence?.({ kind: "claim", id: c.id });
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.stopPropagation();
-            if (event.repeat) {
-              event.preventDefault();
-            }
-          }
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          flexWrap: "wrap",
+          gap: 8,
         }}
       >
-        Evidence
-      </button>
+        <CopilotPromptChip
+          label="Why did this claim pay?"
+          subjectType="claim"
+          subjectId={c.id}
+        />
+        <button
+          type="button"
+          aria-label={`View evidence for claim ${c.id} on flight ${c.flight_id}`}
+          style={evidenceButtonStyle}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onEvidence?.({ kind: "claim", id: c.id });
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.stopPropagation();
+              if (event.repeat) {
+                event.preventDefault();
+              }
+            }
+          }}
+        >
+          Evidence
+        </button>
+      </div>
     </div>
   );
 }

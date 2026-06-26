@@ -19,8 +19,17 @@ export function TopNav() {
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
+        minHeight: "var(--top-nav-height, 64px)",
+        flexWrap: "nowrap",
+        gap: 16,
         padding: "12px 24px",
         borderBottom: "1px solid var(--border-subtle)",
+        background: "rgba(5, 6, 8, 0.92)",
+        backdropFilter: "blur(10px)",
+        position: "sticky",
+        top: 0,
+        zIndex: 60,
+        overflowX: "auto",
         fontFamily: "var(--font-mono)",
         fontSize: 12,
         letterSpacing: 0,
@@ -28,7 +37,16 @@ export function TopNav() {
         color: "var(--text-secondary)",
       }}
     >
-      <div style={{ display: "flex", gap: 20, alignItems: "center" }}>
+      <div
+        style={{
+          display: "flex",
+          gap: 20,
+          alignItems: "center",
+          flexWrap: "nowrap",
+          flexShrink: 0,
+          minWidth: 0,
+        }}
+      >
         <span style={{ color: "var(--accent-radar)", letterSpacing: 0 }}>
           RIALO ◦ CAPTAIN
         </span>
@@ -53,7 +71,17 @@ export function TopNav() {
           </Link>
         ))}
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "flex-end",
+          gap: 12,
+          flexWrap: "nowrap",
+          flexShrink: 0,
+          marginLeft: "auto",
+        }}
+      >
         <span
           style={{
             color: "var(--text-tertiary)",
@@ -69,7 +97,17 @@ export function TopNav() {
         <span style={{ color: "var(--text-primary)" }}>
           {user?.balance ?? "—"} RIA
         </span>
-        <span style={{ color: "var(--text-tertiary)" }}>{user?.email}</span>
+        <span
+          style={{
+            color: "var(--text-tertiary)",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            maxWidth: 180,
+          }}
+        >
+          {user?.email}
+        </span>
       </div>
     </nav>
   );

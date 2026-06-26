@@ -5,6 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EvidenceSubject } from "../hooks/useEvidenceTimeline";
 import { FlightDetail } from "../routes/FlightDetail";
 
+const copilotHarness = vi.hoisted(() => ({
+  ask: vi.fn(),
+  openPanel: vi.fn(),
+}));
+
 vi.mock("../routes/TowerShell", () => ({
   TowerShell: () => <div data-testid="tower-shell">tower shell</div>,
 }));
@@ -29,6 +34,10 @@ vi.mock("../components/evidence/EvidenceDrawer", () => ({
         </button>
       </div>
     ) : null,
+}));
+
+vi.mock("../components/copilot/CopilotProvider", () => ({
+  useCopilot: () => copilotHarness,
 }));
 
 const flight = {
@@ -180,6 +189,8 @@ describe("FlightDetail", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    copilotHarness.ask.mockReset();
+    copilotHarness.openPanel.mockReset();
   });
 
   it("renders the static flight detail blocks without TowerShell", async () => {
@@ -281,6 +292,25 @@ describe("FlightDetail", () => {
     expect(screen.getByTestId("evidence-drawer")).toHaveTextContent(
       "claim:claim-one",
     );
+    expect(screen.getByTestId("location-path")).toHaveTextContent(
+      "/flight/BA178-20260614",
+    );
+  });
+
+  it("sends flight-scoped copilot prompts without leaving the flight detail route", async () => {
+    renderFlightDetailWithLocation();
+
+    await waitFor(() => expect(screen.getByText("BA178")).toBeInTheDocument());
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Why is this flight risky?" }),
+    );
+
+    expect(copilotHarness.ask).toHaveBeenCalledWith({
+      question: "Why is this flight risky?",
+      subjectType: "flight",
+      subjectId: "BA178-20260614",
+    });
     expect(screen.getByTestId("location-path")).toHaveTextContent(
       "/flight/BA178-20260614",
     );

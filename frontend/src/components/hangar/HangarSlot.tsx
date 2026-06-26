@@ -2,6 +2,7 @@ import { useState, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Policy } from "../../hooks/usePolicies";
 import type { EvidenceSubject } from "../../hooks/useEvidenceTimeline";
+import { CopilotPromptChip } from "../copilot/CopilotPromptChip";
 
 const STATUS_COLOR: Record<Policy["status"], string> = {
   active: "var(--accent-radar)",
@@ -69,7 +70,9 @@ export function HangarSlot({ p, onEvidence }: HangarSlotProps) {
         style={{
           display: "flex",
           justifyContent: "space-between",
-          alignItems: "center",
+          alignItems: "flex-start",
+          gap: 12,
+          flexWrap: "wrap",
         }}
       >
         <span
@@ -83,8 +86,8 @@ export function HangarSlot({ p, onEvidence }: HangarSlotProps) {
         </span>
         <span
           style={{
-            display: "flex",
-            alignItems: "center",
+            display: "grid",
+            justifyItems: "end",
             gap: 8,
           }}
         >
@@ -102,26 +105,40 @@ export function HangarSlot({ p, onEvidence }: HangarSlotProps) {
           >
             {p.status}
           </span>
-          <button
-            type="button"
-            aria-label={`View evidence for policy ${p.id} on flight ${p.flight_id}`}
-            style={evidenceButtonStyle}
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              onEvidence?.({ kind: "policy", id: p.id });
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") {
-                event.stopPropagation();
-                if (event.repeat) {
-                  event.preventDefault();
-                }
-              }
+          <span
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              justifyContent: "flex-end",
+              gap: 8,
             }}
           >
-            Evidence
-          </button>
+            <CopilotPromptChip
+              label="Explain this policy"
+              subjectType="policy"
+              subjectId={p.id}
+            />
+            <button
+              type="button"
+              aria-label={`View evidence for policy ${p.id} on flight ${p.flight_id}`}
+              style={evidenceButtonStyle}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onEvidence?.({ kind: "policy", id: p.id });
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.stopPropagation();
+                  if (event.repeat) {
+                    event.preventDefault();
+                  }
+                }
+              }}
+            >
+              Evidence
+            </button>
+          </span>
         </span>
       </div>
       <div

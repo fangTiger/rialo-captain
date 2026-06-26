@@ -348,3 +348,153 @@ TBD - created by archiving change card-navigation-and-flight-detail. Update Purp
 - **THEN** 整个 handler 执行期间 Flight 表的 SQL 查询次数 ≤ 1（一次性 batch 取所有 callsign）
 - **AND** 响应总耗时不显著大于改动前
 
+### Requirement: 全局 Rialo Copilot 可见入口
+
+系统 SHALL 在除 `/login` 之外的受保护前端路由中显示明显的 `Ask Rialo` AI 入口，并通过全局 Copilot 面板承载问答、引用、追问和错误状态。入口 MUST 不影响现有 SearchPalette 快捷键和页面导航。
+
+#### Scenario: TopNav 显示 Ask Rialo
+- **GIVEN** 用户已登录并访问 `/`、`/flight/:id`、`/policies`、`/claims`、`/routes` 或 `/rialo-inside`
+- **WHEN** TopNav 渲染
+- **THEN** 导航区域显示 `Ask Rialo` 入口
+- **AND** 入口视觉上与普通导航 tab 区分，明确表达 AI 能力
+
+#### Scenario: 点击 Ask Rialo 打开全局面板
+- **GIVEN** 用户已登录并看到 `Ask Rialo`
+- **WHEN** 用户点击入口
+- **THEN** Rialo Copilot 面板打开
+- **AND** 面板提供问题输入框、推荐问题、回答区域和来源引用区域
+- **AND** 当前路由不改变
+
+#### Scenario: Login 页面不显示 AI 入口
+- **GIVEN** 用户访问 `/login`
+- **WHEN** 页面渲染
+- **THEN** TopNav 未渲染
+- **AND** 不显示 `Ask Rialo` 或 Copilot 面板
+
+### Requirement: Tower 首页 AI Briefing
+
+系统 SHALL 在 Tower 首页首屏显示 AI Briefing 模块，让用户登录后立即看到 Rialo Copilot 能力。模块 MUST 展示当前账户或市场上下文的简短 AI 引导和可点击 prompt chips。
+
+#### Scenario: Tower 首页展示 AI Briefing
+- **GIVEN** 用户已登录并访问 `/`
+- **WHEN** TowerShell 首屏渲染
+- **THEN** 页面显示 `AI Briefing` 模块
+- **AND** 模块包含至少 3 个 prompt chips
+- **AND** prompt chips 可一键打开 Copilot 面板并提交对应问题
+
+#### Scenario: AI provider 未配置时 Briefing 降级
+- **GIVEN** 用户已登录但后端 Copilot 返回 unavailable
+- **WHEN** 用户点击 AI Briefing 的 prompt chip
+- **THEN** Copilot 面板展示“AI 暂未接通”的可理解状态
+- **AND** Tower 大屏和其他数据组件继续正常显示
+
+### Requirement: 上下文 prompt chips
+
+系统 SHALL 在 FlightDetail、MyHangar、ClaimsFeed 和 EvidenceDrawer 中展示与当前对象相关的 Copilot prompt chips。点击 chip MUST 自动携带 subject 类型与 subject id，使回答基于当前对象。
+
+#### Scenario: FlightDetail 提供航班上下文问题
+- **GIVEN** 用户访问 `/flight/:id`
+- **WHEN** FlightDetail 渲染
+- **THEN** 页面展示至少 2 个航班相关 prompt chips
+- **AND** 点击 chip 以 `subject_type="flight"` 和当前 `flight_id` 调用 Copilot
+
+#### Scenario: ClaimsFeed 提供赔付解释问题
+- **GIVEN** 用户访问 `/claims` 并看到赔付记录
+- **WHEN** 用户点击某条 claim 的 AI prompt chip
+- **THEN** Copilot 面板打开
+- **AND** 以 `subject_type="claim"` 和该 `claim_id` 调用 Copilot
+
+#### Scenario: EvidenceDrawer 提供证据链问题
+- **GIVEN** 用户打开某条赔付的 EvidenceDrawer
+- **WHEN** 抽屉渲染
+- **THEN** 抽屉显示证据链解释 prompt chip
+- **AND** 点击 chip 后 Copilot 回答包含来源引用区域
+
+### Requirement: Copilot 可读取 Tower 实时航班摘要
+
+系统 SHALL 为 Rialo Copilot overview 构建 Tower 实时航班摘要，使 AI 能解释当前地图上的 live flights，同时不暴露 DeepSeek key、原始 provider 响应或其他用户的私有保单/赔付数据。发送给 DeepSeek 的 live flight 样本 MUST 最多包含 5 条。
+
+#### Scenario: overview 包含 live tower 摘要
+- **GIVEN** Tower live cache 中存在航班状态
+- **WHEN** 已登录用户以 `subject_type="overview"` 提交 Copilot 问题
+- **THEN** Copilot 上下文包含 live tower 总航班数
+- **AND** 包含数据是否 stale 与 stale seconds
+- **AND** 包含最多 5 条 sample flights
+- **AND** 不包含 DeepSeek API key 或前端不可见的 provider 机密
+
+#### Scenario: 未买保单用户仍看到 live flights 语义
+- **GIVEN** 用户已登录但没有 policies、claims 或 evidence events
+- **AND** Tower live cache 中存在航班状态
+- **WHEN** 用户询问“现在有什么值得关注”
+- **THEN** Copilot 回答 MUST 明确说明用户当前没有承保敞口
+- **AND** MUST 同时说明 Tower 正在跟踪 live flights
+- **AND** MUST NOT 回答“当前没有航班”
+
+#### Scenario: live sample flights 最多 5 条
+- **GIVEN** Tower live cache 中存在超过 100 条航班状态
+- **WHEN** Copilot 构建 overview 上下文
+- **THEN** 上下文只包含最多 5 条 sample flights
+- **AND** sample flights 优先选择命名 demo 航班、有 DB route 信息或当前页面高可见度航班
+- **AND** 不把完整 live cache 原样发送给 DeepSeek
+
+#### Scenario: live cache 缺失时安全降级
+- **GIVEN** Tower live cache 为空或 flight fetcher 尚未写入数据
+- **WHEN** 用户提交 overview Copilot 问题
+- **THEN** Copilot 仍基于当前用户 policies、claims 和 evidence events 回答
+- **AND** 上下文标记 live tower 数据不可用
+- **AND** 前端页面不因 Copilot 上下文缺失而报错
+
+### Requirement: 列表与详情页提供证据入口
+系统 SHALL 在 Claims Feed、My Hangar 和 Flight Detail 的赔付/保单条目上提供 Evidence 操作入口，允许用户打开 settlement-evidence timeline，同时 MUST 保留现有整行点击跳转航班详情的行为。
+
+#### Scenario: Claims Feed 行内 Evidence 不触发航班跳转
+- **GIVEN** 用户在 `/claims` 看到一条赔付记录
+- **WHEN** 用户点击该行的 Evidence 操作
+- **THEN** 页面 SHALL 打开 Evidence Drawer
+- **AND** URL SHALL 保持 `/claims`
+- **AND** 系统 SHALL NOT 跳转到 `/flight/{claim.flight_id}`
+
+#### Scenario: Claims Feed 整行点击仍跳转航班
+- **GIVEN** 用户在 `/claims` 看到一条赔付记录
+- **WHEN** 用户点击该行非 Evidence 操作区域
+- **THEN** 路由 SHALL 继续跳转 `/flight/{claim.flight_id}`
+- **AND** `location.state.from === '/claims'`
+
+#### Scenario: My Hangar 保单可打开 Evidence
+- **GIVEN** 用户在 `/policies` 看到一张保单
+- **WHEN** 用户点击该保单的 Evidence 操作
+- **THEN** 页面 SHALL 打开 Evidence Drawer
+- **AND** 前端 SHALL 以该 policy id 请求 timeline
+
+#### Scenario: FlightDetail 相关区域可打开 Evidence
+- **GIVEN** 用户在 `/flight/:id` 查看 Related Policies 或 Related Claims
+- **WHEN** 用户点击任一相关条目的 Evidence 操作
+- **THEN** 页面 SHALL 打开 Evidence Drawer
+- **AND** Drawer 关闭后 SHALL 留在当前 FlightDetail 页面
+
+### Requirement: Evidence Drawer UI 状态
+系统 SHALL 使用现有暗色设计 token 渲染 Evidence Drawer，并支持 loading、success、empty、error、close 五种状态。Drawer MUST 可键盘关闭，且不得遮断底层路由状态。
+
+#### Scenario: 加载状态
+- **GIVEN** Evidence Drawer 已打开且 timeline 请求尚未完成
+- **WHEN** 组件渲染
+- **THEN** Drawer SHALL 显示加载状态
+
+#### Scenario: 成功状态
+- **GIVEN** timeline API 返回多条事件
+- **WHEN** Drawer 渲染
+- **THEN** Drawer SHALL 按时间顺序展示事件
+- **AND** 每条事件 SHALL 显示标题、source、格式化时间和 payload 摘要
+
+#### Scenario: Esc 关闭 Drawer
+- **GIVEN** Evidence Drawer 已打开
+- **WHEN** 用户按下 `Escape`
+- **THEN** Drawer SHALL 关闭
+- **AND** 当前路由 SHALL 保持不变
+
+#### Scenario: 错误状态不破坏页面
+- **GIVEN** timeline 请求失败
+- **WHEN** Drawer 渲染错误状态
+- **THEN** 用户 SHALL 仍可关闭 Drawer
+- **AND** 页面现有列表、面包屑和导航 SHALL 保持可用
+
