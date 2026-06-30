@@ -58,7 +58,7 @@ export function resolvePublicDeployConfig(
       (useCheckedInRuntimeDefaults ? checkedInConfig.wsBaseUrl : ""),
     devLoginEnabled: useCheckedInRuntimeDefaults
       ? checkedInConfig.devLoginEnabled
-      : (readBooleanOverride("VITE_DEV_LOGIN_ENABLED") ?? false),
+      : (readBooleanOverride("VITE_DEV_LOGIN_ENABLED") ?? true),
   };
 }
 

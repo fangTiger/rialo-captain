@@ -27,9 +27,9 @@ export function FlightDetail() {
   const { flight, error, isLoading } = useFlight(flightId);
   const { policies } = usePolicies();
   const isNotFound = error instanceof ApiError && error.status === 404;
-  const activePolicyCount = policies.filter(
+  const activePolicies = policies.filter(
     (policy) => policy.flight_id === flightId && policy.status === "active",
-  ).length;
+  );
 
   if (isLoading && !flight && !isNotFound) {
     return (
@@ -148,9 +148,9 @@ export function FlightDetail() {
       <InsureBlock
         flightId={flightId}
         callsign={callsign}
-        delayRate={delayRate ?? 0}
-        hasActivePolicy={activePolicyCount > 0}
-        activePolicyCount={activePolicyCount}
+        delayRate={delayRate}
+        activePolicies={activePolicies}
+        onEvidence={setEvidenceSubject}
       />
       <div
         style={{

@@ -35,14 +35,19 @@ const policy: Policy = {
 };
 
 function renderHangarSlot(
-  onEvidence?: (subject: NonNullable<EvidenceSubject>) => void,
+  options: {
+    policy?: Policy;
+    onEvidence?: (subject: NonNullable<EvidenceSubject>) => void;
+  } = {},
 ) {
   render(
     <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
-      <HangarSlot p={policy} onEvidence={onEvidence} />
+      <HangarSlot p={options.policy ?? policy} onEvidence={options.onEvidence} />
     </MemoryRouter>,
   );
-  return screen.getByRole("button", { name: /^open flight BA178-20260614$/i });
+  return screen.getByRole("button", {
+    name: new RegExp(`^open flight ${options.policy?.flight_id ?? policy.flight_id}$`, "i"),
+  });
 }
 
 function getEvidenceButton() {
@@ -69,7 +74,7 @@ describe("HangarSlot", () => {
 
   it("calls the evidence handler without navigating when Evidence is clicked", () => {
     const onEvidence = vi.fn();
-    renderHangarSlot(onEvidence);
+    renderHangarSlot({ onEvidence });
 
     const evidenceButton = getEvidenceButton();
 
@@ -104,7 +109,7 @@ describe("HangarSlot", () => {
 
   it("does not trigger row navigation when the Evidence button receives keyboard input", () => {
     const onEvidence = vi.fn();
-    renderHangarSlot(onEvidence);
+    renderHangarSlot({ onEvidence });
 
     const evidenceButton = getEvidenceButton();
 
@@ -118,5 +123,57 @@ describe("HangarSlot", () => {
 
     expect(onEvidence).toHaveBeenCalledWith({ kind: "policy", id: "p1" });
     expect(navigateMock).not.toHaveBeenCalled();
+  });
+
+  it("renders risk level, live delay, and threshold distance for projected active policies", () => {
+    renderHangarSlot({
+      policy: {
+        ...policy,
+        risk_level: "watch",
+        delay_threshold_minutes: 30,
+        live_delay_minutes: 24,
+        minutes_until_trigger: 6,
+        risk_reason: "Delay sits inside the watch band.",
+      },
+    });
+
+    expect(screen.getByText("WATCH")).toBeInTheDocument();
+    expect(screen.getByText("Live delay +24m")).toBeInTheDocument();
+    expect(screen.getByText("6m to 30m threshold")).toBeInTheDocument();
+    expect(
+      screen.getByText("Delay sits inside the watch band."),
+    ).toBeInTheDocument();
+  });
+
+  it("renders fallback text when live delay is unavailable", () => {
+    renderHangarSlot({
+      policy: {
+        ...policy,
+        risk_level: "unknown",
+        delay_threshold_minutes: 30,
+        live_delay_minutes: null,
+        minutes_until_trigger: null,
+      },
+    });
+
+    expect(screen.getByText("UNKNOWN")).toBeInTheDocument();
+    expect(screen.getByText("Live delay unavailable")).toBeInTheDocument();
+    expect(screen.getByText("30m threshold unavailable")).toBeInTheDocument();
+  });
+
+  it("renders threshold reached text when the active policy has reached the trigger boundary", () => {
+    renderHangarSlot({
+      policy: {
+        ...policy,
+        risk_level: "triggered",
+        delay_threshold_minutes: 30,
+        live_delay_minutes: 31,
+        minutes_until_trigger: 0,
+        risk_reason: "Delay crossed trigger threshold.",
+      },
+    });
+
+    expect(screen.getByText("TRIGGERED")).toBeInTheDocument();
+    expect(screen.getByText("30m threshold reached")).toBeInTheDocument();
   });
 });

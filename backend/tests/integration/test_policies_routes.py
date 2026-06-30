@@ -7,11 +7,13 @@ from sqlalchemy import select
 from backend.app import create_app
 from backend.auth import google
 from backend.auth.google import GoogleProfile
+from backend.admin.routes import clear_injected_delays
 from backend.db import Base, get_engine, get_session_factory
 from backend.evidence.service import EvidenceService
 from backend.flights.opensky import FlightState
-from backend.models import Flight, Policy, PolicyEvent, User
+from backend.models import Flight, Policy, PolicyEvent, PolicyStatus, User
 from backend.policies.routes import _policy_created_payload
+from backend.tests.factories import make_flight
 
 
 class RecordingBroadcaster:
@@ -69,6 +71,7 @@ async def app_client(monkeypatch, tmp_path):
     app = create_app()
     broadcaster = RecordingBroadcaster()
     app.state.broadcaster = broadcaster
+    clear_injected_delays()
     engine = get_engine()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -103,7 +106,40 @@ async def app_client(monkeypatch, tmp_path):
         await client.post("/auth/google", json={"id_token": "v"})
         yield client
 
+    clear_injected_delays()
     await engine.dispose()
+
+
+async def seed_policy(
+    *,
+    callsign: str,
+    date: str,
+    status: PolicyStatus = PolicyStatus.ACTIVE,
+    premium: int = 10,
+    payout: int = 80,
+    created_at: int = 1_779_926_400,
+    last_state: str = "{}",
+) -> dict[str, str]:
+    async with get_session_factory()() as session:
+        user = (await session.execute(select(User).where(User.email == "x@y.com"))).scalar_one()
+        flight = await make_flight(session, callsign=callsign, date=date)
+        flight.last_state = last_state
+        policy = Policy(
+            user_id=user.id,
+            flight_id=flight.id,
+            premium=premium,
+            payout=payout,
+            condition_json=json.dumps({"type": "delay", "threshold_min": 30}),
+            status=status,
+            contract_ref=f"mock-{callsign}-{date}",
+            created_at=created_at,
+        )
+        session.add(policy)
+        await session.commit()
+        return {
+            "policy_id": policy.id,
+            "flight_id": flight.id,
+        }
 
 
 @pytest.mark.asyncio
@@ -314,3 +350,151 @@ async def test_get_policies_returns_user_policies(app_client: AsyncClient):
     assert isinstance(items, list)
     assert len(items) >= 1
     assert items[0]["flight_id"] == "BA178-20260614"
+
+
+@pytest.mark.asyncio
+async def test_get_policies_preserves_existing_fields_and_returns_risk_projection_fields(
+    app_client: AsyncClient,
+):
+    create_res = await app_client.post("/policies", json={"flight_id": "BA178-20260614", "premium": 5})
+    assert create_res.status_code == 201, create_res.text
+    created = create_res.json()
+
+    async with get_session_factory()() as session:
+        flight = await session.get(Flight, "BA178-20260614")
+        assert flight is not None
+        flight.last_state = '{"delay_minutes": 25}'
+        await session.commit()
+
+    res = await app_client.get("/policies")
+
+    assert res.status_code == 200
+    body = res.json()
+    assert len(body) == 1
+    assert set(body[0]) == {
+        "id",
+        "flight_id",
+        "premium",
+        "payout",
+        "status",
+        "contract_ref",
+        "created_at",
+        "delay_threshold_minutes",
+        "live_delay_minutes",
+        "minutes_until_trigger",
+        "risk_level",
+        "risk_reason",
+    }
+    assert body[0]["id"] == created["id"]
+    assert body[0]["flight_id"] == created["flight_id"]
+    assert body[0]["premium"] == created["premium"]
+    assert body[0]["payout"] == created["payout"]
+    assert body[0]["status"] == created["status"]
+    assert body[0]["contract_ref"] == created["contract_ref"]
+    assert body[0]["created_at"] == created["created_at"]
+    assert body[0]["delay_threshold_minutes"] == 30
+    assert body[0]["live_delay_minutes"] == 25
+    assert body[0]["minutes_until_trigger"] == 5
+    assert body[0]["risk_level"] == "watch"
+    assert body[0]["risk_reason"] == "delay approaching threshold"
+
+
+@pytest.mark.asyncio
+async def test_get_policies_returns_active_policy_risk_levels(app_client: AsyncClient):
+    triggered = await seed_policy(
+        callsign="BA179",
+        date="20260621",
+        created_at=1_779_926_404,
+        last_state='{"delay_minutes": 45}',
+    )
+    watch = await seed_policy(
+        callsign="DL101",
+        date="20260615",
+        created_at=1_779_926_403,
+        last_state='{"delay_minutes": 25}',
+    )
+    normal = await seed_policy(
+        callsign="UA900",
+        date="20260616",
+        created_at=1_779_926_402,
+        last_state='{"delay_minutes": 12}',
+    )
+    unknown = await seed_policy(
+        callsign="AF008",
+        date="20260617",
+        created_at=1_779_926_401,
+        last_state="{}",
+    )
+
+    res = await app_client.get("/policies")
+
+    assert res.status_code == 200
+    payload_by_flight = {item["flight_id"]: item for item in res.json()}
+    assert payload_by_flight[triggered["flight_id"]]["risk_level"] == "triggered"
+    assert payload_by_flight[triggered["flight_id"]]["live_delay_minutes"] == 45
+    assert payload_by_flight[triggered["flight_id"]]["minutes_until_trigger"] == 0
+    assert payload_by_flight[triggered["flight_id"]]["risk_reason"] == "delay threshold reached"
+
+    assert payload_by_flight[watch["flight_id"]]["risk_level"] == "watch"
+    assert payload_by_flight[watch["flight_id"]]["live_delay_minutes"] == 25
+    assert payload_by_flight[watch["flight_id"]]["minutes_until_trigger"] == 5
+    assert payload_by_flight[watch["flight_id"]]["risk_reason"] == "delay approaching threshold"
+
+    assert payload_by_flight[normal["flight_id"]]["risk_level"] == "normal"
+    assert payload_by_flight[normal["flight_id"]]["live_delay_minutes"] == 12
+    assert payload_by_flight[normal["flight_id"]]["minutes_until_trigger"] == 18
+    assert payload_by_flight[normal["flight_id"]]["risk_reason"] == "delay below watch window"
+
+    assert payload_by_flight[unknown["flight_id"]]["risk_level"] == "unknown"
+    assert payload_by_flight[unknown["flight_id"]]["live_delay_minutes"] is None
+    assert payload_by_flight[unknown["flight_id"]]["minutes_until_trigger"] is None
+    assert payload_by_flight[unknown["flight_id"]]["risk_reason"] == "live delay unavailable"
+
+
+@pytest.mark.asyncio
+async def test_get_policies_matches_flight_detail_live_delay_behavior(app_client: AsyncClient):
+    seeded = await seed_policy(
+        callsign="VS300",
+        date="20260618",
+        last_state='{"delay_minutes": 18}',
+    )
+
+    policies_res = await app_client.get("/policies")
+    flight_res = await app_client.get(f"/flights/{seeded['flight_id']}")
+
+    assert policies_res.status_code == 200
+    assert flight_res.status_code == 200
+    policy = next(item for item in policies_res.json() if item["flight_id"] == seeded["flight_id"])
+    assert policy["live_delay_minutes"] == flight_res.json()["live_delay_minutes"] == 18
+
+
+@pytest.mark.asyncio
+async def test_get_policies_returns_settled_and_inactive_without_trigger_countdown(
+    app_client: AsyncClient,
+):
+    settled = await seed_policy(
+        callsign="QF012",
+        date="20260619",
+        status=PolicyStatus.PAID,
+        created_at=1_779_926_404,
+        last_state='{"delay_minutes": 60}',
+    )
+    inactive = await seed_policy(
+        callsign="SQ001",
+        date="20260620",
+        status=PolicyStatus.EXPIRED,
+        created_at=1_779_926_403,
+        last_state='{"delay_minutes": 14}',
+    )
+
+    res = await app_client.get("/policies")
+
+    assert res.status_code == 200
+    payload_by_flight = {item["flight_id"]: item for item in res.json()}
+    assert payload_by_flight[settled["flight_id"]]["risk_level"] == "settled"
+    assert payload_by_flight[settled["flight_id"]]["minutes_until_trigger"] is None
+    assert payload_by_flight[settled["flight_id"]]["risk_reason"] == "policy already settled"
+
+    assert payload_by_flight[inactive["flight_id"]]["risk_level"] == "inactive"
+    assert payload_by_flight[inactive["flight_id"]]["minutes_until_trigger"] is None
+    assert payload_by_flight[inactive["flight_id"]]["risk_reason"] == "policy is no longer active"

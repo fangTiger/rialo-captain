@@ -1,3 +1,4 @@
+import json
 from dataclasses import dataclass
 
 from sqlalchemy import func, select
@@ -11,6 +12,33 @@ class DelayStats:
     samples: int
     delayed: int
     delay_rate: float
+
+
+def live_delay_minutes_from_last_state(last_state: str) -> int | None:
+    """从航班快照中读取当前延误分钟数，缺失或格式异常时降级为空。"""
+    try:
+        state = json.loads(last_state or "{}")
+    except (TypeError, json.JSONDecodeError):
+        return None
+
+    value = state.get("delay_minutes") if isinstance(state, dict) else None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    return None
+
+
+def live_delay_minutes_for_flight(flight: Flight) -> int | None:
+    """优先使用 demo 注入延误，缺失时回退到航班快照。"""
+    from backend.admin.routes import get_injected_delay
+
+    injected = get_injected_delay(flight.id)
+    if injected is not None:
+        return injected
+    return live_delay_minutes_from_last_state(flight.last_state)
 
 
 class FlightService:

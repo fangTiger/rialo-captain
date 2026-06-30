@@ -29,6 +29,7 @@ describe("deployment config", () => {
 
     expect(config.apiBaseUrl).toBe("");
     expect(config.wsBaseUrl).toBe("");
+    expect(config.devLoginEnabled).toBe(true);
   });
 
   it("allows env overrides for preview builds", () => {

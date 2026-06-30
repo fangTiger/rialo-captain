@@ -34,12 +34,19 @@ TBD - created by archiving change rialo-captain-mvp. Update Purpose after archiv
 
 ### Requirement: 开发环境 fake login
 
-系统 SHALL 提供一个仅开发环境显式开启的 `POST /auth/dev-login` 端点，用于本地 demo 在没有 Google OAuth Client ID 时创建或获取用户并签发同样的 JWT cookie。前端登录首页 SHALL 将 dev login 作为右上角 `Latch APP` 入口触发的 DEV 操作面板展示，默认不直接暴露表单。
+系统 SHALL 提供一个开发和演示阶段可用的 `POST /auth/dev-login` 端点，用于本地 demo 在没有 Google OAuth Client ID 时创建或获取用户并签发同样的 JWT cookie。前端登录首页 SHALL 将 dev login 作为右上角 `Latch APP` 入口触发的 DEV 操作面板展示，默认不直接暴露表单。演示阶段 SHALL 默认保留 dev login；除非产品负责人明确批准切换到生产登录策略，否则不得删除、隐藏或默认关闭 dev login。
 
 #### Scenario: dev login 开启时创建账号
 - **GIVEN** `DEV_LOGIN_ENABLED=true`
 - **WHEN** 客户端提交 `{email, name}` 到 `POST /auth/dev-login`
 - **THEN** 系统创建或获取对应用户，初始化 `balance = 1000`，并返回 JWT cookie
+
+#### Scenario: 演示阶段默认保留 dev login
+- **GIVEN** 后端未显式配置 `DEV_LOGIN_ENABLED=false`
+- **AND** 前端未显式配置 `VITE_DEV_LOGIN_ENABLED=false`
+- **WHEN** 系统以本地开发或演示模式启动
+- **THEN** `POST /auth/dev-login` 可用
+- **AND** `/login` 页面显示 `Latch APP` 入口
 
 #### Scenario: dev login 关闭时隐藏端点
 - **GIVEN** `DEV_LOGIN_ENABLED=false`

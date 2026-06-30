@@ -52,6 +52,18 @@ import {
   BuyDrawer,
   type PurchasedPolicy,
 } from "../components/drawer/BuyDrawer";
+import { GuidedDemoRail } from "../components/demo/GuidedDemoRail";
+import {
+  completeGuidedDemoPurchase,
+  createIdleGuidedDemoState,
+  exitGuidedDemo,
+  isGuidedDemoActive,
+  pauseGuidedDemo,
+  resumeGuidedDemo,
+  selectGuidedDemoFlight,
+  startGuidedDemo,
+  type GuidedDemoFlight,
+} from "../components/demo/demoDirector";
 import { useFlights, type FlightPublic } from "../hooks/useFlights";
 import { useEventStore, type FlareEvent } from "../store/eventStore";
 import {
@@ -68,6 +80,9 @@ export function TowerShell() {
   const [drawerFlightId, setDrawerFlightId] = useState<string | null>(null);
   const [electedCallsign, setElectedCallsign] = useState<string | null>(null);
   const [electedTrailToken, setElectedTrailToken] = useState(0);
+  const [guidedDemoState, setGuidedDemoState] = useState(
+    createIdleGuidedDemoState,
+  );
   const [purchasedPolicy, setPurchasedPolicy] = useState<PurchasedPolicy | null>(
     null,
   );
@@ -83,13 +98,89 @@ export function TowerShell() {
   );
   const electedFlight = useMemo(() => {
     if (!electedCallsign) return null;
-    const callsign = electedCallsign.trim().toUpperCase();
-    if (!callsign) return null;
-    return (
-      flights.find((flight) => flight.callsign.trim().toUpperCase() === callsign) ??
-      null
-    );
+    return findFlightByCallsign(flights, electedCallsign);
   }, [electedCallsign, flights]);
+  const recommendedDemoFlight = useMemo(() => {
+    if (!protagonist) return null;
+    const flight = findFlightByCallsign(flights, protagonist.callsign);
+    return toGuidedDemoFlight(flight);
+  }, [flights, protagonist]);
+
+  const openManualFlight = useCallback((callsign: string) => {
+    const normalized = normalizeCallsign(callsign);
+    if (!normalized) return;
+    purchaseCompletedRef.current = false;
+    setElectedCallsign(normalized);
+    setPurchasedPolicy(null);
+    setElectedTrailToken((token) => token + 1);
+    setDrawerFlightId(flightIdForCallsign(normalized));
+  }, []);
+
+  const openGuidedDemoFlight = useCallback((flight: GuidedDemoFlight) => {
+    purchaseCompletedRef.current = false;
+    setGuidedDemoState((current) => selectGuidedDemoFlight(current, flight));
+    setElectedCallsign(flight.callsign);
+    setPurchasedPolicy(null);
+    setElectedTrailToken((token) => token + 1);
+    setDrawerFlightId(flight.flightId);
+  }, []);
+
+  const handleStartGuidedDemo = useCallback(() => {
+    purchaseCompletedRef.current = false;
+    setDrawerFlightId(null);
+    setElectedCallsign(null);
+    setPurchasedPolicy(null);
+    setGuidedDemoState(startGuidedDemo(recommendedDemoFlight));
+  }, [recommendedDemoFlight]);
+
+  const handleUseRecommendedFlight = useCallback(() => {
+    if (!guidedDemoState.recommendedFlight) return;
+    openGuidedDemoFlight(guidedDemoState.recommendedFlight);
+  }, [guidedDemoState.recommendedFlight, openGuidedDemoFlight]);
+
+  const handleResumeGuidedDemo = useCallback(() => {
+    if (!guidedDemoState.selectedFlight) return;
+    purchaseCompletedRef.current = false;
+    setGuidedDemoState((current) => resumeGuidedDemo(current));
+    setDrawerFlightId(guidedDemoState.selectedFlight.flightId);
+  }, [guidedDemoState.selectedFlight]);
+
+  const handleExitGuidedDemo = useCallback(() => {
+    const hasPurchasedPolicy = purchasedPolicy !== null;
+    purchaseCompletedRef.current = false;
+    setGuidedDemoState((current) => exitGuidedDemo(current));
+    setDrawerFlightId(null);
+    setElectedCallsign(null);
+    if (!hasPurchasedPolicy) {
+      setPurchasedPolicy(null);
+    }
+  }, [purchasedPolicy]);
+
+  const handleSelectFlight = useCallback(
+    (callsign: string) => {
+      if (
+        guidedDemoState.status === "select-flight" ||
+        guidedDemoState.status === "buy-cover" ||
+        guidedDemoState.status === "paused"
+      ) {
+        const flight = findFlightByCallsign(flights, callsign);
+        const guidedDemoFlight = toGuidedDemoFlight(flight);
+        if (!guidedDemoFlight) return;
+        openGuidedDemoFlight(guidedDemoFlight);
+        return;
+      }
+
+      if (
+        guidedDemoState.status === "replay" ||
+        guidedDemoState.status === "complete"
+      ) {
+        return;
+      }
+
+      openManualFlight(callsign);
+    },
+    [flights, guidedDemoState.status, openGuidedDemoFlight, openManualFlight],
+  );
 
   return (
     <div
@@ -115,6 +206,13 @@ export function TowerShell() {
           <AIBriefing />
         </div>
       </div>
+      <GuidedDemoRail
+        state={guidedDemoState}
+        onExit={handleExitGuidedDemo}
+        onResume={handleResumeGuidedDemo}
+        onStart={handleStartGuidedDemo}
+        onUseRecommendedFlight={handleUseRecommendedFlight}
+      />
       <CinemaProvider
         initialProtagonist={protagonist}
       >
@@ -128,18 +226,7 @@ export function TowerShell() {
           electedFlight={electedFlight}
           manualFocusLocked={Boolean(electedCallsign)}
           flights={flights}
-          onSelectFlight={(callsign) => {
-            const normalized = callsign.trim();
-            if (!normalized) return;
-            const date = new Date()
-              .toISOString()
-              .slice(0, 10)
-              .replaceAll("-", "");
-            setElectedCallsign(normalized);
-            setPurchasedPolicy(null);
-            setElectedTrailToken((token) => token + 1);
-            setDrawerFlightId(`${normalized}-${date}`);
-          }}
+          onSelectFlight={handleSelectFlight}
           electedTrailToken={electedTrailToken}
           purchasedPolicy={purchasedPolicy}
         />
@@ -150,6 +237,20 @@ export function TowerShell() {
           onPurchased={(policy) => {
             purchaseCompletedRef.current = true;
             setPurchasedPolicy(policy);
+            setGuidedDemoState((current) => {
+              if (current.status === "idle") {
+                return current;
+              }
+              return completeGuidedDemoPurchase(current, {
+                id: policy.id,
+                flightId: policy.flight_id,
+                callsign:
+                  current.selectedFlight?.callsign ??
+                  normalizeCallsign(policy.flight_id.split("-")[0] ?? ""),
+                premium: policy.premium,
+                payout: policy.payout,
+              });
+            });
           }}
           onClose={() => {
             if (purchaseCompletedRef.current) {
@@ -158,6 +259,10 @@ export function TowerShell() {
               return;
             }
             setDrawerFlightId(null);
+            if (isGuidedDemoActive(guidedDemoState)) {
+              setGuidedDemoState((current) => pauseGuidedDemo(current));
+              return;
+            }
             setElectedCallsign(null);
             setPurchasedPolicy(null);
           }}
@@ -165,6 +270,43 @@ export function TowerShell() {
       )}
     </div>
   );
+}
+
+function normalizeCallsign(callsign: string) {
+  return callsign.trim().toUpperCase();
+}
+
+function flightIdForCallsign(callsign: string) {
+  return `${normalizeCallsign(callsign)}-${new Date()
+    .toISOString()
+    .slice(0, 10)
+    .replaceAll("-", "")}`;
+}
+
+function findFlightByCallsign(
+  flights: FlightPublic[],
+  callsign: string,
+): FlightPublic | null {
+  const normalized = normalizeCallsign(callsign);
+  if (!normalized) return null;
+  return (
+    flights.find(
+      (flight) => normalizeCallsign(flight.callsign) === normalized,
+    ) ?? null
+  );
+}
+
+function toGuidedDemoFlight(
+  flight: FlightPublic | null,
+): GuidedDemoFlight | null {
+  if (!flight) return null;
+  if (flight.longitude === null || flight.latitude === null || flight.on_ground) {
+    return null;
+  }
+  return {
+    callsign: normalizeCallsign(flight.callsign),
+    flightId: flightIdForCallsign(flight.callsign),
+  };
 }
 
 interface TowerCinemaLayersProps {

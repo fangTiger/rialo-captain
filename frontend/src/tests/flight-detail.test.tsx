@@ -65,6 +65,35 @@ const activePolicy = {
   id: "active-policy",
   status: "active",
   contract_ref: "mock-active-policy",
+  risk_level: "normal",
+  risk_reason: "Delay remains below watch band.",
+  delay_threshold_minutes: 30,
+  live_delay_minutes: 12,
+  minutes_until_trigger: 18,
+};
+
+const watchPolicy = {
+  ...activePolicy,
+  id: "watch-policy",
+  premium: 5,
+  payout: 35,
+  contract_ref: "mock-watch-policy",
+  risk_level: "watch",
+  risk_reason: "Delay sits inside the watch band.",
+  live_delay_minutes: 24,
+  minutes_until_trigger: 6,
+};
+
+const triggeredPolicy = {
+  ...activePolicy,
+  id: "triggered-policy",
+  premium: 20,
+  payout: 120,
+  contract_ref: "mock-triggered-policy",
+  risk_level: "triggered",
+  risk_reason: "Delay crossed trigger threshold.",
+  live_delay_minutes: 45,
+  minutes_until_trigger: 0,
 };
 
 const claim = {
@@ -201,9 +230,9 @@ describe("FlightDetail", () => {
     expect(screen.getByText("← CLAIMS FEED")).toBeInTheDocument();
     expect(screen.getByText("LHR")).toBeInTheDocument();
     expect(screen.getByText("JFK")).toBeInTheDocument();
-    expect(screen.getByText("25%")).toBeInTheDocument();
+    expect(screen.getAllByText("25%").length).toBeGreaterThan(0);
     expect(screen.getByText("147")).toBeInTheDocument();
-    expect(screen.getByText("4.9×")).toBeInTheDocument();
+    expect(screen.getAllByText("4.9×").length).toBeGreaterThan(0);
     expect(screen.getByText("+12 min")).toBeInTheDocument();
     expect(screen.getByText("INSURE")).toBeInTheDocument();
     expect(screen.getByText("YOUR POLICIES ON THIS FLIGHT")).toBeInTheDocument();
@@ -218,10 +247,23 @@ describe("FlightDetail", () => {
     renderFlightDetail();
 
     await waitFor(() =>
-      expect(
-        screen.getByText("You hold 1 active policy on this flight · view in HANGAR →"),
-      ).toBeInTheDocument(),
+      expect(screen.getByText("ACTIVE HOLDING")).toBeInTheDocument(),
     );
+    const holdingSection = screen
+      .getByRole("heading", { name: "ACTIVE HOLDING" })
+      .closest("section");
+    if (!holdingSection) {
+      throw new Error("Expected active holding section to render");
+    }
+    expect(
+      within(holdingSection).getByText("1 active policy on this flight"),
+    ).toBeInTheDocument();
+    expect(within(holdingSection).getByText("10 RIA")).toBeInTheDocument();
+    expect(within(holdingSection).getByText("49 RIA")).toBeInTheDocument();
+    expect(within(holdingSection).getByText("NORMAL")).toBeInTheDocument();
+    expect(
+      within(holdingSection).getByRole("link", { name: /view in hangar/i }),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /confirm/i })).not.toBeInTheDocument();
   });
 
@@ -239,6 +281,10 @@ describe("FlightDetail", () => {
     expect(screen.getByText("← TOWER")).toBeInTheDocument();
     expect(screen.getByText("YOUR POLICIES ON THIS FLIGHT")).toBeInTheDocument();
     expect(screen.getByText("CLAIM HISTORY")).toBeInTheDocument();
+    expect(screen.getByText("Signal unavailable")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /flight signal unavailable/i }),
+    ).toBeDisabled();
   });
 
   it("renders empty states for policies and claims", async () => {
@@ -291,6 +337,39 @@ describe("FlightDetail", () => {
 
     expect(screen.getByTestId("evidence-drawer")).toHaveTextContent(
       "claim:claim-one",
+    );
+    expect(screen.getByTestId("location-path")).toHaveTextContent(
+      "/flight/BA178-20260614",
+    );
+  });
+
+  it("opens the holding summary evidence for the highest-risk active policy without leaving the flight detail route", async () => {
+    stubApi({ policies: [watchPolicy, triggeredPolicy, paidPolicy] });
+
+    renderFlightDetailWithLocation();
+
+    await waitFor(() =>
+      expect(screen.getByText("2 active policies on this flight")).toBeInTheDocument(),
+    );
+    const holdingSection = screen
+      .getByRole("heading", { name: "ACTIVE HOLDING" })
+      .closest("section");
+    if (!holdingSection) {
+      throw new Error("Expected active holding section to render");
+    }
+
+    expect(within(holdingSection).getByText("25 RIA")).toBeInTheDocument();
+    expect(within(holdingSection).getByText("155 RIA")).toBeInTheDocument();
+    expect(within(holdingSection).getByText("TRIGGERED")).toBeInTheDocument();
+
+    fireEvent.click(
+      within(holdingSection).getByRole("button", {
+        name: /view evidence for active holdings on BA178/i,
+      }),
+    );
+
+    expect(screen.getByTestId("evidence-drawer")).toHaveTextContent(
+      "policy:triggered-policy",
     );
     expect(screen.getByTestId("location-path")).toHaveTextContent(
       "/flight/BA178-20260614",

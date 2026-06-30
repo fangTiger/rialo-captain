@@ -13,11 +13,23 @@ from backend.evidence.service import EvidenceService
 from backend.flights.service import FlightService
 from backend.flights.opensky import FlightState
 from backend.models import Flight, Policy
-from backend.policies.schemas import CreatePolicyRequest, PolicyPublic
+from backend.policies.schemas import CreatePolicyRequest, PolicyCreatedPublic, PolicyPublic
 from backend.policies.service import InvalidPremiumError, PolicyService
 from backend.ws.broadcaster import EventType
 
 router = APIRouter()
+
+
+def _policy_created_public(policy: Policy) -> PolicyCreatedPublic:
+    return PolicyCreatedPublic(
+        id=policy.id,
+        flight_id=policy.flight_id,
+        premium=policy.premium,
+        payout=policy.payout,
+        status=policy.status.value,
+        contract_ref=policy.contract_ref,
+        created_at=policy.created_at,
+    )
 
 
 def _valid_coordinate(longitude: object, latitude: object) -> tuple[float, float] | None:
@@ -123,13 +135,13 @@ async def _record_policy_evidence(
     )
 
 
-@router.post("/policies", response_model=PolicyPublic, status_code=status.HTTP_201_CREATED)
+@router.post("/policies", response_model=PolicyCreatedPublic, status_code=status.HTTP_201_CREATED)
 async def create_policy(
     body: CreatePolicyRequest,
     request: Request,
     user: CurrentUser,
     session: Annotated[AsyncSession, Depends(get_session)],
-) -> PolicyPublic:
+) -> PolicyCreatedPublic:
     flight = await FlightService(session).get_flight(body.flight_id)
     if flight is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="flight unknown")
@@ -168,15 +180,7 @@ async def create_policy(
             cached_states=_cached_flight_states(request),
         ),
     )
-    return PolicyPublic(
-        id=policy.id,
-        flight_id=policy.flight_id,
-        premium=policy.premium,
-        payout=policy.payout,
-        status=policy.status.value,
-        contract_ref=policy.contract_ref,
-        created_at=policy.created_at,
-    )
+    return _policy_created_public(policy)
 
 
 @router.get("/policies", response_model=list[PolicyPublic])
@@ -184,16 +188,21 @@ async def list_policies(
     user: CurrentUser,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> list[PolicyPublic]:
-    policies = await PolicyService(session).get_user_policies(user.id)
+    policies = await PolicyService(session).get_user_policy_views(user.id)
     return [
         PolicyPublic(
-            id=p.id,
-            flight_id=p.flight_id,
-            premium=p.premium,
-            payout=p.payout,
-            status=p.status.value,
-            contract_ref=p.contract_ref,
-            created_at=p.created_at,
+            id=item.policy.id,
+            flight_id=item.policy.flight_id,
+            premium=item.policy.premium,
+            payout=item.policy.payout,
+            status=item.policy.status.value,
+            contract_ref=item.policy.contract_ref,
+            created_at=item.policy.created_at,
+            delay_threshold_minutes=item.projection.delay_threshold_minutes,
+            live_delay_minutes=item.projection.live_delay_minutes,
+            minutes_until_trigger=item.projection.minutes_until_trigger,
+            risk_level=item.projection.risk_level,
+            risk_reason=item.projection.risk_reason,
         )
-        for p in policies
+        for item in policies
     ]

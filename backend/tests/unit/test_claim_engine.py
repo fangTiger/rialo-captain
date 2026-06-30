@@ -215,6 +215,28 @@ async def test_run_once_no_trigger_when_below_threshold(db_session: AsyncSession
 
 
 @pytest.mark.asyncio
+async def test_run_once_ignores_projection_like_fields_for_settlement(db_session: AsyncSession):
+    policy = await _seed_policy(db_session, callsign="BA178")
+    policy.risk_level = "triggered"  # type: ignore[attr-defined]
+    policy.minutes_until_trigger = 0  # type: ignore[attr-defined]
+    await db_session.commit()
+
+    adapter = FakeAdapter(observation={"delay_minutes": 5})
+    engine = ClaimEngine(
+        adapter=adapter,
+        session_factory=_session_factory(db_session),
+        observe_url=lambda fid: f"https://opensky.test/state/{fid}",
+        now=_now,
+    )
+
+    summary = await engine._run_policies([policy])
+
+    assert summary.triggered == 0
+    assert summary.checked == 1
+    assert adapter.trigger_calls == []
+
+
+@pytest.mark.asyncio
 async def test_run_once_does_not_broadcast_claim_triggered_when_below_threshold(
     db_session: AsyncSession,
 ):

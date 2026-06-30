@@ -1,4 +1,3 @@
-import json
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -9,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.db import get_session
 from backend.flights.cache import FlightCache
 from backend.flights.opensky import OpenSkyClient, OpenSkyError
-from backend.flights.service import FlightService
+from backend.flights.service import FlightService, live_delay_minutes_for_flight
 from backend.models import Flight
 
 router = APIRouter()
@@ -66,23 +65,6 @@ class HotRoutePublic(BaseModel):
 
 def _cache_from(request: Request) -> FlightCache:
     return request.app.state.flight_cache
-
-
-def _live_delay_minutes_from_last_state(last_state: str) -> int | None:
-    """从航班快照中读取当前延误分钟数，缺失或格式异常时降级为空。"""
-    try:
-        state = json.loads(last_state or "{}")
-    except (TypeError, json.JSONDecodeError):
-        return None
-
-    value = state.get("delay_minutes") if isinstance(state, dict) else None
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int):
-        return value
-    if isinstance(value, float) and value.is_integer():
-        return int(value)
-    return None
 
 
 @router.get("/flights/live", response_model=LiveResponse)
@@ -168,7 +150,7 @@ async def flight_detail(
         destination=flight.destination,
         delay_rate=stats.delay_rate,
         samples=stats.samples,
-        live_delay_minutes=_live_delay_minutes_from_last_state(flight.last_state),
+        live_delay_minutes=live_delay_minutes_for_flight(flight),
     )
 
 

@@ -62,7 +62,7 @@ TBD - created by archiving change add-vercel-frontend-deploy. Update Purpose aft
 
 ### Requirement: DeepSeek V4 服务端配置
 
-系统 SHALL 通过服务端环境变量配置 Rialo Copilot 的 DeepSeek V4 provider。前端构建配置 MUST NOT 包含 DeepSeek API key，生产和本地开发在未配置 key 时 MUST 以可理解方式降级。
+系统 SHALL 通过服务端环境变量配置 Rialo Copilot 的 DeepSeek V4 provider。前端构建配置 MUST NOT 包含 DeepSeek API key。生产环境在未配置 key 时 MUST 以可理解方式降级；本地演示和开发环境 MUST 使用真实 DeepSeek provider，登录方式仍可使用 dev login。
 
 #### Scenario: 服务端配置 DeepSeek key 后启用 Copilot
 - **GIVEN** 后端环境设置 `DEEPSEEK_API_KEY`
@@ -83,11 +83,13 @@ TBD - created by archiving change add-vercel-frontend-deploy. Update Purpose aft
 - **THEN** 前端构建不得失败
 - **AND** 构建产物不得包含 DeepSeek API key 占位值
 
-#### Scenario: 本地未配置 key 时可继续 demo
-- **GIVEN** 本地开发后端未配置 `DEEPSEEK_API_KEY`
+#### Scenario: 本地演示使用真实 Copilot provider
+- **GIVEN** 本地开发或演示后端启动
+- **AND** 登录方式为 `DEV_LOGIN_ENABLED=true`
 - **WHEN** 用户使用 dev login 进入产品并点击 Ask Rialo
-- **THEN** Copilot 面板显示 AI provider 未配置的降级状态
-- **AND** dev login、航班、保单、赔付和证据回放仍正常工作
+- **THEN** 后端使用 `.env` 或进程环境中的 `DEEPSEEK_API_KEY` 调用真实 DeepSeek provider
+- **AND** Copilot 返回真实回答或流式 `context`、`delta`、`done` 事件
+- **AND** 不得把本地 Copilot 降级为 fake、mock、offline 或 provider 未配置模式，除非产品负责人明确批准
 
 ### Requirement: DeepSeek Copilot 服务端运行时配置
 

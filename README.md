@@ -113,6 +113,10 @@ Vercel 可以直接导入仓库根目录，也可以把 Root Directory 设置为
 
 构建命令会先运行 `node scripts/ensure-production-env.mjs`。当前默认使用临时登录模式：`devLoginEnabled=true` 时 `googleClientId` 和 `apiBaseUrl` 可以为空，前端会请求同源 `/api/auth/dev-login`。后续切回 Google OAuth 和常驻后端时，把 `devLoginEnabled` 改成 `false`，填入真实 Google Client ID、外部 API URL 与 WebSocket URL。若非临时登录模式缺少外部后端地址，Vercel 构建会直接失败。
 
+> 演示阶段禁令：dev login 是必保能力。未经产品负责人明确批准，不得删除、隐藏或默认关闭 `dev login`、`/auth/dev-login`、`DEV_LOGIN_ENABLED`、`VITE_DEV_LOGIN_ENABLED` 或 `frontend/deploy.config.json` 中的 `devLoginEnabled=true`。本地开发和演示启动必须默认保留 `Latch APP` / `Dev Login` 入口。
+
+> 本地 AI 禁令：本地演示和开发中的 Rialo Copilot 必须使用真实 provider。登录继续使用 dev login，但 AI 问答不得降级为 fake/mock/offline 或 provider 未配置模式；重启后端前确认本地 `.env` 已配置 `DEEPSEEK_API_KEY`，并验证 `/copilot/ask` 或 `/copilot/ask/stream` 返回真实回答。
+
 ## Demo: 反应式赔付
 
 ```bash

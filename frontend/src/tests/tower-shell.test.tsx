@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { TowerShell } from "../routes/TowerShell";
 
@@ -48,6 +48,20 @@ const towerHarness = vi.hoisted(() => ({
       on_ground: false,
     },
   ],
+}));
+
+const buyDrawerHarness = vi.hoisted(() => ({
+  purchaseRequests: 0,
+  purchaseMode: "immediate" as "immediate" | "deferred",
+  pendingComplete: null as null | (() => void),
+  nextPolicy: {
+    id: "policy-guided-1",
+    premium: 12,
+    payout: 60,
+    status: "active",
+    contract_ref: "mock-guided-1",
+    created_at: new Date("2026-06-14T08:00:00.000Z").getTime(),
+  },
 }));
 
 const trailHarness = vi.hoisted(() => ({
@@ -113,6 +127,8 @@ vi.mock("../hooks/useFlights", () => ({
 }));
 
 vi.mock("../components/cinema/useTrailDraw", () => ({
+  TRAIL_DRAW_START_MS: 0,
+  TRAIL_DRAW_TTL_MS: 1000,
   useTrailDraw: trailHarness.useTrailDraw,
 }));
 
@@ -176,6 +192,8 @@ vi.mock("../components/cinema/AutoSeeder", () => ({
 
 vi.mock("../components/cinema/EventChoreographer", () => ({
   EventChoreographer: () => <div data-testid="event-choreographer" />,
+  normalizeCreatedAtMs: (createdAt: number | null | undefined, fallback: number) =>
+    typeof createdAt === "number" ? createdAt : fallback,
 }));
 
 vi.mock("../components/cinema/CameraDirector", () => ({
@@ -231,12 +249,42 @@ vi.mock("../components/drawer/BuyDrawer", () => ({
   BuyDrawer: ({
     flightId,
     onClose,
+    onPurchased,
   }: {
     flightId: string;
     onClose: () => void;
+    onPurchased?: (policy: {
+      id: string;
+      flight_id: string;
+      premium: number;
+      payout: number;
+      status: string;
+      contract_ref: string;
+      created_at: number;
+    }) => void;
   }) => (
     <div data-testid="buy-drawer" data-flight-id={flightId}>
       buy drawer
+      <button
+        type="button"
+        onClick={() => {
+          buyDrawerHarness.purchaseRequests += 1;
+          const completePurchase = () => {
+            onPurchased?.({
+              ...buyDrawerHarness.nextPolicy,
+              flight_id: flightId,
+            });
+            onClose();
+          };
+          if (buyDrawerHarness.purchaseMode === "deferred") {
+            buyDrawerHarness.pendingComplete = completePurchase;
+            return;
+          }
+          completePurchase();
+        }}
+      >
+        confirm purchase
+      </button>
       <button type="button" onClick={onClose}>
         close drawer
       </button>
@@ -269,6 +317,16 @@ vi.mock("../components/tower/GlobeMap", () => ({
       >
         mock globe
       </button>
+      {towerHarness.flights.map((flight) => (
+        <button
+          key={flight.callsign}
+          type="button"
+          data-testid={`pick-${flight.callsign}`}
+          onClick={() => onSelectFlight?.(flight.callsign)}
+        >
+          {`pick ${flight.callsign}`}
+        </button>
+      ))}
       <button
         type="button"
         data-testid="mock-viewport-change"
@@ -348,6 +406,17 @@ describe("TowerShell", () => {
     };
     trailHarness.useTrailDraw.mockClear();
     trailHarness.useTrailDraw.mockImplementation(() => ({ activeTrail: null }));
+    buyDrawerHarness.purchaseRequests = 0;
+    buyDrawerHarness.purchaseMode = "immediate";
+    buyDrawerHarness.pendingComplete = null;
+    buyDrawerHarness.nextPolicy = {
+      id: "policy-guided-1",
+      premium: 12,
+      payout: 60,
+      status: "active",
+      contract_ref: "mock-guided-1",
+      created_at: new Date("2026-06-14T08:00:00.000Z").getTime(),
+    };
     keyMomentHarness.order = [];
     keyMomentHarness.clearAllMoments.mockClear();
     keyMomentHarness.enqueue.mockClear();
@@ -1165,6 +1234,323 @@ describe("TowerShell", () => {
         userElectedFlight: null,
       }),
     );
+  });
+
+  it("starts guided demo with a recommended highlight and does not purchase a policy", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-14T08:00:00.000Z"));
+
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Start guided demo" }),
+    );
+
+    expect(screen.getByText("Recommended flight")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Use recommended flight" }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("mock-globe")).toHaveAttribute(
+      "data-protagonist-highlight",
+      "BA178",
+    );
+    expect(screen.queryByTestId("buy-drawer")).not.toBeInTheDocument();
+    expect(buyDrawerHarness.purchaseRequests).toBe(0);
+  });
+
+  it("opens buy cover for the recommended or a different demo flight", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-14T08:00:00.000Z"));
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    towerHarness.flights = [
+      {
+        icao24: "a1b2c3",
+        callsign: "BA178",
+        origin_country: "United Kingdom",
+        longitude: -73.78,
+        latitude: 40.64,
+        velocity: 240,
+        heading: 90,
+        on_ground: false,
+      },
+      {
+        icao24: "ua200x",
+        callsign: "UA200",
+        origin_country: "United States",
+        longitude: -0.46,
+        latitude: 51.47,
+        velocity: 220,
+        heading: 270,
+        on_ground: false,
+      },
+    ];
+
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Start guided demo" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use recommended flight" }),
+    );
+
+    expect(screen.getByTestId("buy-drawer")).toHaveAttribute(
+      "data-flight-id",
+      "BA178-20260614",
+    );
+    expect(screen.getByText("Selected flight")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("close drawer"));
+    fireEvent.click(screen.getByRole("button", { name: "pick UA200" }));
+
+    expect(screen.getByTestId("buy-drawer")).toHaveAttribute(
+      "data-flight-id",
+      "UA200-20260614",
+    );
+    expect(screen.getAllByText("UA200")[0]).toBeInTheDocument();
+  });
+
+  it("pauses demo context on close and resumes the same selected flight", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-14T08:00:00.000Z"));
+
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Start guided demo" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use recommended flight" }),
+    );
+    fireEvent.click(screen.getByText("close drawer"));
+
+    expect(screen.queryByTestId("buy-drawer")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Resume" })).toBeInTheDocument();
+    expect(buyDrawerHarness.purchaseRequests).toBe(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Resume" }));
+
+    expect(screen.getByTestId("buy-drawer")).toHaveAttribute(
+      "data-flight-id",
+      "BA178-20260614",
+    );
+  });
+
+  it("enters settlement replay after purchase and routes the purchase as a REAL protagonist", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-14T08:00:00.000Z"));
+
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Start guided demo" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use recommended flight" }),
+    );
+    fireEvent.click(screen.getByText("confirm purchase"));
+
+    expect(screen.getByText("Policy policy-guided-1")).toBeInTheDocument();
+    expect(screen.getByText("12 RIA")).toBeInTheDocument();
+    expect(screen.getByText("60 RIA")).toBeInTheDocument();
+    expect(cinemaState.routeRealProtagonist).toHaveBeenCalledWith(
+      expect.objectContaining({
+        callsign: "BA178",
+        flightId: "BA178-20260614",
+        policyId: "policy-guided-1",
+      }),
+      expect.objectContaining({
+        playbackLockMs: expect.any(Number),
+      }),
+    );
+    expect(buyDrawerHarness.purchaseRequests).toBe(1);
+  });
+
+  it("keeps guided demo active through manual gestures and replacing the selected flight without remounting the provider", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-14T08:00:00.000Z"));
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    towerHarness.flights = [
+      {
+        icao24: "a1b2c3",
+        callsign: "BA178",
+        origin_country: "United Kingdom",
+        longitude: -73.78,
+        latitude: 40.64,
+        velocity: 240,
+        heading: 90,
+        on_ground: false,
+      },
+      {
+        icao24: "ua200x",
+        callsign: "UA200",
+        origin_country: "United States",
+        longitude: -0.46,
+        latitude: 51.47,
+        velocity: 220,
+        heading: 270,
+        on_ground: false,
+      },
+    ];
+
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Start guided demo" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use recommended flight" }),
+    );
+    fireEvent.click(screen.getByText("close drawer"));
+    fireEvent.click(screen.getByText("mock user gesture"));
+
+    expect(cinemaState.interrupt).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Resume" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "pick UA200" }));
+
+    expect(screen.getByTestId("buy-drawer")).toHaveAttribute(
+      "data-flight-id",
+      "UA200-20260614",
+    );
+    expect(towerHarness.providerMounts).toBe(1);
+  });
+
+  it("does not reactivate the rail after exit when a delayed purchase success arrives", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-14T08:00:00.000Z"));
+    buyDrawerHarness.purchaseMode = "deferred";
+
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Start guided demo" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use recommended flight" }),
+    );
+    fireEvent.click(screen.getByText("confirm purchase"));
+
+    expect(screen.getByTestId("buy-drawer")).toHaveAttribute(
+      "data-flight-id",
+      "BA178-20260614",
+    );
+
+    fireEvent.click(screen.getByText("close drawer"));
+    fireEvent.click(screen.getByRole("button", { name: "Exit demo" }));
+
+    expect(
+      screen.getByRole("button", { name: "Start guided demo" }),
+    ).toBeInTheDocument();
+
+    act(() => {
+      buyDrawerHarness.pendingComplete?.();
+    });
+
+    expect(
+      screen.getByRole("button", { name: "Start guided demo" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Policy policy-guided-1")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Exit demo" })).not.toBeInTheDocument();
+  });
+
+  it("shows waiting state when no projectable flight is available and does not enter buy cover", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-14T08:00:00.000Z"));
+    towerHarness.flights = [
+      {
+        icao24: "nogeo01",
+        callsign: "BA178",
+        origin_country: "United Kingdom",
+        longitude: null,
+        latitude: null,
+        velocity: 240,
+        heading: 90,
+        on_ground: true,
+      },
+    ];
+
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Start guided demo" }),
+    );
+
+    expect(screen.getByText("Waiting for live flight")).toBeInTheDocument();
+    expect(screen.getByText("No recommendation")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Use recommended flight" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("buy-drawer")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("mock globe"));
+    fireEvent.click(screen.getByRole("button", { name: "pick BA178" }));
+
+    expect(screen.queryByTestId("buy-drawer")).not.toBeInTheDocument();
+    expect(screen.getByText("Waiting for live flight")).toBeInTheDocument();
   });
 
   it("uses the session seed to choose a rotating initial demo protagonist", () => {

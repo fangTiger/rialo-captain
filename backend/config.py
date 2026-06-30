@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     jwt_cookie_name: str = "rialo_session"
     jwt_ttl_hours: int = 720
     cookie_secure: bool = False
-    dev_login_enabled: bool = False
+    dev_login_enabled: bool = True
     google_client_id: str = ""
     rialo_mode: str = "mock"
     admin_token: str = "local-dev-admin-token"
