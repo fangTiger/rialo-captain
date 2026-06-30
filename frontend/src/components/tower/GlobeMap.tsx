@@ -47,6 +47,7 @@ const WORLD_TOPOJSON_URL =
 const MIN_K = 0.6;
 const MAX_K = 12;
 const TICK_INTERVAL_MS = 500;
+const CAMERA_COMMIT_INTERVAL_MS = 50;
 const protagonistRingStyle: CSSProperties = {
   animationName: "protagonist-spotlight-ring-breathe",
 };
@@ -226,26 +227,45 @@ export function GlobeMap({
 
     const targetViewport = cameraTargetToViewport(cameraTarget, size);
     const durationMs = Math.max(0, cameraTarget.durationMs);
+    const commitViewport = (nextViewport: Viewport) => {
+      setViewport((current) =>
+        current.k === nextViewport.k &&
+        current.x === nextViewport.x &&
+        current.y === nextViewport.y
+          ? current
+          : nextViewport,
+      );
+    };
     if (durationMs === 0) {
-      setViewport(targetViewport);
+      commitViewport(targetViewport);
       return;
     }
 
     const from = viewportRef.current;
     let startedAt: number | null = null;
+    let lastCommittedElapsedMs = Number.NEGATIVE_INFINITY;
 
     const step = (timestamp: number) => {
       if (startedAt === null) startedAt = timestamp;
       const elapsed = Math.max(0, timestamp - startedAt);
       const t = Math.min(1, elapsed / durationMs);
       const eased = easeInOutCubic(t);
-      setViewport(interpolateViewport(from, targetViewport, eased));
+      const nextViewport =
+        t === 1
+          ? targetViewport
+          : interpolateViewport(from, targetViewport, eased);
+      if (
+        t === 1 ||
+        elapsed - lastCommittedElapsedMs >= CAMERA_COMMIT_INTERVAL_MS
+      ) {
+        lastCommittedElapsedMs = elapsed;
+        commitViewport(nextViewport);
+      }
 
       if (t < 1) {
         cameraRafRef.current = window.requestAnimationFrame(step);
       } else {
         cameraRafRef.current = null;
-        setViewport(targetViewport);
       }
     };
 

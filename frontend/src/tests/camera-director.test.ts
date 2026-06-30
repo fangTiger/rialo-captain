@@ -19,6 +19,12 @@ vi.mock("../components/cinema/CinemaContext", () => ({
 }));
 
 const size = { width: 1200, height: 720 };
+const safeAreaInsets = {
+  left: 500,
+  right: 380,
+  top: 260,
+  bottom: 96,
+};
 
 describe("CameraDirector spotlight compatibility", () => {
   beforeEach(() => {
@@ -86,6 +92,53 @@ describe("legacy cameraMath viewport conversion", () => {
     expect(viewport.y).toBeCloseTo(size.height / 2 - point.y * viewport.k, 4);
     expect(point.x * viewport.k + viewport.x).toBeCloseTo(size.width / 2, 4);
     expect(point.y * viewport.k + viewport.y).toBeCloseTo(size.height / 2, 4);
+  });
+
+  it("anchors protagonist targets to the safe-area center when insets are provided", () => {
+    const target = {
+      longitude: -73.78,
+      latitude: 40.64,
+      zoom: 5,
+      durationMs: 2_000,
+      reason: "protagonist",
+      safeAreaInsets,
+    } as CameraTarget & { safeAreaInsets: typeof safeAreaInsets };
+
+    const point = projectLonLat(target.longitude, target.latitude, size);
+    const viewport = cameraTargetToViewport(target, size);
+    const safeCenterX =
+      safeAreaInsets.left +
+      (size.width - safeAreaInsets.left - safeAreaInsets.right) / 2;
+    const safeCenterY =
+      safeAreaInsets.top +
+      (size.height - safeAreaInsets.top - safeAreaInsets.bottom) / 2;
+
+    expect(point.x * viewport.k + viewport.x).toBeCloseTo(safeCenterX, 4);
+    expect(point.y * viewport.k + viewport.y).toBeCloseTo(safeCenterY, 4);
+  });
+
+  it("falls back to viewport center when safe-area insets overlap the viewport", () => {
+    const compactSize = { width: 840, height: 300 };
+    const target = {
+      longitude: -73.78,
+      latitude: 40.64,
+      zoom: 5,
+      durationMs: 2_000,
+      reason: "protagonist",
+      safeAreaInsets,
+    } as CameraTarget & { safeAreaInsets: typeof safeAreaInsets };
+
+    const point = projectLonLat(target.longitude, target.latitude, compactSize);
+    const viewport = cameraTargetToViewport(target, compactSize);
+
+    expect(point.x * viewport.k + viewport.x).toBeCloseTo(
+      compactSize.width / 2,
+      4,
+    );
+    expect(point.y * viewport.k + viewport.y).toBeCloseTo(
+      compactSize.height / 2,
+      4,
+    );
   });
 
   it("returns the global viewport when camera target zooms out", () => {

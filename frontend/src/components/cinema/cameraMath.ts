@@ -23,6 +23,36 @@ function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
+function normalizedInset(value: number | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return 0;
+  }
+  return Math.max(0, value);
+}
+
+function resolveSafeAreaAnchor(
+  target: CameraTarget,
+  size: ViewportSize,
+): ProjectedPoint {
+  const left = normalizedInset(target.safeAreaInsets?.left);
+  const right = normalizedInset(target.safeAreaInsets?.right);
+  const top = normalizedInset(target.safeAreaInsets?.top);
+  const bottom = normalizedInset(target.safeAreaInsets?.bottom);
+  const safeWidth = size.width - left - right;
+  const safeHeight = size.height - top - bottom;
+
+  return {
+    x:
+      safeWidth > 0
+        ? clamp(left + safeWidth / 2, 0, size.width)
+        : size.width / 2,
+    y:
+      safeHeight > 0
+        ? clamp(top + safeHeight / 2, 0, size.height)
+        : size.height / 2,
+  };
+}
+
 export function projectLonLat(
   longitude: number,
   latitude: number,
@@ -45,9 +75,10 @@ export function cameraTargetToViewport(
 
   const k = clamp(target.zoom, MIN_CAMERA_K, MAX_CAMERA_K);
   const point = projectLonLat(target.longitude, target.latitude, size);
+  const anchor = resolveSafeAreaAnchor(target, size);
   return {
     k,
-    x: size.width / 2 - point.x * k,
-    y: size.height / 2 - point.y * k,
+    x: anchor.x - point.x * k,
+    y: anchor.y - point.y * k,
   };
 }

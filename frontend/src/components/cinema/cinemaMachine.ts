@@ -25,6 +25,12 @@ export interface CameraTarget {
   zoom: number;
   durationMs: number;
   reason: "protagonist" | "global";
+  safeAreaInsets?: {
+    left?: number;
+    right?: number;
+    top?: number;
+    bottom?: number;
+  };
 }
 
 export interface CinemaState {

@@ -12,6 +12,7 @@ import { CinemaController } from "../components/cinema/CinemaController";
 import { CinemaOverlay } from "../components/cinema/CinemaOverlay";
 import {
   CinemaProvider,
+  type CameraTarget,
   type CinemaProtagonist,
   useCinema,
 } from "../components/cinema/CinemaContext";
@@ -52,7 +53,10 @@ import {
   BuyDrawer,
   type PurchasedPolicy,
 } from "../components/drawer/BuyDrawer";
-import { GuidedDemoRail } from "../components/demo/GuidedDemoRail";
+import {
+  GUIDED_DEMO_NARROW_BREAKPOINT_PX,
+  GuidedDemoRail,
+} from "../components/demo/GuidedDemoRail";
 import {
   completeGuidedDemoPurchase,
   createIdleGuidedDemoState,
@@ -78,7 +82,12 @@ import type { CoordinateLocator, MomentLocator } from "../components/cinema/keyM
 export function TowerShell() {
   const { flights } = useFlights();
   const [drawerFlightId, setDrawerFlightId] = useState<string | null>(null);
+  const [drawerGuidedDemoSessionId, setDrawerGuidedDemoSessionId] = useState<
+    number | null
+  >(null);
   const [electedCallsign, setElectedCallsign] = useState<string | null>(null);
+  const [electedCameraTarget, setElectedCameraTarget] =
+    useState<CameraTarget | null>(null);
   const [electedTrailToken, setElectedTrailToken] = useState(0);
   const [guidedDemoState, setGuidedDemoState] = useState(
     createIdleGuidedDemoState,
@@ -87,6 +96,7 @@ export function TowerShell() {
     null,
   );
   const purchaseCompletedRef = useRef(false);
+  const guidedDemoSessionIdRef = useRef(0);
   const demoSelectionOffsetRef = useRef<number | null>(null);
   if (demoSelectionOffsetRef.current === null) {
     demoSelectionOffsetRef.current = Math.floor(Math.random() * 1_000_000_000);
@@ -109,26 +119,35 @@ export function TowerShell() {
   const openManualFlight = useCallback((callsign: string) => {
     const normalized = normalizeCallsign(callsign);
     if (!normalized) return;
+    const flight = findFlightByCallsign(flights, normalized);
     purchaseCompletedRef.current = false;
     setElectedCallsign(normalized);
+    setElectedCameraTarget(cameraTargetForElectedFlight(flight));
     setPurchasedPolicy(null);
     setElectedTrailToken((token) => token + 1);
+    setDrawerGuidedDemoSessionId(null);
     setDrawerFlightId(flightIdForCallsign(normalized));
-  }, []);
+  }, [flights]);
 
   const openGuidedDemoFlight = useCallback((flight: GuidedDemoFlight) => {
+    const liveFlight = findFlightByCallsign(flights, flight.callsign);
     purchaseCompletedRef.current = false;
     setGuidedDemoState((current) => selectGuidedDemoFlight(current, flight));
     setElectedCallsign(flight.callsign);
+    setElectedCameraTarget(cameraTargetForElectedFlight(liveFlight));
     setPurchasedPolicy(null);
     setElectedTrailToken((token) => token + 1);
+    setDrawerGuidedDemoSessionId(guidedDemoSessionIdRef.current);
     setDrawerFlightId(flight.flightId);
-  }, []);
+  }, [flights]);
 
   const handleStartGuidedDemo = useCallback(() => {
+    guidedDemoSessionIdRef.current += 1;
     purchaseCompletedRef.current = false;
     setDrawerFlightId(null);
+    setDrawerGuidedDemoSessionId(null);
     setElectedCallsign(null);
+    setElectedCameraTarget(null);
     setPurchasedPolicy(null);
     setGuidedDemoState(startGuidedDemo(recommendedDemoFlight));
   }, [recommendedDemoFlight]);
@@ -142,15 +161,19 @@ export function TowerShell() {
     if (!guidedDemoState.selectedFlight) return;
     purchaseCompletedRef.current = false;
     setGuidedDemoState((current) => resumeGuidedDemo(current));
+    setDrawerGuidedDemoSessionId(guidedDemoSessionIdRef.current);
     setDrawerFlightId(guidedDemoState.selectedFlight.flightId);
   }, [guidedDemoState.selectedFlight]);
 
   const handleExitGuidedDemo = useCallback(() => {
     const hasPurchasedPolicy = purchasedPolicy !== null;
+    guidedDemoSessionIdRef.current += 1;
     purchaseCompletedRef.current = false;
     setGuidedDemoState((current) => exitGuidedDemo(current));
     setDrawerFlightId(null);
+    setDrawerGuidedDemoSessionId(null);
     setElectedCallsign(null);
+    setElectedCameraTarget(null);
     if (!hasPurchasedPolicy) {
       setPurchasedPolicy(null);
     }
@@ -223,6 +246,7 @@ export function TowerShell() {
           flights={flights}
         />
         <TowerCinemaLayers
+          electedCameraTarget={electedCameraTarget}
           electedFlight={electedFlight}
           manualFocusLocked={Boolean(electedCallsign)}
           flights={flights}
@@ -235,6 +259,12 @@ export function TowerShell() {
         <BuyDrawer
           flightId={drawerFlightId}
           onPurchased={(policy) => {
+            if (
+              drawerGuidedDemoSessionId !== null &&
+              drawerGuidedDemoSessionId !== guidedDemoSessionIdRef.current
+            ) {
+              return;
+            }
             purchaseCompletedRef.current = true;
             setPurchasedPolicy(policy);
             setGuidedDemoState((current) => {
@@ -253,17 +283,26 @@ export function TowerShell() {
             });
           }}
           onClose={() => {
+            if (
+              drawerGuidedDemoSessionId !== null &&
+              drawerGuidedDemoSessionId !== guidedDemoSessionIdRef.current
+            ) {
+              return;
+            }
             if (purchaseCompletedRef.current) {
               purchaseCompletedRef.current = false;
               setDrawerFlightId(null);
+              setDrawerGuidedDemoSessionId(null);
               return;
             }
             setDrawerFlightId(null);
+            setDrawerGuidedDemoSessionId(null);
             if (isGuidedDemoActive(guidedDemoState)) {
               setGuidedDemoState((current) => pauseGuidedDemo(current));
               return;
             }
             setElectedCallsign(null);
+            setElectedCameraTarget(null);
             setPurchasedPolicy(null);
           }}
         />
@@ -310,6 +349,7 @@ function toGuidedDemoFlight(
 }
 
 interface TowerCinemaLayersProps {
+  electedCameraTarget: CameraTarget | null;
   electedFlight: FlightPublic | null;
   manualFocusLocked: boolean;
   flights: FlightPublic[];
@@ -325,6 +365,61 @@ const PURCHASE_LANDED_AT_MS = 10_000;
 const PURCHASE_DELAY_MINUTES = 45;
 const PURCHASE_SETTLE_DURATION_MS = 1_400;
 const PURCHASE_PLAYBACK_LOCK_MS = 12_000;
+const ELECTED_CAMERA_ZOOM = 5;
+const ELECTED_CAMERA_DURATION_MS = 2_000;
+const ELECTED_TRAIL_TTL_MS = 3_000;
+const ELECTED_CAMERA_DESKTOP_SAFE_AREA_INSETS: NonNullable<
+  CameraTarget["safeAreaInsets"]
+> = {
+  left: 500,
+  right: 380,
+  top: 260,
+  bottom: 320,
+};
+const ELECTED_CAMERA_BOTTOM_RAIL_SAFE_AREA_INSETS: NonNullable<
+  CameraTarget["safeAreaInsets"]
+> = {
+  left: 500,
+  right: 0,
+  top: 0,
+  bottom: 520,
+};
+
+function safeAreaInsetsForElectedCamera(): NonNullable<
+  CameraTarget["safeAreaInsets"]
+> {
+  if (
+    typeof window !== "undefined" &&
+    window.innerWidth < GUIDED_DEMO_NARROW_BREAKPOINT_PX
+  ) {
+    return ELECTED_CAMERA_BOTTOM_RAIL_SAFE_AREA_INSETS;
+  }
+
+  return ELECTED_CAMERA_DESKTOP_SAFE_AREA_INSETS;
+}
+
+function cameraTargetForElectedFlight(
+  flight: FlightPublic | null,
+): CameraTarget | null {
+  if (!flight) return null;
+  if (
+    typeof flight.longitude !== "number" ||
+    typeof flight.latitude !== "number" ||
+    !Number.isFinite(flight.longitude) ||
+    !Number.isFinite(flight.latitude)
+  ) {
+    return null;
+  }
+
+  return {
+    longitude: flight.longitude,
+    latitude: flight.latitude,
+    zoom: ELECTED_CAMERA_ZOOM,
+    durationMs: ELECTED_CAMERA_DURATION_MS,
+    reason: "protagonist",
+    safeAreaInsets: safeAreaInsetsForElectedCamera(),
+  };
+}
 
 function fallbackSignature(policyId: string) {
   const material = Array.from(policyId)
@@ -349,6 +444,7 @@ function hasPolicyEvent(type: string, policyId: string) {
 }
 
 function TowerCinemaLayers({
+  electedCameraTarget,
   electedFlight,
   electedTrailToken,
   flights,
@@ -391,6 +487,10 @@ function TowerCinemaLayers({
     userElectedFlight: purchasedPolicy ? null : electedFlight,
     userElectedTrailToken: electedTrailToken,
     resetToken: cinema.storyResetId,
+    ttlMs:
+      purchasedPolicy || !electedFlight
+        ? TRAIL_DRAW_TTL_MS
+        : ELECTED_TRAIL_TTL_MS,
   });
   const displayedTrail = activeTrail ?? purchasedTrail;
   const trailPoints = projectTrailPoints(
@@ -416,6 +516,23 @@ function TowerCinemaLayers({
       onSelectFlight(callsign);
     },
     [clearKeyMoments, onSelectFlight],
+  );
+  const handleViewportChange = useCallback(
+    (viewport: MapViewport, size: ViewportSize = DEFAULT_OVERLAY_SIZE) => {
+      setMapViewport((current) =>
+        current.k === viewport.k &&
+        current.x === viewport.x &&
+        current.y === viewport.y
+          ? current
+          : viewport,
+      );
+      setMapSize((current) =>
+        current.width === size.width && current.height === size.height
+          ? current
+          : size,
+      );
+    },
+    [],
   );
 
   useEffect(() => {
@@ -607,21 +724,8 @@ function TowerCinemaLayers({
       <CameraDirector>
         {(cameraTarget) => (
           <GlobeMap
-            cameraTarget={cameraTarget}
-            onViewportChange={(viewport, size = DEFAULT_OVERLAY_SIZE) => {
-              setMapViewport((current) =>
-                current.k === viewport.k &&
-                current.x === viewport.x &&
-                current.y === viewport.y
-                  ? current
-                  : viewport,
-              );
-              setMapSize((current) =>
-                current.width === size.width && current.height === size.height
-                  ? current
-                  : size,
-              );
-            }}
+            cameraTarget={electedCameraTarget ?? cameraTarget}
+            onViewportChange={handleViewportChange}
             onUserGesture={cinema.interrupt}
             onSelectFlight={handleSelectFlight}
             protagonistHighlight={protagonistHighlight}

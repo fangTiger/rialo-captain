@@ -1,6 +1,9 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cameraTargetToViewport } from "../components/cinema/cameraMath";
+import {
+  cameraTargetToViewport,
+  projectLonLat,
+} from "../components/cinema/cameraMath";
 import type {
   CameraTarget,
   CinemaProtagonist,
@@ -37,6 +40,12 @@ const protagonistHighlight: CinemaProtagonist = {
 };
 
 const size = { width: 1200, height: 720 };
+const safeAreaInsets = {
+  left: 500,
+  right: 380,
+  top: 260,
+  bottom: 96,
+};
 
 let rafId = 0;
 let rafCallbacks: Map<number, FrameRequestCallback>;
@@ -77,6 +86,13 @@ function runNextFrame(timestamp: number) {
   });
 }
 
+function runAnimationFrames(stepMs: number, frameCount: number) {
+  for (let frame = 0; frame < frameCount; frame += 1) {
+    if (rafCallbacks.size === 0) break;
+    runNextFrame(frame * stepMs);
+  }
+}
+
 describe("GlobeMap spotlight and legacy camera target", () => {
   beforeEach(() => {
     rafId = 0;
@@ -110,6 +126,59 @@ describe("GlobeMap spotlight and legacy camera target", () => {
     runNextFrame(1_000);
 
     const expected = cameraTargetToViewport(target, size);
+    expect(screen.getByTestId("globe-viewport")).toHaveAttribute(
+      "transform",
+      `translate(${expected.x},${expected.y}) scale(${expected.k})`,
+    );
+  });
+
+  it("lands safe-area camera targets on the unobstructed viewport anchor", () => {
+    const safeAreaTarget = {
+      ...target,
+      safeAreaInsets,
+    } as CameraTarget & { safeAreaInsets: typeof safeAreaInsets };
+
+    render(<GlobeMap cameraTarget={safeAreaTarget} />);
+
+    runNextFrame(0);
+    runNextFrame(1_000);
+
+    const point = projectLonLat(
+      safeAreaTarget.longitude,
+      safeAreaTarget.latitude,
+      size,
+    );
+    const anchorX =
+      safeAreaInsets.left +
+      (size.width - safeAreaInsets.left - safeAreaInsets.right) / 2;
+    const anchorY =
+      safeAreaInsets.top +
+      (size.height - safeAreaInsets.top - safeAreaInsets.bottom) / 2;
+
+    expect(screen.getByTestId("globe-viewport")).toHaveAttribute(
+      "transform",
+      `translate(${anchorX - point.x * safeAreaTarget.zoom},${anchorY - point.y * safeAreaTarget.zoom}) scale(${safeAreaTarget.zoom})`,
+    );
+  });
+
+  it("throttles long camera animations while still landing on the target viewport", () => {
+    const onViewportChange = vi.fn();
+    const longTarget: CameraTarget = {
+      ...target,
+      durationMs: 2_000,
+    };
+
+    render(
+      <GlobeMap
+        cameraTarget={longTarget}
+        onViewportChange={onViewportChange}
+      />,
+    );
+
+    runAnimationFrames(16, 130);
+
+    const expected = cameraTargetToViewport(longTarget, size);
+    expect(onViewportChange.mock.calls.length).toBeLessThanOrEqual(50);
     expect(screen.getByTestId("globe-viewport")).toHaveAttribute(
       "transform",
       `translate(${expected.x},${expected.y}) scale(${expected.k})`,

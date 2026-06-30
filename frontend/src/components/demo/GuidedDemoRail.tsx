@@ -23,6 +23,8 @@ const railButtonStyle: CSSProperties = {
   textTransform: "uppercase",
 };
 
+export const GUIDED_DEMO_NARROW_BREAKPOINT_PX = 980;
+
 function currentStepIndex(state: GuidedDemoState): 0 | 1 | 2 {
   if (state.status === "buy-cover" || state.status === "paused") return 1;
   if (state.status === "replay" || state.status === "complete") return 2;
@@ -233,5 +235,5 @@ export function GuidedDemoRail({
 }
 
 function readIsNarrowGuidedDemoViewport() {
-  return window.innerWidth < 980;
+  return window.innerWidth < GUIDED_DEMO_NARROW_BREAKPOINT_PX;
 }

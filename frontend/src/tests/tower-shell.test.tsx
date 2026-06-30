@@ -2,14 +2,30 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { TowerShell } from "../routes/TowerShell";
+import type { CameraTarget } from "../components/cinema/CinemaContext";
+import type { FlightPublic } from "../hooks/useFlights";
 
 interface TrailDrawMockOptions {
   userElectedFlight?: { callsign: string } | null;
+  ttlMs?: number;
 }
+
+const SAFE_AREA_INSETS = {
+  left: 500,
+  right: 380,
+  top: 260,
+  bottom: 320,
+};
+const NARROW_SAFE_AREA_INSETS = {
+  left: 500,
+  right: 0,
+  top: 0,
+  bottom: 520,
+};
 
 const cinemaState = vi.hoisted(() => ({
   interrupt: vi.fn(),
-  cameraTarget: null as { reason: string } | null,
+  cameraTarget: null as CameraTarget | null,
   cycleId: 1,
   cycleStartedAt: new Date("2026-06-14T08:00:00.000Z").getTime(),
   cyclePromotionLocked: false,
@@ -47,7 +63,7 @@ const towerHarness = vi.hoisted(() => ({
       heading: 90,
       on_ground: false,
     },
-  ],
+  ] as FlightPublic[],
 }));
 
 const buyDrawerHarness = vi.hoisted(() => ({
@@ -69,6 +85,14 @@ const trailHarness = vi.hoisted(() => ({
     void options;
     return { activeTrail: null };
   }),
+}));
+
+const globeHarness = vi.hoisted(() => ({
+  cameraTargets: [] as Array<CameraTarget | null>,
+  viewportChangeHandlers: [] as Array<
+    | ((viewport: { k: number; x: number; y: number }) => void)
+    | undefined
+  >,
 }));
 
 const copilotHarness = vi.hoisted(() => ({
@@ -300,45 +324,54 @@ vi.mock("../components/tower/GlobeMap", () => ({
     onSelectFlight,
     protagonistHighlight,
   }: {
-    cameraTarget?: { reason: string } | null;
+    cameraTarget?: CameraTarget | null;
     onViewportChange?: (viewport: { k: number; x: number; y: number }) => void;
     onUserGesture?: () => void;
     onSelectFlight?: (callsign: string) => void;
     protagonistHighlight?: { callsign: string } | null;
-  }) => (
-    <div>
-      <button
-        type="button"
-        data-testid="mock-globe"
-        data-camera-reason={cameraTarget?.reason ?? "none"}
-        data-protagonist-highlight={protagonistHighlight?.callsign ?? "none"}
-        data-has-on-viewport-change={String(Boolean(onViewportChange))}
-        onClick={() => onSelectFlight?.("BA178")}
-      >
-        mock globe
-      </button>
-      {towerHarness.flights.map((flight) => (
+  }) => {
+    globeHarness.cameraTargets.push(cameraTarget ?? null);
+    globeHarness.viewportChangeHandlers.push(onViewportChange);
+
+    return (
+      <div>
         <button
-          key={flight.callsign}
           type="button"
-          data-testid={`pick-${flight.callsign}`}
-          onClick={() => onSelectFlight?.(flight.callsign)}
+          data-testid="mock-globe"
+          data-camera-reason={cameraTarget?.reason ?? "none"}
+          data-camera-longitude={cameraTarget?.longitude ?? "none"}
+          data-camera-latitude={cameraTarget?.latitude ?? "none"}
+          data-camera-zoom={cameraTarget?.zoom ?? "none"}
+          data-camera-duration-ms={cameraTarget?.durationMs ?? "none"}
+          data-protagonist-highlight={protagonistHighlight?.callsign ?? "none"}
+          data-has-on-viewport-change={String(Boolean(onViewportChange))}
+          onClick={() => onSelectFlight?.("BA178")}
         >
-          {`pick ${flight.callsign}`}
+          mock globe
         </button>
-      ))}
-      <button
-        type="button"
-        data-testid="mock-viewport-change"
-        onClick={() => onViewportChange?.({ k: 1.4, x: 12, y: -8 })}
-      >
-        mock viewport change
-      </button>
-      <button type="button" onClick={() => onUserGesture?.()}>
-        mock user gesture
-      </button>
-    </div>
-  ),
+        {towerHarness.flights.map((flight) => (
+          <button
+            key={flight.callsign}
+            type="button"
+            data-testid={`pick-${flight.callsign}`}
+            onClick={() => onSelectFlight?.(flight.callsign)}
+          >
+            {`pick ${flight.callsign}`}
+          </button>
+        ))}
+        <button
+          type="button"
+          data-testid="mock-viewport-change"
+          onClick={() => onViewportChange?.({ k: 1.4, x: 12, y: -8 })}
+        >
+          mock viewport change
+        </button>
+        <button type="button" onClick={() => onUserGesture?.()}>
+          mock user gesture
+        </button>
+      </div>
+    );
+  },
 }));
 
 vi.mock("../components/tower/RadarSweep", () => ({
@@ -406,6 +439,8 @@ describe("TowerShell", () => {
     };
     trailHarness.useTrailDraw.mockClear();
     trailHarness.useTrailDraw.mockImplementation(() => ({ activeTrail: null }));
+    globeHarness.cameraTargets = [];
+    globeHarness.viewportChangeHandlers = [];
     buyDrawerHarness.purchaseRequests = 0;
     buyDrawerHarness.purchaseMode = "immediate";
     buyDrawerHarness.pendingComplete = null;
@@ -450,6 +485,11 @@ describe("TowerShell", () => {
         on_ground: false,
       },
     ];
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      writable: true,
+      value: 1200,
+    });
   });
 
   it("composes the live tower layers and opens BuyDrawer without leaving the tower", () => {
@@ -566,12 +606,317 @@ describe("TowerShell", () => {
 
     fireEvent.click(screen.getByText("mock globe"));
 
+    const lastCameraTarget =
+      globeHarness.cameraTargets[globeHarness.cameraTargets.length - 1];
+
     expect(trailHarness.useTrailDraw).toHaveBeenLastCalledWith(
       expect.objectContaining({
         userElectedFlight: expect.objectContaining({
           callsign: "BA178",
           latitude: 40.64,
           longitude: -73.78,
+        }),
+      }),
+    );
+    expect(lastCameraTarget).toMatchObject({
+      reason: "protagonist",
+      longitude: -73.78,
+      latitude: 40.64,
+      safeAreaInsets: SAFE_AREA_INSETS,
+    });
+  });
+
+  it("focuses the guided demo selection with a protagonist camera target while preserving trail draw", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-14T08:00:00.000Z"));
+
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Start guided demo" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use recommended flight" }),
+    );
+
+    const lastCameraTarget =
+      globeHarness.cameraTargets[globeHarness.cameraTargets.length - 1];
+    const lastTrailOptions = trailHarness.useTrailDraw.mock.lastCall?.[0];
+
+    expect(lastCameraTarget).toMatchObject({
+      reason: "protagonist",
+      longitude: -73.78,
+      latitude: 40.64,
+      safeAreaInsets: SAFE_AREA_INSETS,
+    });
+    expect(lastCameraTarget?.zoom ?? 0).toBeGreaterThan(1);
+    expect(lastCameraTarget?.zoom ?? 99).toBeLessThanOrEqual(12);
+    expect(lastCameraTarget?.durationMs ?? 0).toBeGreaterThanOrEqual(500);
+    expect(lastCameraTarget?.durationMs ?? 9_999).toBeLessThanOrEqual(4_000);
+    expect(screen.getByTestId("mock-globe")).toHaveAttribute(
+      "data-camera-reason",
+      "protagonist",
+    );
+    expect(lastTrailOptions?.ttlMs ?? 0).toBeGreaterThan(1_000);
+    expect(trailHarness.useTrailDraw).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        userElectedFlight: expect.objectContaining({
+          callsign: "BA178",
+          latitude: 40.64,
+          longitude: -73.78,
+        }),
+      }),
+    );
+  });
+
+  it("uses a bottom-rail safe-area target when guided demo runs on a narrow viewport", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-14T08:00:00.000Z"));
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      writable: true,
+      value: 900,
+    });
+
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Start guided demo" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use recommended flight" }),
+    );
+
+    const lastCameraTarget =
+      globeHarness.cameraTargets[globeHarness.cameraTargets.length - 1];
+
+    expect(screen.getByTestId("guided-demo-rail-container")).toHaveAttribute(
+      "data-layout",
+      "bottom",
+    );
+    expect(lastCameraTarget).toMatchObject({
+      reason: "protagonist",
+      longitude: -73.78,
+      latitude: 40.64,
+      safeAreaInsets: NARROW_SAFE_AREA_INSETS,
+    });
+  });
+
+  it("refreshes the protagonist camera target when guided demo reselects the same or a different flight", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-14T08:00:00.000Z"));
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    towerHarness.flights = [
+      {
+        icao24: "a1b2c3",
+        callsign: "BA178",
+        origin_country: "United Kingdom",
+        longitude: -73.78,
+        latitude: 40.64,
+        velocity: 240,
+        heading: 90,
+        on_ground: false,
+      },
+      {
+        icao24: "ua200x",
+        callsign: "UA200",
+        origin_country: "United States",
+        longitude: -0.46,
+        latitude: 51.47,
+        velocity: 220,
+        heading: 270,
+        on_ground: false,
+      },
+    ];
+
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Start guided demo" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use recommended flight" }),
+    );
+
+    const firstTarget =
+      globeHarness.cameraTargets[globeHarness.cameraTargets.length - 1];
+
+    fireEvent.click(screen.getByRole("button", { name: "pick BA178" }));
+
+    const repeatedTarget =
+      globeHarness.cameraTargets[globeHarness.cameraTargets.length - 1];
+
+    expect(repeatedTarget).not.toBe(firstTarget);
+    expect(repeatedTarget).toMatchObject({
+      reason: "protagonist",
+      longitude: -73.78,
+      latitude: 40.64,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "pick UA200" }));
+
+    const uaTarget =
+      globeHarness.cameraTargets[globeHarness.cameraTargets.length - 1];
+    const lastTrailOptions = trailHarness.useTrailDraw.mock.lastCall?.[0];
+
+    expect(uaTarget).not.toBe(repeatedTarget);
+    expect(uaTarget).toMatchObject({
+      reason: "protagonist",
+      longitude: -0.46,
+      latitude: 51.47,
+    });
+    expect(lastTrailOptions?.ttlMs ?? 0).toBeGreaterThan(1_000);
+    expect(screen.getByTestId("mock-globe")).toHaveAttribute(
+      "data-protagonist-highlight",
+      "UA200",
+    );
+    expect(trailHarness.useTrailDraw).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        userElectedFlight: expect.objectContaining({
+          callsign: "UA200",
+          latitude: 51.47,
+          longitude: -0.46,
+        }),
+      }),
+    );
+  });
+
+  it("keeps GlobeMap onViewportChange stable across selected-flight focus rerenders", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-14T08:00:00.000Z"));
+
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const initialHandler =
+      globeHarness.viewportChangeHandlers[
+        globeHarness.viewportChangeHandlers.length - 1
+      ];
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Start guided demo" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use recommended flight" }),
+    );
+
+    const focusedHandler =
+      globeHarness.viewportChangeHandlers[
+        globeHarness.viewportChangeHandlers.length - 1
+      ];
+
+    expect(focusedHandler).toBe(initialHandler);
+
+    fireEvent.click(screen.getByTestId("mock-viewport-change"));
+
+    const rerenderedHandler =
+      globeHarness.viewportChangeHandlers[
+        globeHarness.viewportChangeHandlers.length - 1
+      ];
+
+    expect(rerenderedHandler).toBe(focusedHandler);
+  });
+
+  it("keeps the one-shot camera target stable across live flight refreshes while trail uses latest elected flight", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-14T08:00:00.000Z"));
+
+    const view = render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByText("mock globe"));
+
+    const initialCameraTarget =
+      globeHarness.cameraTargets[globeHarness.cameraTargets.length - 1];
+
+    expect(initialCameraTarget).toMatchObject({
+      reason: "protagonist",
+      longitude: -73.78,
+      latitude: 40.64,
+    });
+
+    towerHarness.flights = [
+      {
+        icao24: "a1b2c3",
+        callsign: "BA178",
+        origin_country: "United Kingdom",
+        longitude: -71.25,
+        latitude: 41.12,
+        velocity: 255,
+        heading: 96,
+        on_ground: false,
+      },
+    ];
+
+    view.rerender(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const refreshedCameraTarget =
+      globeHarness.cameraTargets[globeHarness.cameraTargets.length - 1];
+
+    expect(refreshedCameraTarget).toBe(initialCameraTarget);
+    expect(refreshedCameraTarget).toMatchObject({
+      reason: "protagonist",
+      longitude: -73.78,
+      latitude: 40.64,
+    });
+    expect(trailHarness.useTrailDraw).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        userElectedFlight: expect.objectContaining({
+          callsign: "BA178",
+          longitude: -71.25,
+          latitude: 41.12,
         }),
       }),
     );
@@ -1506,6 +1851,52 @@ describe("TowerShell", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText("Policy policy-guided-1")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Exit demo" })).not.toBeInTheDocument();
+  });
+
+  it("ignores a delayed purchase from an exited guided demo after a new demo starts", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-14T08:00:00.000Z"));
+    buyDrawerHarness.purchaseMode = "deferred";
+
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Start guided demo" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use recommended flight" }),
+    );
+    fireEvent.click(screen.getByText("confirm purchase"));
+    const staleCompletePurchase = buyDrawerHarness.pendingComplete;
+
+    fireEvent.click(screen.getByText("close drawer"));
+    fireEvent.click(screen.getByRole("button", { name: "Exit demo" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Start guided demo" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use recommended flight" }),
+    );
+
+    act(() => {
+      staleCompletePurchase?.();
+    });
+
+    expect(screen.queryByText("Policy policy-guided-1")).not.toBeInTheDocument();
+    expect(screen.getByTestId("buy-drawer")).toHaveAttribute(
+      "data-flight-id",
+      "BA178-20260614",
+    );
+    expect(screen.getByRole("button", { name: "Exit demo" })).toBeInTheDocument();
   });
 
   it("shows waiting state when no projectable flight is available and does not enter buy cover", () => {
