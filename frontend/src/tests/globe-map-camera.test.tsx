@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cameraTargetToViewport,
@@ -9,6 +9,7 @@ import type {
   CinemaProtagonist,
 } from "../components/cinema/CinemaContext";
 import { GlobeMap } from "../components/tower/GlobeMap";
+import type { TowerRiskSignal } from "../components/tower/riskSignals";
 import type { FlightPublic } from "../hooks/useFlights";
 
 const flight: FlightPublic = {
@@ -39,6 +40,201 @@ const protagonistHighlight: CinemaProtagonist = {
   name: "Alice",
 };
 
+const riskSignal: TowerRiskSignal = {
+  metadata: {
+    source: "simulated",
+    sourceLabel: "Simulated signal",
+    modelVersion: "Rialo demo risk v2",
+    forecastWindowMinutes: 15,
+    forecastWindowStartedAt: "2026-07-03T07:00:00.000Z",
+    confidence: 0.72,
+    confidenceLabel: "Medium confidence",
+  },
+  weatherCells: [
+    {
+      id: "cell-low",
+      longitude: -150,
+      latitude: 42,
+      radiusDeg: 8.2,
+      level: "low",
+      drift: "ne",
+    },
+    {
+      id: "cell-elevated",
+      longitude: -106,
+      latitude: 36,
+      radiusDeg: 7.8,
+      level: "elevated",
+      drift: "sw",
+    },
+    {
+      id: "cell-severe",
+      longitude: -58,
+      latitude: 26,
+      radiusDeg: 6.5,
+      level: "severe",
+      drift: "nw",
+    },
+    {
+      id: "cell-low-europe",
+      longitude: 6,
+      latitude: 50,
+      radiusDeg: 7.1,
+      level: "low",
+      drift: "se",
+    },
+    {
+      id: "cell-elevated-africa",
+      longitude: 18,
+      latitude: 4,
+      radiusDeg: 9.4,
+      level: "elevated",
+      drift: "ne",
+    },
+    {
+      id: "cell-severe-asia",
+      longitude: 78,
+      latitude: 22,
+      radiusDeg: 8.8,
+      level: "severe",
+      drift: "sw",
+    },
+    {
+      id: "cell-elevated-pacific",
+      longitude: 137,
+      latitude: 34,
+      radiusDeg: 7.4,
+      level: "elevated",
+      drift: "nw",
+    },
+    {
+      id: "cell-low-australia",
+      longitude: 146,
+      latitude: -29,
+      radiusDeg: 8.1,
+      level: "low",
+      drift: "se",
+    },
+    {
+      id: "cell-elevated-south-atlantic",
+      longitude: -24,
+      latitude: -28,
+      radiusDeg: 7.9,
+      level: "elevated",
+      drift: "ne",
+    },
+    {
+      id: "cell-low-indian",
+      longitude: 62,
+      latitude: -12,
+      radiusDeg: 8.6,
+      level: "low",
+      drift: "sw",
+    },
+  ],
+  weatherBands: [
+    {
+      id: "band-north-atlantic-front",
+      points: [
+        [-145, 48],
+        [-84, 41],
+        [-28, 49],
+        [34, 45],
+      ],
+      widthDeg: 8.5,
+      level: "elevated",
+      drift: "ne",
+      kind: "front",
+    },
+    {
+      id: "band-equatorial-rain",
+      points: [
+        [-92, 9],
+        [-24, 5],
+        [46, 8],
+        [118, 12],
+      ],
+      widthDeg: 10,
+      level: "low",
+      drift: "se",
+      kind: "rain",
+    },
+    {
+      id: "band-asia-pacific-severe",
+      points: [
+        [68, 24],
+        [101, 18],
+        [148, 30],
+      ],
+      widthDeg: 9.2,
+      level: "severe",
+      drift: "sw",
+      kind: "wind",
+    },
+  ],
+  corridor: {
+    callsign: "BA178",
+    from: [-78.2, 39.7],
+    to: [-69.4, 41.3],
+    pressureLevel: "severe",
+    riskDeltaPct: 28.4,
+    segments: [
+      {
+        id: "BA178-corridor-low",
+        from: [-78.2, 39.7],
+        to: [-75.27, 40.23],
+        level: "low",
+      },
+      {
+        id: "BA178-corridor-elevated",
+        from: [-75.27, 40.23],
+        to: [-72.33, 40.77],
+        level: "elevated",
+      },
+      {
+        id: "BA178-corridor-severe",
+        from: [-72.33, 40.77],
+        to: [-69.4, 41.3],
+        level: "severe",
+      },
+    ],
+  },
+  market: {
+    subjectLabel: "BA178",
+    marketProbability: 0.38,
+    modelProbability: 0.31,
+    marketOdds: 2.6,
+    spread: 0.07,
+    spreadLabel: "Market more bearish",
+    divergence: {
+      valuePp: 7,
+      direction: "market",
+      label: "Market more bearish",
+      tone: "elevated",
+    },
+    insight: "BA178 trades richer than the Rialo model.",
+  },
+  weatherContribution: {
+    subjectLabel: "BA178",
+    pressureLevel: "severe",
+    contributionPp: 10,
+    riskDeltaPct: 28.4,
+    explanation:
+      "BA178 severe weather pressure adds +10.0pp corridor model risk; signal-only context.",
+  },
+  watchlist: [
+    {
+      id: "BA178-0",
+      callsign: "BA178",
+      probability: 0.38,
+      odds: 2.6,
+      direction: "up",
+      pressureLevel: "severe",
+      pressureLabel: "Severe pressure",
+    },
+  ],
+};
+
 const size = { width: 1200, height: 720 };
 const safeAreaInsets = {
   left: 500,
@@ -49,6 +245,7 @@ const safeAreaInsets = {
 
 let rafId = 0;
 let rafCallbacks: Map<number, FrameRequestCallback>;
+let resizeObserverCallback: ResizeObserverCallback | null = null;
 
 vi.mock("../hooks/useFlights", () => ({
   useFlights: () => ({
@@ -61,21 +258,26 @@ vi.mock("../hooks/useFlights", () => ({
 }));
 
 class MockResizeObserver {
-  private readonly callback: ResizeObserverCallback;
-
   constructor(callback: ResizeObserverCallback) {
-    this.callback = callback;
+    resizeObserverCallback = callback;
   }
 
-  observe() {
-    this.callback(
-      [{ contentRect: { width: size.width, height: size.height } } as ResizeObserverEntry],
-      this as unknown as ResizeObserver,
-    );
-  }
+  observe() {}
 
   disconnect() {}
   unobserve() {}
+}
+
+function emitResize(nextSize: typeof size) {
+  const callback = resizeObserverCallback;
+  if (!callback) throw new Error("ResizeObserver was not initialized");
+
+  act(() => {
+    callback(
+      [{ contentRect: nextSize } as ResizeObserverEntry],
+      {} as ResizeObserver,
+    );
+  });
 }
 
 function runNextFrame(timestamp: number) {
@@ -97,6 +299,7 @@ describe("GlobeMap spotlight and legacy camera target", () => {
   beforeEach(() => {
     rafId = 0;
     rafCallbacks = new Map();
+    resizeObserverCallback = null;
     vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
     vi.stubGlobal("ResizeObserver", MockResizeObserver);
     vi.stubGlobal(
@@ -119,6 +322,18 @@ describe("GlobeMap spotlight and legacy camera target", () => {
     vi.unstubAllGlobals();
   });
 
+  it("renders a more visible radar frame around the map edge", () => {
+    render(<GlobeMap />);
+
+    expect(screen.getByTestId("globe-map-frame")).toHaveStyle({
+      border: "1px solid rgba(0, 255, 157, 0.28)",
+      outline: "1px solid rgba(255, 255, 255, 0.08)",
+    });
+    expect(screen.getByTestId("globe-map-frame").style.boxShadow).toContain(
+      "inset 0 0 0 1px rgba(255, 255, 255, 0.05)",
+    );
+  });
+
   it("applies cameraTarget to the existing viewport transform through RAF", () => {
     render(<GlobeMap cameraTarget={target} />);
 
@@ -129,6 +344,29 @@ describe("GlobeMap spotlight and legacy camera target", () => {
     expect(screen.getByTestId("globe-viewport")).toHaveAttribute(
       "transform",
       `translate(${expected.x},${expected.y}) scale(${expected.k})`,
+    );
+  });
+
+  it("uses the measured mobile container width without forcing a desktop map width", async () => {
+    const mobileSize = { width: 390, height: 520 };
+    const onViewportChange = vi.fn();
+
+    render(<GlobeMap onViewportChange={onViewportChange} />);
+    emitResize(mobileSize);
+
+    await waitFor(() => {
+      expect(screen.getByRole("img", { name: /global flight radar/i })).toHaveAttribute(
+        "width",
+        "390",
+      );
+    });
+    expect(screen.getByRole("img", { name: /global flight radar/i })).toHaveAttribute(
+      "height",
+      "520",
+    );
+    expect(onViewportChange).toHaveBeenLastCalledWith(
+      { k: 1, x: 0, y: 0 },
+      mobileSize,
     );
   });
 
@@ -283,6 +521,103 @@ describe("GlobeMap spotlight and legacy camera target", () => {
     });
 
     expect(onUserGesture).toHaveBeenCalledTimes(3);
+  });
+
+  it("renders the passive weather risk layer with global pressure cells, forecast bands, and corridor", () => {
+    render(<GlobeMap weatherLayerVisible riskSignal={riskSignal} />);
+
+    expect(screen.getByTestId("weather-risk-layer")).toHaveAttribute(
+      "pointer-events",
+      "none",
+    );
+    const weatherCells = screen.getAllByTestId(/weather-cell-/);
+    expect(weatherCells).toHaveLength(riskSignal.weatherCells.length);
+    expect(screen.getAllByTestId(/weather-storm-mass-/)).toHaveLength(
+      riskSignal.weatherCells.length,
+    );
+    expect(screen.getAllByTestId("weather-cell-low").length).toBeGreaterThan(0);
+    expect(screen.getAllByTestId("weather-cell-elevated").length).toBeGreaterThan(
+      0,
+    );
+    expect(screen.getAllByTestId("weather-cell-severe").length).toBeGreaterThan(
+      0,
+    );
+    expect(screen.getAllByTestId("weather-severe-cell-pulse").length).toBeGreaterThan(
+      0,
+    );
+    screen.getAllByTestId(/weather-storm-mass-/).forEach((stormMass) => {
+      expect(stormMass).toHaveAttribute("pointer-events", "none");
+    });
+    screen.getAllByTestId("weather-severe-cell-pulse").forEach((pulse) => {
+      expect(pulse).toHaveAttribute("pointer-events", "none");
+    });
+    expect(screen.getAllByTestId(/weather-forecast-band/)).toHaveLength(
+      riskSignal.weatherBands.length,
+    );
+    expect(screen.getByTestId("weather-forecast-band-severe")).toHaveAttribute(
+      "pointer-events",
+      "none",
+    );
+    screen.getAllByTestId(/weather-forecast-band/).forEach((band) => {
+      expect(band).toHaveAttribute("pointer-events", "none");
+    });
+    expect(screen.getByTestId("weather-risk-corridor")).toHaveAttribute(
+      "pointer-events",
+      "none",
+    );
+    expect(screen.getByTestId("weather-active-corridor")).toHaveAttribute(
+      "pointer-events",
+      "none",
+    );
+    expect(screen.getByTestId("weather-corridor-intercept-marker")).toHaveAttribute(
+      "pointer-events",
+      "none",
+    );
+    expect(screen.getByTestId("weather-pressure-label")).toHaveTextContent(
+      /BA178|SEVERE|\+28\.4pp/i,
+    );
+    expect(screen.getByTestId("weather-pressure-label")).toHaveAttribute(
+      "pointer-events",
+      "none",
+    );
+    expect(
+      screen.getByTestId("weather-risk-corridor-segment-low"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("weather-risk-corridor-segment-elevated"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("weather-risk-corridor-segment-severe"),
+    ).toBeInTheDocument();
+  });
+
+  it("hides weather risk visuals when the weather layer is disabled", () => {
+    render(<GlobeMap weatherLayerVisible={false} riskSignal={riskSignal} />);
+
+    expect(screen.queryByTestId("weather-risk-layer")).not.toBeInTheDocument();
+  });
+
+  it("keeps weather shapes from blocking flight clicks", () => {
+    const onUserGesture = vi.fn();
+    const onSelectFlight = vi.fn();
+    render(
+      <GlobeMap
+        weatherLayerVisible
+        riskSignal={riskSignal}
+        onUserGesture={onUserGesture}
+        onSelectFlight={onSelectFlight}
+      />,
+    );
+
+    expect(screen.getByTestId("weather-risk-layer")).toHaveAttribute(
+      "pointer-events",
+      "none",
+    );
+
+    fireEvent.click(screen.getByTestId("flight-dot-BA178"));
+
+    expect(onUserGesture).toHaveBeenCalledTimes(1);
+    expect(onSelectFlight).toHaveBeenCalledWith("BA178");
   });
 
   it("renders protagonist highlight with CSS pulse animation and without runtime hooks", () => {

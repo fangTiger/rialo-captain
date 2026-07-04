@@ -3,6 +3,9 @@ import {
   completeGuidedDemoPurchase,
   completeGuidedDemoReplay,
   createIdleGuidedDemoState,
+  getGuidedDemoScenario,
+  requestGuidedDemoReplay,
+  selectGuidedDemoScenario,
   exitGuidedDemo,
   pauseGuidedDemo,
   resumeGuidedDemo,
@@ -22,6 +25,18 @@ const replacementFlight: GuidedDemoFlight = {
 };
 
 describe("guided demo director", () => {
+  it("starts from idle with the default smooth payout scenario", () => {
+    const state = createIdleGuidedDemoState();
+
+    expect(state.selectedScenarioId).toBe("smooth-payout");
+    expect(getGuidedDemoScenario(state.selectedScenarioId)).toMatchObject({
+      id: "smooth-payout",
+      label: "Smooth payout",
+      nextAction: "Select flight",
+    });
+    expect(state.replayToken).toBe(0);
+  });
+
   it("starts from idle and enters select flight with the recommended flight", () => {
     const state = startGuidedDemo(recommendedFlight);
 
@@ -29,6 +44,28 @@ describe("guided demo director", () => {
     expect(state.recommendedFlight).toEqual(recommendedFlight);
     expect(state.selectedFlight).toBeNull();
     expect(state.purchasedPolicy).toBeNull();
+  });
+
+  it("changes only scenario fields when selecting a scenario and preserves that choice on start", () => {
+    const idleState = createIdleGuidedDemoState();
+    const selectedScenarioState = selectGuidedDemoScenario(
+      idleState,
+      "evidence-deep-dive",
+    );
+
+    expect(selectedScenarioState.status).toBe("idle");
+    expect(selectedScenarioState.selectedScenarioId).toBe("evidence-deep-dive");
+    expect(selectedScenarioState.selectedFlight).toBeNull();
+    expect(selectedScenarioState.purchasedPolicy).toBeNull();
+
+    const startedState = startGuidedDemo(recommendedFlight, selectedScenarioState);
+
+    expect(startedState.status).toBe("select-flight");
+    expect(startedState.selectedScenarioId).toBe("evidence-deep-dive");
+    expect(getGuidedDemoScenario(startedState.selectedScenarioId)).toMatchObject({
+      goal: "Open the evidence story and explain how settlement was proven.",
+      nextAction: "Select flight",
+    });
   });
 
   it("selects a flight and advances to buy cover", () => {
@@ -77,6 +114,7 @@ describe("guided demo director", () => {
 
     expect(replayState.status).toBe("replay");
     expect(replayState.selectedFlight).toEqual(recommendedFlight);
+    expect(replayState.replayToken).toBe(1);
     expect(replayState.purchasedPolicy).toEqual({
       id: "policy-1",
       flightId: "BA178-20260630",
@@ -89,6 +127,34 @@ describe("guided demo director", () => {
 
     expect(completedState.status).toBe("complete");
     expect(completedState.purchasedPolicy?.id).toBe("policy-1");
+  });
+
+  it("requests a replay only after purchase and keeps the same policy context", () => {
+    const selectedState = selectGuidedDemoFlight(
+      startGuidedDemo(recommendedFlight),
+      recommendedFlight,
+    );
+
+    expect(requestGuidedDemoReplay(selectedState)).toBe(selectedState);
+
+    const replayState = completeGuidedDemoPurchase(selectedState, {
+      id: "policy-1",
+      flightId: "BA178-20260630",
+      callsign: "BA178",
+      premium: 12,
+      payout: 60,
+    });
+
+    const replayRequestedState = requestGuidedDemoReplay(replayState);
+
+    expect(replayRequestedState.status).toBe("replay");
+    expect(replayRequestedState.replayToken).toBe(2);
+    expect(replayRequestedState.purchasedPolicy).toEqual(
+      replayState.purchasedPolicy,
+    );
+    expect(replayRequestedState.selectedScenarioId).toBe(
+      replayState.selectedScenarioId,
+    );
   });
 
   it("exits back to idle and clears demo context", () => {

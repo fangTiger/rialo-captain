@@ -2,6 +2,12 @@ import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { apiFetch } from "../../api/client";
+import {
+  CommandPanel,
+  MetricDeck,
+  SignalPill,
+  type CommandMetric,
+} from "../../design/commandCenter";
 import { useMe } from "../../hooks/useMe";
 import { multiplierFor } from "../flight/multiplier";
 import { DelayHistogram } from "./DelayHistogram";
@@ -54,7 +60,10 @@ export function BuyDrawer({ flightId, onClose, onPurchased }: Props) {
   if (!flight) {
     return (
       <Shell onClose={onClose}>
-        <div style={{ padding: 24, color: "var(--text-secondary)" }}>
+        <div
+          className="buy-drawer-content"
+          style={{ color: "var(--text-secondary)" }}
+        >
           loading...
         </div>
       </Shell>
@@ -64,6 +73,30 @@ export function BuyDrawer({ flightId, onClose, onPurchased }: Props) {
   const estimatedPayout = Math.round(
     premium * multiplierFor(flight.delay_rate),
   );
+  const delayProbability = Math.round(flight.delay_rate * 100);
+  const decisionMetrics: CommandMetric[] = [
+    {
+      id: "premium",
+      label: "Premium",
+      value: `${premium} RIA`,
+      detail: "Selected stake",
+      tone: "radar",
+    },
+    {
+      id: "estimated-payout",
+      label: "Est. payout",
+      value: `${estimatedPayout} RIA`,
+      detail: "If delayed >= 30 min",
+      tone: "elevated",
+    },
+    {
+      id: "delay-probability",
+      label: "Delay probability",
+      value: `${delayProbability}%`,
+      detail: `${flight.samples} samples`,
+      tone: delayProbability >= 30 ? "severe" : "guarded",
+    },
+  ];
 
   async function confirm() {
     setBusy(true);
@@ -85,24 +118,29 @@ export function BuyDrawer({ flightId, onClose, onPurchased }: Props) {
 
   return (
     <Shell onClose={onClose}>
-      <div style={{ padding: 24, display: "grid", gap: 20 }}>
-        <div>
-          <div
-            style={{
-              fontFamily: "var(--font-mono)",
-              color: "var(--text-secondary)",
-              letterSpacing: "0.18em",
-              fontSize: 11,
-              textTransform: "uppercase",
-            }}
-          >
-            FLIGHT
+      <div className="buy-drawer-content">
+        <CommandPanel
+          aria-label="Coverage purchase decision"
+          className="buy-drawer-decision-panel"
+          eyebrow="COVERAGE OPS"
+          status={`${flight.origin} -> ${flight.destination}`}
+          title={flight.callsign}
+        >
+          <MetricDeck
+            ariaLabel="Coverage decision metrics"
+            className="buy-drawer-metrics"
+            metrics={decisionMetrics}
+          />
+          <div className="buy-drawer-boundary">
+            <SignalPill label="Purchase signal boundary" tone="weather">
+              Signal-only pricing context
+            </SignalPill>
+            <span>
+              Purchase terms still settle only through contract conditions and
+              verified delay evidence.
+            </span>
           </div>
-          <div style={{ fontSize: 36, marginTop: 4 }}>{flight.callsign}</div>
-          <div style={{ color: "var(--text-secondary)", marginTop: 6 }}>
-            {flight.origin} -&gt; {flight.destination}
-          </div>
-        </div>
+        </CommandPanel>
         <DelayHistogram
           delayRate={flight.delay_rate}
           samples={flight.samples}
@@ -197,23 +235,14 @@ function Shell({
         }}
       />
       <aside
-        style={{
-          position: "fixed",
-          left: 0,
-          right: 0,
-          bottom: 0,
-          zIndex: 51,
-          background: "var(--surface-1)",
-          borderTop: "1px solid var(--border-emphasis)",
-          boxShadow: "var(--elev-2)",
-          maxHeight: "80vh",
-          overflow: "auto",
-          animation: "slideup 280ms cubic-bezier(0.22, 1, 0.36, 1)",
-        }}
+        aria-label="Buy coverage panel"
+        className="buy-drawer-panel command-surface command-safe-area"
+        data-testid="buy-drawer-panel"
       >
         <button
           type="button"
           aria-label="Close buy drawer"
+          className="command-hit-target command-focus-ring"
           onClick={onClose}
           onMouseEnter={() => setCloseHovered(true)}
           onMouseLeave={() => setCloseHovered(false)}
@@ -239,7 +268,79 @@ function Shell({
         {children}
       </aside>
       <style>
-        {`@keyframes slideup { from { transform: translateY(100%); } to { transform: translateY(0); } }`}
+        {`
+          @keyframes slideup {
+            from { transform: translateY(100%); }
+            to { transform: translateY(0); }
+          }
+
+          .buy-drawer-panel {
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 51;
+            background: var(--command-surface-panel);
+            border-top: 1px solid var(--command-border-strong);
+            box-shadow: var(--elev-2);
+            max-height: 80vh;
+            overflow: auto;
+            animation: slideup 280ms cubic-bezier(0.22, 1, 0.36, 1);
+          }
+
+          .buy-drawer-content {
+            padding: 24px;
+            display: grid;
+            gap: 20px;
+          }
+
+          .buy-drawer-decision-panel {
+            border-radius: 8px;
+          }
+
+          .buy-drawer-metrics {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+          }
+
+          .buy-drawer-boundary {
+            display: grid;
+            gap: 8px;
+            margin-top: 14px;
+            color: var(--text-secondary);
+            font-size: var(--font-size-caption);
+            line-height: var(--line-height-copy);
+          }
+
+          @media (min-width: 820px) {
+            .buy-drawer-panel {
+              top: calc(var(--top-nav-height, 64px) + 20px);
+              right: 20px;
+              bottom: 20px;
+              left: auto;
+              width: min(26rem, calc(100vw - 40px));
+              max-height: calc(100vh - var(--top-nav-height, 64px) - 40px);
+              border: 1px solid var(--border-emphasis);
+              border-radius: 8px;
+            }
+
+            .buy-drawer-content {
+              padding: 20px;
+              gap: 16px;
+            }
+          }
+
+          @media (max-width: 520px) {
+            .buy-drawer-metrics {
+              grid-template-columns: minmax(0, 1fr);
+            }
+          }
+
+          @media (prefers-reduced-motion: reduce) {
+            .buy-drawer-panel {
+              animation: none;
+            }
+          }
+        `}
       </style>
     </>
   );

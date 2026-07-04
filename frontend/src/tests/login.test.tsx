@@ -35,9 +35,20 @@ describe("Login", () => {
     );
 
     const { container } = renderLogin();
+    const page = container.querySelector(".login-page");
     const shell = container.querySelector(".login-shell");
 
+    expect(page).toHaveClass("command-center-shell", "login-command-center");
     expect(shell).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Latch APP" })).toHaveClass(
+      "command-focus-ring",
+    );
+    expect(container.querySelector(".login-access-panel")).toHaveClass(
+      "command-surface",
+    );
+    expect(container.querySelector(".login-signal-panel")).toHaveClass(
+      "command-surface",
+    );
 
     expect(screen.getByTestId("login-radar-field")).toHaveAttribute(
       "aria-hidden",
@@ -57,11 +68,10 @@ describe("Login", () => {
     expect(
       screen.getByText(/live tower access for flight cover and claims/i),
     ).toBeInTheDocument();
-    expect(screen.getByTestId("rialo-logo-mark")).toHaveAttribute(
-      "aria-hidden",
-      "true",
-    );
-    expect(container.querySelector(".login-brand-mark")).toBeNull();
+    expect(screen.queryByTestId("rialo-logo-mark")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Rialo Captain")).not.toBeInTheDocument();
+    expect(screen.queryByText("RIALO · CAPTAIN")).not.toBeInTheDocument();
+    expect(container.querySelector(".login-brand")).toBeNull();
     expect(screen.getByText("Live field")).toBeInTheDocument();
     expect(screen.getByText("Ready latch")).toBeInTheDocument();
     expect(screen.getByText("Warm relay")).toBeInTheDocument();
@@ -104,6 +114,11 @@ describe("Login", () => {
     const dialog = screen.getByRole("dialog", { name: "DEV access" });
     const emailInput = screen.getByLabelText("Dev login email");
 
+    expect(dialog).toHaveClass("command-panel", "command-surface");
+    expect(emailInput).toHaveClass("command-focus-ring");
+    expect(screen.getByRole("button", { name: "Dev Login" })).toHaveClass(
+      "command-focus-ring",
+    );
     expect(dialog).toHaveAttribute("aria-modal", "true");
     await waitFor(() => expect(emailInput).toHaveFocus());
     await waitFor(() => expect(shell).toHaveAttribute("aria-hidden", "true"));

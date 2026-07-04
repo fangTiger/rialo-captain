@@ -1,0 +1,106 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 64 64"
+  fill="none"
+  data-brand-icon="rialo-captain"
+>
+  <title>Rialo Captain</title>
+  <defs>
+    <linearGradient id="bg" x1="12" y1="8" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#11212D" />
+      <stop offset="0.52" stop-color="#09131B" />
+      <stop offset="1" stop-color="#04070B" />
+    </linearGradient>
+    <linearGradient id="trail" x1="14" y1="47" x2="41" y2="19" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#22D3EE" />
+      <stop offset="1" stop-color="#5FF2B6" />
+    </linearGradient>
+    <linearGradient
+      id="aircraft"
+      x1="23"
+      y1="12"
+      x2="41"
+      y2="51"
+      gradientUnits="userSpaceOnUse"
+    >
+      <stop offset="0" stop-color="#F1FFFC" />
+      <stop offset="1" stop-color="#B8FFF1" />
+    </linearGradient>
+    <linearGradient id="node" x1="44" y1="40" x2="53" y2="49" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#C8FFF2" />
+      <stop offset="1" stop-color="#5FF2B6" />
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="14" fill="url(#bg)" />
+  <rect
+    x="4.5"
+    y="4.5"
+    width="55"
+    height="55"
+    rx="13.5"
+    stroke="rgba(164, 245, 221, 0.18)"
+  />
+  <path
+    d="M14 47C15.8 36.4 21.6 26.6 31 20.8"
+    stroke="url(#trail)"
+    stroke-opacity="0.7"
+    stroke-width="4.2"
+    stroke-linecap="round"
+  />
+  <path
+    d="M14 47C16.8 29.6 30.2 20 47 20"
+    stroke="#1ED8D4"
+    stroke-opacity="0.34"
+    stroke-width="2.6"
+    stroke-linecap="round"
+  />
+  <path d="M12 19C21 16 30 12.8 42 9.8" stroke="rgba(191, 240, 228, 0.08)" stroke-width="1.4" />
+  <g
+    data-icon-part="aircraft"
+    data-icon-role="primary-aircraft"
+    fill="url(#aircraft)"
+    stroke="rgba(86, 235, 220, 0.32)"
+    stroke-width="1"
+    stroke-linejoin="round"
+  >
+    <path
+      data-aircraft-segment="fuselage"
+      d="M32 11.6L35.4 17.6L34.6 49C34.6 50.2 33.6 51.2 32.4 51.2H31.6C30.4 51.2 29.4 50.2 29.4 49L28.6 17.6L32 11.6Z"
+    />
+    <path
+      data-aircraft-segment="main-wing"
+      d="M13.4 29.4L29.6 25.4H34.4L50.6 29.4C52.2 29.8 52.2 32.2 50.6 32.6L34.4 36.6H29.6L13.4 32.6C11.8 32.2 11.8 29.8 13.4 29.4Z"
+    />
+    <path
+      data-aircraft-segment="tail-wing"
+      d="M22.6 41.4L29.8 38H34.2L41.4 41.4C42.8 42.1 42.4 44.2 40.8 44.2H23.2C21.6 44.2 21.2 42.1 22.6 41.4Z"
+    />
+  </g>
+  <path
+    d="M32 15.4V47"
+    stroke="rgba(7, 22, 28, 0.32)"
+    stroke-width="1.7"
+    stroke-linecap="round"
+  />
+  <g
+    data-icon-part="confirm-node"
+    data-icon-role="secondary-confirmation"
+    data-icon-zone="lower-right"
+  >
+    <circle cx="48.5" cy="46" r="4.8" fill="url(#node)" />
+    <circle
+      cx="48.5"
+      cy="46"
+      r="4.1"
+      stroke="rgba(220, 255, 247, 0.52)"
+      stroke-width="1"
+    />
+    <path
+      d="M46.9 45.8L48 46.9L50.4 44.5"
+      stroke="#04150F"
+      stroke-width="1.8"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+  </g>
+</svg>

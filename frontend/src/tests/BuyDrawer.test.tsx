@@ -150,4 +150,71 @@ describe("BuyDrawer", () => {
     });
     expect(onPurchased).toHaveBeenCalledWith(createdPolicy);
   });
+
+  it("exposes a compact desktop ticket panel via responsive shell styles", async () => {
+    render(
+      <SWRConfig value={{ provider: () => new Map() }}>
+        <MemoryRouter
+          future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+        >
+          <BuyDrawer flightId="BA178-20260614" onClose={() => {}} />
+        </MemoryRouter>
+      </SWRConfig>,
+    );
+
+    await waitFor(() => expect(screen.getByText("BA178")).toBeInTheDocument());
+
+    expect(screen.getByTestId("buy-drawer-panel")).toHaveAttribute(
+      "aria-label",
+      "Buy coverage panel",
+    );
+
+    const styleText = Array.from(document.querySelectorAll("style"))
+      .map((node) => node.textContent ?? "")
+      .join("\n");
+
+    expect(styleText).toContain("@media (min-width: 820px)");
+    expect(styleText).toContain("width: min(26rem, calc(100vw - 40px))");
+    expect(styleText).toContain("right: 20px");
+  });
+
+  it("renders a command center purchase decision panel without blocking confirm", async () => {
+    render(
+      <SWRConfig value={{ provider: () => new Map() }}>
+        <MemoryRouter
+          future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+        >
+          <BuyDrawer flightId="BA178-20260614" onClose={() => {}} />
+        </MemoryRouter>
+      </SWRConfig>,
+    );
+
+    await waitFor(() => expect(screen.getByText("BA178")).toBeInTheDocument());
+
+    const shell = screen.getByTestId("buy-drawer-panel");
+    expect(shell).toHaveClass("command-surface", "command-safe-area");
+
+    const decisionPanel = screen.getByRole("region", {
+      name: /coverage purchase decision/i,
+    });
+    expect(decisionPanel).toHaveClass("command-panel", "command-surface");
+    expect(screen.getByLabelText("Coverage decision metrics")).toHaveAttribute(
+      "role",
+      "list",
+    );
+    expect(screen.getByText("Premium")).toBeInTheDocument();
+    expect(screen.getByText("Est. payout")).toBeInTheDocument();
+    expect(screen.getByText("Delay probability")).toBeInTheDocument();
+    expect(screen.getByLabelText("Purchase signal boundary")).toHaveClass(
+      "signal-pill",
+    );
+    expect(screen.getByTestId("command-panel-decor")).toHaveClass(
+      "command-decorative-layer",
+    );
+    expect(screen.getByTestId("command-panel-decor")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: /Confirm/i })).toBeEnabled();
+  });
 });

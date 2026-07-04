@@ -26,6 +26,7 @@ import {
   type CinemaMode,
   type CinemaPhase,
   type CinemaProtagonist,
+  type RouteRealProtagonistOptions,
   type CinemaState,
 } from "./cinemaMachine";
 import type { RealProtagonistEvent } from "./protagonist";
@@ -48,7 +49,7 @@ export interface CinemaContextValue extends CinemaState {
   resumeCinema: () => void;
   routeRealProtagonist: (
     event: RealProtagonistEvent,
-    options?: { playbackLockMs?: number },
+    options?: RouteRealProtagonistOptions,
   ) => void;
   setCyclePromotionLocked: (locked: boolean) => void;
   setDemoProtagonist: (protagonist: CinemaProtagonist) => void;
@@ -106,10 +107,7 @@ export function CinemaProvider({
     [],
   );
   const routeRealProtagonist = useCallback(
-    (
-      event: RealProtagonistEvent,
-      options?: { playbackLockMs?: number },
-    ) =>
+    (event: RealProtagonistEvent, options?: RouteRealProtagonistOptions) =>
       setState((current) =>
         routeRealProtagonistState(current, event, Date.now(), options),
       ),

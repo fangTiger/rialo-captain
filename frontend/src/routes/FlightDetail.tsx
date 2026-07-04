@@ -1,6 +1,13 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { ApiError } from "../api/client";
+import {
+  CommandPanel,
+  DivergenceMeter,
+  MetricDeck,
+  SignalPill,
+  type CommandTone,
+} from "../design/commandCenter";
 import { EvidenceDrawer } from "../components/evidence/EvidenceDrawer";
 import { Breadcrumb } from "../components/flight/Breadcrumb";
 import { FlightHero } from "../components/flight/FlightHero";
@@ -20,12 +27,23 @@ function statusFor(liveDelayMinutes: number | null) {
   return "IN-FLIGHT";
 }
 
+function toneForDelay(delayRate: number | null, liveDelayMinutes: number | null): CommandTone {
+  if (liveDelayMinutes !== null && liveDelayMinutes >= 30) return "severe";
+  if (delayRate !== null && delayRate >= 0.3) return "elevated";
+  if (delayRate !== null) return "low";
+  return "neutral";
+}
+
+function formatProbability(value: number | null): string {
+  return value === null ? "Unavailable" : `${Math.round(value * 100)}%`;
+}
+
 export function FlightDetail() {
   const { id } = useParams();
   const flightId = id ?? "";
   const [evidenceSubject, setEvidenceSubject] = useState<EvidenceSubject>(null);
   const { flight, error, isLoading } = useFlight(flightId);
-  const { policies } = usePolicies();
+  const { policies, isLoading: policiesLoading } = usePolicies();
   const isNotFound = error instanceof ApiError && error.status === 404;
   const activePolicies = policies.filter(
     (policy) => policy.flight_id === flightId && policy.status === "active",
@@ -55,11 +73,27 @@ export function FlightDetail() {
   const callsign = flight?.callsign ?? flightId;
   const origin = flight?.origin ?? "";
   const destination = flight?.destination ?? "";
+  const marketProbability =
+    delayRate === null ? null : Math.max(0.05, Math.min(0.95, delayRate * 0.82));
+  const divergence =
+    delayRate === null || marketProbability === null
+      ? 0
+      : Math.round((delayRate - marketProbability) * 100);
+  const flightTone = toneForDelay(delayRate, liveDelayMinutes);
+  const purchaseDecision =
+    policiesLoading
+      ? "Policy check pending"
+      : activePolicies.length > 0
+      ? "Active policy locked"
+      : multiplier === null
+        ? "Quote paused"
+        : "Open quote";
 
   return (
     <main
+      className="command-center-shell command-safe-area"
       style={{
-        maxWidth: 960,
+        maxWidth: 1120,
         margin: "0 auto",
         padding: "32px 24px 96px",
         display: "grid",
@@ -94,6 +128,95 @@ export function FlightDetail() {
         multiplier={multiplier}
         liveDelayMinutes={liveDelayMinutes}
       />
+      <CommandPanel
+        aria-label="Flight command center"
+        eyebrow="SINGLE FLIGHT RISK"
+        status={liveDelayMinutes === null ? "SIGNAL PENDING" : "LIVE"}
+        title="Flight Command Center"
+      >
+        <div style={{ display: "grid", gap: 16 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            <SignalPill tone={flightTone}>
+              {statusFor(liveDelayMinutes)}
+            </SignalPill>
+            <SignalPill tone="weather">signal-only context</SignalPill>
+            <SignalPill
+              tone={
+                policiesLoading
+                  ? "weather"
+                  : activePolicies.length > 0
+                    ? "elevated"
+                    : "radar"
+              }
+            >
+              {purchaseDecision}
+            </SignalPill>
+          </div>
+          <MetricDeck
+            ariaLabel="Flight command metrics"
+            metrics={[
+              {
+                id: "risk-kpi",
+                label: "RISK KPI",
+                value: formatProbability(delayRate),
+                detail:
+                  samples === null
+                    ? "Historical sample window unavailable"
+                    : `${samples} tracked samples`,
+                tone: flightTone,
+              },
+              {
+                id: "weather-context",
+                label: "WEATHER CONTEXT",
+                value:
+                  liveDelayMinutes === null
+                    ? "Freshness pending"
+                    : `Live delay +${liveDelayMinutes} min`,
+                detail: "Contextual pressure only; settlement still follows observed delay.",
+                tone: liveDelayMinutes !== null && liveDelayMinutes >= 30 ? "severe" : "weather",
+              },
+              {
+                id: "market-context",
+                label: "MARKET CONTEXT",
+                value:
+                  multiplier === null
+                    ? "Quote unavailable"
+                    : `${multiplier.toFixed(1)}x payout curve`,
+                detail: `Market implied ${formatProbability(marketProbability)}`,
+                tone: "guarded",
+              },
+              {
+                id: "purchase-decision",
+                label: "PURCHASE DECISION",
+                value: purchaseDecision,
+                detail:
+                  policiesLoading
+                    ? "Quote controls remain locked until active policies are known."
+                    : activePolicies.length > 0
+                    ? "Duplicate purchase stays disabled by active holding."
+                    : "Existing quote controls remain below.",
+                tone: policiesLoading
+                  ? "weather"
+                  : activePolicies.length > 0
+                    ? "elevated"
+                    : "radar",
+              },
+              {
+                id: "evidence-ready",
+                label: "EVIDENCE READY",
+                value: isNotFound ? "Route retained" : "Flight facts ready",
+                detail: "Policy and claim evidence open through existing drawers.",
+                tone: "low",
+              },
+            ]}
+          />
+          <DivergenceMeter
+            label="Model vs market divergence"
+            tone={Math.abs(divergence) > 10 ? "elevated" : "radar"}
+            value={divergence}
+          />
+        </div>
+      </CommandPanel>
       <section
         style={{
           padding: "16px 18px",
@@ -145,13 +268,37 @@ export function FlightDetail() {
         </div>
       </section>
       <DelayHistogram delayRate={delayRate ?? 0} samples={samples ?? 0} />
-      <InsureBlock
-        flightId={flightId}
-        callsign={callsign}
-        delayRate={delayRate}
-        activePolicies={activePolicies}
-        onEvidence={setEvidenceSubject}
-      />
+      {policiesLoading ? (
+        <CommandPanel
+          aria-label="Policy lock check"
+          eyebrow="POLICY LOCK CHECK"
+          status="SYNCING"
+          title="Quote Locked"
+        >
+          <div style={{ display: "grid", gap: 12 }}>
+            <SignalPill tone="weather">active policy scan pending</SignalPill>
+            <div
+              style={{
+                color: "var(--text-secondary)",
+                fontFamily: "var(--font-mono)",
+                fontSize: 12,
+                lineHeight: 1.5,
+              }}
+            >
+              Purchase controls stay hidden until Rialo confirms whether this
+              flight already has an active policy.
+            </div>
+          </div>
+        </CommandPanel>
+      ) : (
+        <InsureBlock
+          flightId={flightId}
+          callsign={callsign}
+          delayRate={delayRate}
+          activePolicies={activePolicies}
+          onEvidence={setEvidenceSubject}
+        />
+      )}
       <div
         style={{
           display: "grid",

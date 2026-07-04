@@ -23,7 +23,18 @@ describe("ToastRenderer", () => {
 
     render(<ToastRenderer />);
 
-    expect(screen.getByText("Policy created")).toBeInTheDocument();
+    const toast = screen.getByRole("button", { name: "Policy created" });
+
+    expect(screen.getByLabelText("Notifications")).toHaveClass(
+      "toast-stack",
+      "command-safe-area",
+    );
+    expect(toast).toHaveClass(
+      "toast-item",
+      "command-surface",
+      "command-focus-ring",
+    );
+    expect(toast).toBeInTheDocument();
   });
 
   it("automatically dismisses each toast after three seconds", () => {

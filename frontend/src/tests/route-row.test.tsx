@@ -1,8 +1,10 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { SWRConfig } from "swr";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RouteRow } from "../components/routes/RouteRow";
 import type { HotRoute } from "../hooks/useHotRoutes";
+import { HotRoutes } from "../routes/HotRoutes";
 
 const navigateMock = vi.hoisted(() => vi.fn());
 
@@ -60,5 +62,55 @@ describe("RouteRow", () => {
     expect(navigateMock).toHaveBeenNthCalledWith(2, "/flight/BA178-20260614-real", {
       state: { from: "/routes" },
     });
+  });
+
+  it("uses a wrapping grid instead of fixed columns for narrow route boards", () => {
+    const row = renderRouteRow();
+    const style = row.getAttribute("style") ?? "";
+
+    expect(style).toContain("repeat(auto-fit");
+    expect(style).toContain("minmax(min(");
+    expect(row).toHaveStyle({ overflowWrap: "anywhere" });
+  });
+});
+
+describe("HotRoutes", () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify([route]), { status: 200 }),
+      ),
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("renders hot routes as a command center risk board", async () => {
+    render(
+      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+          <HotRoutes />
+        </SWRConfig>
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByRole("button", {
+        name: /open flight BA178-20260614-real for route BA178/i,
+      }),
+    ).toBeInTheDocument();
+
+    const commandPanel = screen.getByRole("region", {
+      name: /hot routes command center/i,
+    });
+
+    expect(commandPanel).toHaveClass("command-panel");
+    expect(screen.getByText("DEMAND HEAT")).toBeInTheDocument();
+    expect(screen.getByText("WEATHER / MARKET WATCH")).toBeInTheDocument();
+    expect(screen.getByText("LIVE ROUTE SIGNALS")).toBeInTheDocument();
+    expect(screen.getByText("signal-only")).toBeInTheDocument();
   });
 });

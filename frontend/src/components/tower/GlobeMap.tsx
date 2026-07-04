@@ -15,6 +15,11 @@ import {
   FLIGHT_TIME_ACCEL,
   matchesFlightIdentity,
 } from "../cinema/flightMotion";
+import type {
+  TowerRiskSignal,
+  WeatherCell,
+  WeatherForecastBand,
+} from "./riskSignals";
 import "./GlobeMap.css";
 
 interface Props {
@@ -23,6 +28,8 @@ interface Props {
   onSelectFlight?: (callsign: string) => void;
   onViewportChange?: (viewport: Viewport, size: ViewportSize) => void;
   protagonistHighlight?: ProtagonistHighlight | null;
+  weatherLayerVisible?: boolean;
+  riskSignal?: TowerRiskSignal | null;
 }
 
 type PositionedFlight = FlightPublic & {
@@ -48,6 +55,8 @@ const MIN_K = 0.6;
 const MAX_K = 12;
 const TICK_INTERVAL_MS = 500;
 const CAMERA_COMMIT_INTERVAL_MS = 50;
+const DEFAULT_MAP_SIZE = { width: 1200, height: 720 };
+const MIN_MAP_HEIGHT = 400;
 const protagonistRingStyle: CSSProperties = {
   animationName: "protagonist-spotlight-ring-breathe",
 };
@@ -60,12 +69,14 @@ export function GlobeMap({
   onSelectFlight,
   onViewportChange,
   protagonistHighlight = null,
+  weatherLayerVisible = false,
+  riskSignal = null,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [world, setWorld] = useState<FeatureCollection<Geometry> | null>(null);
   const [worldErr, setWorldErr] = useState<string | null>(null);
-  const [size, setSize] = useState({ width: 1200, height: 720 });
+  const [size, setSize] = useState(DEFAULT_MAP_SIZE);
   const [hovered, setHovered] = useState<PositionedFlight | null>(null);
   const [viewport, setViewport] = useState<Viewport>({ k: 1, x: 0, y: 0 });
   const viewportRef = useRef<Viewport>(viewport);
@@ -133,10 +144,22 @@ export function GlobeMap({
     const el = containerRef.current;
     const ro = new ResizeObserver((entries) => {
       const r = entries[0].contentRect;
-      setSize({ width: Math.max(800, r.width), height: Math.max(400, r.height) });
+      setSize({
+        width: positiveDimension(r.width, el.clientWidth || DEFAULT_MAP_SIZE.width),
+        height: Math.max(
+          MIN_MAP_HEIGHT,
+          positiveDimension(r.height, el.clientHeight || DEFAULT_MAP_SIZE.height),
+        ),
+      });
     });
     ro.observe(el);
-    setSize({ width: el.clientWidth || 1200, height: el.clientHeight || 720 });
+    setSize({
+      width: positiveDimension(el.clientWidth, DEFAULT_MAP_SIZE.width),
+      height: Math.max(
+        MIN_MAP_HEIGHT,
+        positiveDimension(el.clientHeight, DEFAULT_MAP_SIZE.height),
+      ),
+    });
     return () => ro.disconnect();
   }, []);
 
@@ -365,11 +388,18 @@ export function GlobeMap({
   return (
     <div
       ref={containerRef}
+      data-testid="globe-map-frame"
       style={{
         position: "absolute",
         inset: 0,
         overflow: "hidden",
         background: "var(--surface-0)",
+        border: "1px solid rgba(0, 255, 157, 0.28)",
+        outline: "1px solid rgba(255, 255, 255, 0.08)",
+        outlineOffset: "-2px",
+        boxSizing: "border-box",
+        boxShadow:
+          "inset 0 0 0 1px rgba(255, 255, 255, 0.05), inset 0 0 28px rgba(0, 255, 157, 0.08)",
         userSelect: "none",
       }}
     >
@@ -450,6 +480,15 @@ export function GlobeMap({
                 ),
               )}
             </g>
+          )}
+
+          {weatherLayerVisible && riskSignal && (
+            <WeatherRiskLayer
+              projection={projection}
+              riskSignal={riskSignal}
+              size={size}
+              viewport={viewport}
+            />
           )}
 
           {hoverTrackInfo && (
@@ -744,6 +783,326 @@ export function GlobeMap({
       )}
     </div>
   );
+}
+
+function WeatherRiskLayer({
+  projection,
+  riskSignal,
+  size,
+  viewport,
+}: {
+  projection: GeoProjection;
+  riskSignal: TowerRiskSignal;
+  size: ViewportSize;
+  viewport: Viewport;
+}) {
+  const corridorEndpointPoints = riskSignal.corridor
+    ? [projection(riskSignal.corridor.from), projection(riskSignal.corridor.to)]
+    : null;
+  const corridorSegments =
+    riskSignal.corridor?.segments
+      .map((segment) => {
+        const from = projection(segment.from);
+        const to = projection(segment.to);
+        if (!from || !to) return null;
+        return {
+          ...segment,
+          path: `M ${from[0]} ${from[1]} L ${to[0]} ${to[1]}`,
+          fromPoint: from,
+          toPoint: to,
+          midpoint: [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2] as [
+            number,
+            number,
+          ],
+        };
+      })
+      .filter((segment): segment is NonNullable<typeof segment> => segment !== null) ??
+    [];
+  const interceptSegment =
+    corridorSegments
+      .slice()
+      .sort(
+        (left, right) =>
+          weatherLevelRank(right.level) - weatherLevelRank(left.level),
+      )[0] ?? null;
+
+  return (
+    <g
+      className="weather-risk-layer"
+      data-testid="weather-risk-layer"
+      pointerEvents="none"
+      style={{ pointerEvents: "none" }}
+    >
+      {riskSignal.weatherBands.map((band) => (
+        <WeatherForecastBandShape
+          key={band.id}
+          band={band}
+          projection={projection}
+          widthScale={size.width / 360}
+          viewport={viewport}
+        />
+      ))}
+      {riskSignal.weatherCells.map((cell) => (
+        <WeatherCellShape
+          key={cell.id}
+          cell={cell}
+          projection={projection}
+          radiusScale={size.width / 360}
+          viewport={viewport}
+        />
+      ))}
+      {riskSignal.corridor && corridorSegments.length > 0 && (
+        <g
+          className={`weather-risk-corridor-group weather-risk-corridor-${riskSignal.corridor?.pressureLevel ?? "low"}`}
+          data-testid="weather-risk-corridor"
+          pointerEvents="none"
+        >
+          <g
+            className="weather-active-corridor"
+            data-testid="weather-active-corridor"
+            pointerEvents="none"
+          >
+            {corridorSegments.map((segment) => (
+              <g
+                key={segment.id}
+                className={`weather-risk-corridor-segment weather-risk-corridor-segment-${segment.level}`}
+                pointerEvents="none"
+              >
+                <path
+                  className="weather-risk-corridor weather-risk-corridor-segment-halo"
+                  d={segment.path}
+                  fill="none"
+                  strokeWidth={12 / viewport.k}
+                  pointerEvents="none"
+                />
+                <path
+                  className="weather-risk-corridor weather-risk-corridor-segment-core"
+                  data-testid={`weather-risk-corridor-segment-${segment.level}`}
+                  d={segment.path}
+                  fill="none"
+                  strokeWidth={3.4 / viewport.k}
+                  strokeDasharray={`${10 / viewport.k} ${7 / viewport.k}`}
+                  pointerEvents="none"
+                />
+              </g>
+            ))}
+            {corridorEndpointPoints?.map((point, index) =>
+              point ? (
+                <circle
+                  key={index}
+                  className="weather-risk-pressure-ring"
+                  cx={point[0]}
+                  cy={point[1]}
+                  r={14 / viewport.k}
+                  fill="none"
+                  strokeWidth={1.1 / viewport.k}
+                  pointerEvents="none"
+                />
+              ) : null,
+            )}
+            {interceptSegment ? (
+              <>
+                <g
+                  className={`weather-corridor-intercept-marker weather-corridor-intercept-marker-${interceptSegment.level}`}
+                  data-testid="weather-corridor-intercept-marker"
+                  transform={`translate(${interceptSegment.midpoint[0]},${interceptSegment.midpoint[1]})`}
+                  pointerEvents="none"
+                >
+                  <circle
+                    r={7 / viewport.k}
+                    fill="none"
+                    strokeWidth={1.4 / viewport.k}
+                    pointerEvents="none"
+                  />
+                  <path
+                    d={`M ${-10 / viewport.k} 0 L ${10 / viewport.k} 0 M 0 ${-10 / viewport.k} L 0 ${10 / viewport.k}`}
+                    fill="none"
+                    strokeWidth={0.9 / viewport.k}
+                    pointerEvents="none"
+                  />
+                </g>
+                <g
+                  className="weather-pressure-label"
+                  data-testid="weather-pressure-label"
+                  transform={`translate(${interceptSegment.midpoint[0] + 12 / viewport.k},${interceptSegment.midpoint[1] - 20 / viewport.k})`}
+                  pointerEvents="none"
+                >
+                  <rect
+                    width={132 / viewport.k}
+                    height={30 / viewport.k}
+                    rx={3 / viewport.k}
+                    pointerEvents="none"
+                  />
+                  <text
+                    x={7 / viewport.k}
+                    y={12 / viewport.k}
+                    pointerEvents="none"
+                  >
+                    {riskSignal.corridor.callsign}{" "}
+                    {interceptSegment.level.toUpperCase()}
+                  </text>
+                  <text
+                    x={7 / viewport.k}
+                    y={24 / viewport.k}
+                    pointerEvents="none"
+                  >
+                    +{riskSignal.corridor.riskDeltaPct.toFixed(1)}pp pressure
+                  </text>
+                </g>
+              </>
+            ) : null}
+          </g>
+        </g>
+      )}
+    </g>
+  );
+}
+
+function WeatherForecastBandShape({
+  band,
+  projection,
+  widthScale,
+  viewport,
+}: {
+  band: WeatherForecastBand;
+  projection: GeoProjection;
+  widthScale: number;
+  viewport: Viewport;
+}) {
+  const points = band.points
+    .map((point) => projection(point))
+    .filter((point): point is [number, number] => point !== null);
+  if (points.length < 2) return null;
+  const path = points
+    .map((point, index) => `${index === 0 ? "M" : "L"} ${point[0]} ${point[1]}`)
+    .join(" ");
+  const width = Math.max(12, band.widthDeg * widthScale);
+  return (
+    <g
+      className={`weather-forecast-band weather-forecast-band-${band.level} weather-forecast-band-${band.kind} weather-forecast-band-drift-${band.drift}`}
+      data-testid={
+        band.level === "severe"
+          ? "weather-forecast-band-severe"
+          : "weather-forecast-band"
+      }
+      pointerEvents="none"
+      style={{ pointerEvents: "none" }}
+    >
+      <path
+        className="weather-forecast-band-halo"
+        d={path}
+        fill="none"
+        strokeWidth={(width * 1.7) / viewport.k}
+        pointerEvents="none"
+      />
+      <path
+        className="weather-forecast-band-core"
+        d={path}
+        fill="none"
+        strokeWidth={width / viewport.k}
+        pointerEvents="none"
+      />
+      <path
+        className="weather-forecast-band-radar-line"
+        d={path}
+        fill="none"
+        strokeWidth={1.2 / viewport.k}
+        strokeDasharray={`${12 / viewport.k} ${8 / viewport.k}`}
+        pointerEvents="none"
+      />
+    </g>
+  );
+}
+
+function WeatherCellShape({
+  cell,
+  projection,
+  radiusScale,
+  viewport,
+}: {
+  cell: WeatherCell;
+  projection: GeoProjection;
+  radiusScale: number;
+  viewport: Viewport;
+}) {
+  const projected = projection([cell.longitude, cell.latitude]);
+  if (!projected) return null;
+  const radius = Math.max(10, cell.radiusDeg * radiusScale);
+  const squash = cell.drift === "ne" || cell.drift === "sw" ? 0.64 : 0.78;
+  return (
+    <g
+      className={`weather-risk-cell weather-risk-cell-${cell.level} weather-risk-cell-drift-${cell.drift}`}
+      data-testid={`weather-cell-${cell.level}`}
+      transform={`translate(${projected[0]},${projected[1]}) rotate(${
+        cell.drift === "ne" || cell.drift === "sw" ? -18 : 18
+      })`}
+      pointerEvents="none"
+    >
+      <ellipse
+        className="weather-storm-mass"
+        data-testid={`weather-storm-mass-${cell.level}`}
+        rx={radius * 1.32}
+        ry={radius * squash * 1.2}
+        pointerEvents="none"
+      />
+      <ellipse
+        className="weather-risk-cell-field"
+        rx={radius}
+        ry={radius * squash}
+        pointerEvents="none"
+      />
+      <ellipse
+        className="weather-risk-cell-core"
+        rx={radius * 0.46}
+        ry={radius * squash * 0.42}
+        pointerEvents="none"
+      />
+      <ellipse
+        className="weather-risk-cell-lobe weather-risk-cell-lobe-a"
+        cx={radius * 0.22}
+        cy={-radius * squash * 0.12}
+        rx={radius * 0.34}
+        ry={radius * squash * 0.32}
+        pointerEvents="none"
+      />
+      <ellipse
+        className="weather-risk-cell-lobe weather-risk-cell-lobe-b"
+        cx={-radius * 0.28}
+        cy={radius * squash * 0.18}
+        rx={radius * 0.28}
+        ry={radius * squash * 0.26}
+        pointerEvents="none"
+      />
+      <ellipse
+        className="weather-risk-cell-radar-line"
+        rx={Math.max(6 / viewport.k, radius * 0.74)}
+        ry={Math.max(4 / viewport.k, radius * squash * 0.7)}
+        fill="none"
+        strokeWidth={1 / viewport.k}
+        pointerEvents="none"
+      />
+      {cell.level === "severe" ? (
+        <circle
+          className="weather-severe-cell-pulse"
+          data-testid="weather-severe-cell-pulse"
+          r={Math.max(8 / viewport.k, radius * 0.86)}
+          fill="none"
+          strokeWidth={1.2 / viewport.k}
+          pointerEvents="none"
+        />
+      ) : null}
+    </g>
+  );
+}
+
+function weatherLevelRank(level: WeatherCell["level"]) {
+  if (level === "severe") return 3;
+  if (level === "elevated") return 2;
+  return 1;
+}
+
+function positiveDimension(value: number, fallback: number) {
+  return Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
 function interpolateViewport(from: Viewport, to: Viewport, t: number): Viewport {

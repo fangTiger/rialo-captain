@@ -107,6 +107,15 @@ const claim = {
   settle_duration_ms: 118,
 };
 
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolver) => {
+    resolve = resolver;
+  });
+
+  return { promise, resolve };
+}
+
 function stubApi({
   flightStatus = 200,
   policies = [paidPolicy],
@@ -241,6 +250,24 @@ describe("FlightDetail", () => {
     expect(screen.getByText("+80 RIA")).toBeInTheDocument();
   });
 
+  it("renders a command center decision panel with risk, weather, market, and evidence context", async () => {
+    renderFlightDetail();
+
+    await waitFor(() => expect(screen.getByText("BA178")).toBeInTheDocument());
+
+    const commandPanel = screen.getByRole("region", {
+      name: /flight command center/i,
+    });
+
+    expect(commandPanel).toHaveClass("command-panel");
+    expect(within(commandPanel).getByText("RISK KPI")).toBeInTheDocument();
+    expect(within(commandPanel).getByText("WEATHER CONTEXT")).toBeInTheDocument();
+    expect(within(commandPanel).getByText("MARKET CONTEXT")).toBeInTheDocument();
+    expect(within(commandPanel).getByText("PURCHASE DECISION")).toBeInTheDocument();
+    expect(within(commandPanel).getByText("EVIDENCE READY")).toBeInTheDocument();
+    expect(within(commandPanel).getByText(/signal-only context/i)).toBeInTheDocument();
+  });
+
   it("replaces the insure block when an active policy exists", async () => {
     stubApi({ policies: [activePolicy] });
 
@@ -264,6 +291,67 @@ describe("FlightDetail", () => {
     expect(
       within(holdingSection).getByRole("link", { name: /view in hangar/i }),
     ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /confirm/i })).not.toBeInTheDocument();
+  });
+
+  it("keeps the purchase quote locked while policies are still loading, then shows the active holding", async () => {
+    const policiesDeferred = createDeferred<Response>();
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const url = String(input);
+
+        if (url.includes("/api/flights/")) {
+          return Promise.resolve(
+            new Response(JSON.stringify(flight), { status: 200 }),
+          );
+        }
+
+        if (url.includes("/api/policies")) {
+          return policiesDeferred.promise;
+        }
+
+        if (url.includes("/api/claims/recent?flight_id=")) {
+          return Promise.resolve(
+            new Response(JSON.stringify([]), { status: 200 }),
+          );
+        }
+
+        if (url.includes("/api/me")) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                id: "u1",
+                email: "captain@rialo.test",
+                name: "Captain",
+                avatar_url: "",
+                balance: 990,
+              }),
+              { status: 200 },
+            ),
+          );
+        }
+
+        return Promise.resolve(new Response("{}", { status: 200 }));
+      }),
+    );
+
+    renderFlightDetail();
+
+    await waitFor(() => expect(screen.getByText("BA178")).toBeInTheDocument());
+
+    expect(screen.queryByRole("button", { name: /confirm/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "INSURE" })).not.toBeInTheDocument();
+    expect(screen.getByText("POLICY LOCK CHECK")).toBeInTheDocument();
+
+    policiesDeferred.resolve(
+      new Response(JSON.stringify([activePolicy]), { status: 200 }),
+    );
+
+    await waitFor(() =>
+      expect(screen.getByText("ACTIVE HOLDING")).toBeInTheDocument(),
+    );
     expect(screen.queryByRole("button", { name: /confirm/i })).not.toBeInTheDocument();
   });
 

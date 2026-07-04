@@ -227,6 +227,85 @@ describe("REAL protagonist queue", () => {
     expect(duplicate.realQueue).toHaveLength(0);
   });
 
+  it("still ignores duplicate policy events by default but can force replay the same policy", () => {
+    const first = routeRealProtagonistState(
+      {
+        ...createInitialCinemaState(now - 5_000),
+        cycleStartedAt: now - 5_000,
+        storyResetId: 2,
+      },
+      eventWithPolicy("REAL0", "policy-real-0"),
+      now,
+      { playbackLockMs: 12_000 },
+    );
+
+    const duplicate = routeRealProtagonistState(
+      first,
+      eventWithPolicy("REAL0-replay", "policy-real-0", now + 500),
+      now + 500,
+      { playbackLockMs: 12_000 },
+    );
+
+    expect(duplicate).toBe(first);
+
+    const forcedReplay = routeRealProtagonistState(
+      first,
+      eventWithPolicy("REAL0-replay", "policy-real-0", now + 2_000),
+      now + 2_000,
+      { playbackLockMs: 12_000, force: true },
+    );
+
+    expect(forcedReplay).not.toBe(first);
+    expect(forcedReplay.protagonist).toMatchObject({
+      callsign: "REAL0-replay",
+      policyId: "policy-real-0",
+    });
+    expect(forcedReplay.cycleStartedAt).toBe(now + 2_000);
+    expect(forcedReplay.storyResetId).toBe(first.storyResetId + 1);
+    expect(forcedReplay.playbackLockedUntil).toBe(now + 14_000);
+    expect(forcedReplay.realQueue).toHaveLength(0);
+  });
+
+  it("still ignores stale policy events by default but can force replay them past the lookback window", () => {
+    const first = routeRealProtagonistState(
+      {
+        ...createInitialCinemaState(now - 5_000),
+        cycleStartedAt: now - 5_000,
+        storyResetId: 4,
+      },
+      eventWithPolicy("REAL6", "policy-real-6"),
+      now,
+      { playbackLockMs: 12_000 },
+    );
+    const staleCreatedAt = now - 60_001;
+
+    const staleIgnored = routeRealProtagonistState(
+      first,
+      eventWithPolicy("REAL6-stale", "policy-real-6", staleCreatedAt),
+      now + 2_000,
+      { playbackLockMs: 12_000 },
+    );
+
+    expect(staleIgnored).toBe(first);
+
+    const forcedReplay = routeRealProtagonistState(
+      first,
+      eventWithPolicy("REAL6-stale", "policy-real-6", staleCreatedAt),
+      now + 2_000,
+      { playbackLockMs: 12_000, force: true },
+    );
+
+    expect(forcedReplay).not.toBe(first);
+    expect(forcedReplay.protagonist).toMatchObject({
+      callsign: "REAL6-stale",
+      policyId: "policy-real-6",
+    });
+    expect(forcedReplay.cycleStartedAt).toBe(now + 2_000);
+    expect(forcedReplay.storyResetId).toBe(first.storyResetId + 1);
+    expect(forcedReplay.playbackLockedUntil).toBe(now + 14_000);
+    expect(forcedReplay.realQueue).toHaveLength(0);
+  });
+
   it("preserves policyId when a queued real event becomes protagonist on the next cycle", () => {
     const first = routeRealProtagonistState(
       createInitialCinemaState(now - 5_000),

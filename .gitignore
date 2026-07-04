@@ -17,6 +17,8 @@ frontend/.vite/
 frontend/playwright-report/
 frontend/test-results/
 frontend/tests/screenshots/
+.playwright-cli/
+output/
 *.tsbuildinfo
 frontend/vitest.config.js
 

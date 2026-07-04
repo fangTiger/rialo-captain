@@ -118,4 +118,13 @@ describe("ClaimRow", () => {
     expect(onEvidence).toHaveBeenCalledWith({ kind: "claim", id: "c1" });
     expect(navigateMock).not.toHaveBeenCalled();
   });
+
+  it("uses a wrapping grid instead of fixed columns for narrow claim feeds", () => {
+    const row = renderClaimRow();
+    const style = row.getAttribute("style") ?? "";
+
+    expect(style).toContain("repeat(auto-fit");
+    expect(style).toContain("minmax(min(");
+    expect(row).toHaveStyle({ overflowWrap: "anywhere" });
+  });
 });

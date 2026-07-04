@@ -21,6 +21,11 @@ const evidenceButtonStyle: CSSProperties = {
   lineHeight: 1,
   cursor: "pointer",
 };
+const claimTimeFormatter = new Intl.DateTimeFormat("en-US", {
+  hour: "numeric",
+  minute: "2-digit",
+  second: "2-digit",
+});
 
 export function ClaimRow({ c, onEvidence }: ClaimRowProps) {
   const navigate = useNavigate();
@@ -49,9 +54,9 @@ export function ClaimRow({ c, onEvidence }: ClaimRowProps) {
       onBlur={() => setIsActive(false)}
       style={{
         display: "grid",
-        gridTemplateColumns:
-          "120px minmax(0, 1fr) 100px 100px minmax(0, 200px) minmax(170px, 250px)",
-        padding: "14px 24px",
+        gridTemplateColumns: "repeat(auto-fit, minmax(min(170px, 100%), 1fr))",
+        gap: 10,
+        padding: "14px 16px",
         width: "100%",
         borderLeft: `2px solid ${isActive ? "var(--accent-radar)" : "transparent"}`,
         borderBottom: "1px solid var(--border-subtle)",
@@ -62,15 +67,20 @@ export function ClaimRow({ c, onEvidence }: ClaimRowProps) {
         color: "var(--text-secondary)",
         textAlign: "left",
         cursor: "pointer",
+        overflowWrap: "anywhere",
       }}
     >
-      <div style={{ color: "var(--accent-radar)" }}>
+      <div style={{ color: "var(--accent-radar)", minWidth: 0 }}>
         {c.policy_id.slice(0, 10)}…
       </div>
-      <div>{new Date(c.settled_at * 1000).toLocaleTimeString()}</div>
-      <div>{c.delay_minutes}m late</div>
-      <div style={{ color: "var(--text-primary)" }}>+{c.payout} RIA</div>
-      <div style={{ color: "var(--text-tertiary)" }}>
+      <div style={{ minWidth: 0 }}>
+        {claimTimeFormatter.format(new Date(c.settled_at * 1000))}
+      </div>
+      <div style={{ minWidth: 0 }}>{c.delay_minutes}m late</div>
+      <div style={{ color: "var(--text-primary)", minWidth: 0 }}>
+        +{c.payout} RIA
+      </div>
+      <div style={{ color: "var(--text-tertiary)", minWidth: 0 }}>
         {c.signature.slice(0, 18)}… ({c.settle_duration_ms}ms)
       </div>
       <div
@@ -79,6 +89,7 @@ export function ClaimRow({ c, onEvidence }: ClaimRowProps) {
           justifyContent: "flex-end",
           flexWrap: "wrap",
           gap: 8,
+          minWidth: 0,
         }}
       >
         <CopilotPromptChip

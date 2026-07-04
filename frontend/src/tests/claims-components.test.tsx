@@ -9,6 +9,13 @@ const copilotHarness = vi.hoisted(() => ({
   ask: vi.fn(),
 }));
 
+const claimTimeFormatterOptions: Intl.DateTimeFormatOptions = {
+  hour: "numeric",
+  minute: "2-digit",
+  second: "2-digit",
+};
+const hanTextPattern = /\p{Script=Han}/u;
+
 vi.mock("../components/copilot/CopilotProvider", () => ({
   useCopilot: () => copilotHarness,
 }));
@@ -53,6 +60,24 @@ describe("claims components", () => {
   });
 
   it("renders a claim row with policy, settlement time, delay, payout, and signature", () => {
+    const expectedTime = new Intl.DateTimeFormat(
+      "en-US",
+      claimTimeFormatterOptions,
+    ).format(new Date(claims[0].settled_at * 1000));
+    const originalToLocaleTimeString = Date.prototype.toLocaleTimeString;
+    const toLocaleTimeStringSpy = vi
+      .spyOn(Date.prototype, "toLocaleTimeString")
+      .mockImplementation(function (
+        this: Date,
+        locales?: Intl.LocalesArgument,
+        options?: Intl.DateTimeFormatOptions,
+      ) {
+        if (locales === undefined) {
+          return "下午2:13:20";
+        }
+        return originalToLocaleTimeString.call(this, locales, options);
+      });
+
     render(
       <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
         <ClaimRow c={claims[0]} />
@@ -60,11 +85,13 @@ describe("claims components", () => {
     );
 
     expect(screen.getByText("policy-alp…")).toBeInTheDocument();
-    expect(
-      screen.getByText(new Date(claims[0].settled_at * 1000).toLocaleTimeString()),
-    ).toBeInTheDocument();
+    expect(screen.getByText(expectedTime)).toBeInTheDocument();
+    expect(expectedTime).not.toMatch(hanTextPattern);
+    expect(screen.queryByText("下午2:13:20")).not.toBeInTheDocument();
     expect(screen.getByText("45m late")).toBeInTheDocument();
     expect(screen.getByText("+80 RIA")).toBeInTheDocument();
     expect(screen.getByText("0xabcdef1234567890… (118ms)")).toBeInTheDocument();
+
+    toLocaleTimeStringSpy.mockRestore();
   });
 });

@@ -78,8 +78,19 @@ describe("SearchPalette", () => {
 
     rerender(<SearchPalette open={true} onClose={vi.fn()} />);
 
-    expect(screen.getByRole("dialog", { name: "Search flights" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Flight search query")).toHaveFocus();
+    const dialog = screen.getByRole("dialog", { name: "Search flights" });
+    const input = screen.getByLabelText("Flight search query");
+
+    expect(screen.getByTestId("search-overlay")).toHaveClass(
+      "search-palette-overlay",
+    );
+    expect(dialog).toHaveClass(
+      "search-palette",
+      "command-panel",
+      "command-surface",
+    );
+    expect(input).toHaveClass("command-focus-ring");
+    expect(input).toHaveFocus();
   });
 
   it("renders results after typing", () => {
@@ -99,19 +110,53 @@ describe("SearchPalette", () => {
     const input = screen.getByLabelText("Flight search query");
     fireEvent.change(input, { target: { value: "UAL" } });
 
+    const listbox = screen.getByRole("listbox", {
+      name: "Flight search results",
+    });
+    const firstOption = screen.getByRole("option", {
+      name: /Open flight UAL2351/,
+    });
+    const secondOption = screen.getByRole("option", {
+      name: /Open flight UAL2360/,
+    });
+
+    expect(input).toHaveAttribute("aria-controls", "search-flight-results");
+    expect(listbox).toContainElement(firstOption);
+    expect(input).toHaveAttribute("aria-activedescendant", firstOption.id);
+    expect(firstOption).toHaveAttribute("aria-selected", "true");
+
     fireEvent.keyDown(input, { key: "ArrowDown" });
 
-    expect(screen.getByRole("button", { name: /Open flight UAL2360/ })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
+    expect(input).toHaveAttribute("aria-activedescendant", secondOption.id);
+    expect(secondOption).toHaveAttribute("aria-selected", "true");
 
     fireEvent.keyDown(input, { key: "ArrowUp" });
 
-    expect(screen.getByRole("button", { name: /Open flight UAL2351/ })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
+    expect(input).toHaveAttribute("aria-activedescendant", firstOption.id);
+    expect(firstOption).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("keeps result rows readable without fixed desktop columns on narrow screens", () => {
+    render(<SearchPalette open={true} onClose={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("Flight search query"), {
+      target: { value: "UAL" },
+    });
+
+    const firstOption = screen.getByRole("option", {
+      name: /Open flight UAL2351/,
+    });
+    const responsiveRules = screen.getByTestId("search-palette-responsive-rules");
+
+    expect(firstOption).toHaveClass("search-palette__result");
+    expect(firstOption.style.gridTemplateColumns).not.toContain("120px");
+    expect(firstOption.style.gridTemplateColumns).not.toContain("80px");
+    expect(firstOption).toHaveStyle({
+      minWidth: "0",
+      overflowWrap: "anywhere",
+      whiteSpace: "normal",
+    });
+    expect(responsiveRules.textContent).toContain("@media (max-width: 520px)");
+    expect(responsiveRules.textContent).toContain("grid-template-columns: 1fr");
   });
 
   it("navigates from current pathname on enter", () => {
@@ -136,7 +181,7 @@ describe("SearchPalette", () => {
       target: { value: "UAL" },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /Open flight UAL2415/ }));
+    fireEvent.click(screen.getByRole("option", { name: /Open flight UAL2415/ }));
 
     expect(navigateMock).toHaveBeenCalledWith("/flight/UAL2415-20260616", {
       state: { from: "/policies" },

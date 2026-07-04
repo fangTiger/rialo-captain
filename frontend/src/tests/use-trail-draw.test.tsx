@@ -43,6 +43,7 @@ interface TrailProbeProps {
   liveFlights?: FlightPublic[];
   userElectedFlight?: FlightPublic | null;
   userElectedTrailToken?: number;
+  suppressProtagonistTrail?: boolean;
   activeCycleStartedAt?: number;
   resetToken?: number;
   ttlMs?: number;
@@ -55,6 +56,7 @@ function TrailProbe({
   liveFlights = flights,
   userElectedFlight = null,
   userElectedTrailToken = 0,
+  suppressProtagonistTrail = false,
   activeCycleStartedAt = cycleStartedAt,
   resetToken = 0,
   ttlMs = TRAIL_DRAW_TTL_MS,
@@ -67,6 +69,7 @@ function TrailProbe({
     flights: liveFlights,
     userElectedFlight,
     userElectedTrailToken,
+    suppressProtagonistTrail,
     resetToken,
     ttlMs,
   });
@@ -378,6 +381,44 @@ describe("useTrailDraw", () => {
     const replayedState = screen.getByTestId("trail-state").textContent ?? "";
     expect(replayedState).toMatch(/^elected:DL101:\d+:traildraw\|/);
     expect(replayedState).not.toBe(firstState);
+  });
+
+  it("suppresses the protagonist trail until the purchased replay handoff is released", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(cycleStartedAt);
+    const resumedCycleStartedAt = cycleStartedAt + 5_000;
+
+    const { rerender } = render(
+      <TrailProbe phase="establish" suppressProtagonistTrail />,
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(5_000);
+    });
+
+    expect(screen.getByTestId("trail-state")).toHaveTextContent("none");
+
+    vi.setSystemTime(resumedCycleStartedAt);
+    rerender(
+      <TrailProbe
+        phase="establish"
+        suppressProtagonistTrail={false}
+        activeCycleStartedAt={resumedCycleStartedAt}
+      />,
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(3_999);
+    });
+    expect(screen.getByTestId("trail-state")).toHaveTextContent("none");
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+
+    expect(screen.getByTestId("trail-state")).toHaveTextContent(
+      `${resumedCycleStartedAt}:BA178-20260615:traildraw`,
+    );
   });
 
   it.each<CinemaMode>(["interactive", "paused-hidden", "degraded"])(

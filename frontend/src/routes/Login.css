@@ -11,6 +11,10 @@
   isolation: isolate;
 }
 
+.login-command-center {
+  background: var(--command-bg);
+}
+
 .login-shell {
   position: relative;
   z-index: 2;
@@ -213,71 +217,16 @@
 
 .login-nav {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: 1fr auto;
   align-items: center;
   gap: 24px;
   min-height: 52px;
 }
 
-.login-brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  font-family: var(--font-mono);
-  font-size: 13px;
-  color: var(--text-primary);
-}
-
-.login-brand-logo {
-  position: relative;
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  width: 24px;
-  height: 24px;
-  border: 1px solid rgba(0, 255, 157, 0.54);
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 50% 50%, rgba(0, 255, 157, 0.2), transparent 38%),
-    rgba(0, 255, 157, 0.045);
-  box-shadow:
-    inset 0 0 0 1px rgba(232, 227, 213, 0.08),
-    0 0 18px rgba(0, 255, 157, 0.16);
-}
-
-.login-brand-logo::after {
-  content: "";
-  position: absolute;
-  right: 3px;
-  top: 5px;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: var(--warn-amber);
-  box-shadow: 0 0 12px rgba(255, 180, 0, 0.36);
-}
-
-.login-brand-logo__orbit {
-  position: absolute;
-  inset: 4px;
-  border: 1px solid rgba(232, 227, 213, 0.32);
-  border-radius: 50%;
-  transform: rotate(-24deg) scaleX(0.68);
-}
-
-.login-brand-logo__glyph {
-  position: relative;
-  color: var(--text-primary);
-  font-family: var(--font-display);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1;
-}
-
 .login-nav-links {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 22px;
   font-family: var(--font-mono);
   font-size: 12px;
@@ -351,7 +300,6 @@
   max-width: 660px;
 }
 
-.login-hero-kicker,
 .login-panel-eyebrow,
 .dev-login-card__eyebrow,
 .dev-login-card__field span,
@@ -434,6 +382,13 @@
     0 24px 80px rgba(0, 0, 0, 0.36),
     0 0 34px rgba(0, 255, 157, 0.08);
   backdrop-filter: blur(18px);
+}
+
+.login-access-panel.command-surface,
+.login-signal-panel.command-surface,
+.dev-login-card.command-surface {
+  border-color: var(--command-border);
+  box-shadow: var(--glow-command);
 }
 
 .login-access-panel::before,
@@ -760,7 +715,7 @@
   }
 
   .login-nav {
-    grid-template-columns: auto auto;
+    grid-template-columns: 1fr auto;
   }
 
   .login-nav-links {
@@ -811,10 +766,6 @@
 @media (max-width: 640px) {
   .login-page {
     padding: 16px 16px 28px;
-  }
-
-  .login-brand span:last-child {
-    overflow-wrap: anywhere;
   }
 
   .login-hero {

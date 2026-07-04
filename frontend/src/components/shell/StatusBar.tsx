@@ -14,18 +14,24 @@ export function StatusBar() {
 
   return (
     <footer
+      className="status-bar command-surface command-safe-area"
       style={{
         position: "fixed",
         bottom: 0,
         left: 0,
         right: 0,
-        height: 32,
+        height: "calc(34px + env(safe-area-inset-bottom))",
         display: "flex",
         alignItems: "center",
         gap: 16,
-        padding: "0 16px",
-        borderTop: "1px solid var(--border-subtle)",
-        background: "var(--surface-1)",
+        paddingTop: 0,
+        paddingRight: "max(16px, env(safe-area-inset-right))",
+        paddingBottom: "env(safe-area-inset-bottom)",
+        paddingLeft: "max(16px, env(safe-area-inset-left))",
+        borderTop: "1px solid var(--command-border)",
+        background: "var(--command-surface-panel)",
+        boxShadow:
+          "0 -1px 0 rgba(0, 255, 157, 0.08), 0 -18px 48px rgba(0, 0, 0, 0.24)",
         fontFamily: "var(--font-mono)",
         fontSize: 11,
         color: "var(--text-secondary)",
@@ -35,13 +41,17 @@ export function StatusBar() {
     >
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <span
+          className="status-bar__signal"
+          data-state={wsState}
           style={{
             width: 8,
             height: 8,
             borderRadius: "var(--radius-pill)",
             background: COLORS[wsState],
             boxShadow:
-              wsState === "open" ? "0 0 8px var(--accent-radar-dim)" : "none",
+              wsState === "open"
+                ? "0 0 12px var(--accent-radar-dim)"
+                : "0 0 8px rgba(255, 180, 0, 0.12)",
           }}
         />
         <span>{wsState}</span>

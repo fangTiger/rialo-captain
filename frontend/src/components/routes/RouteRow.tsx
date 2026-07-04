@@ -27,8 +27,9 @@ export function RouteRow({ r, rank }: { r: HotRoute; rank: number }) {
       onBlur={() => setIsActive(false)}
       style={{
         display: "grid",
-        gridTemplateColumns: "40px 1fr 120px 100px",
-        padding: "14px 24px",
+        gridTemplateColumns: "repeat(auto-fit, minmax(min(150px, 100%), 1fr))",
+        gap: 12,
+        padding: "14px 16px",
         width: "100%",
         border: 0,
         borderLeft: `2px solid ${isActive ? "var(--accent-radar)" : "transparent"}`,
@@ -39,13 +40,14 @@ export function RouteRow({ r, rank }: { r: HotRoute; rank: number }) {
         alignItems: "center",
         textAlign: "left",
         cursor: "pointer",
+        overflowWrap: "anywhere",
       }}
     >
-      <div style={{ color: "var(--text-tertiary)" }}>#{rank}</div>
-      <div style={{ color: "var(--accent-radar)", fontSize: 16 }}>
+      <div style={{ color: "var(--text-tertiary)", minWidth: 0 }}>#{rank}</div>
+      <div style={{ color: "var(--accent-radar)", fontSize: 16, minWidth: 0 }}>
         {r.callsign}
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
         <div style={{ flex: 1, height: 6, background: "var(--surface-2)" }}>
           <div
             style={{
@@ -60,7 +62,13 @@ export function RouteRow({ r, rank }: { r: HotRoute; rank: number }) {
           {pct}%
         </span>
       </div>
-      <div style={{ textAlign: "right", color: "var(--text-secondary)" }}>
+      <div
+        style={{
+          textAlign: "right",
+          color: "var(--text-secondary)",
+          minWidth: 0,
+        }}
+      >
         {r.policy_count} pol
       </div>
     </button>

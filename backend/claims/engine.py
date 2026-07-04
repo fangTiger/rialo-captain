@@ -122,7 +122,7 @@ class ClaimEngine:
                     flight_id=policy.flight_id,
                     claim_id=claim.id,
                     event_type="claim.settled",
-                    title="赔付已结算",
+                    title="Claim settled",
                     source=self._settlement_source(contract_ref.mode),
                     payload={
                         "payout": policy.payout,
@@ -136,7 +136,7 @@ class ClaimEngine:
                     flight_id=policy.flight_id,
                     claim_id=claim.id,
                     event_type="balance.credited",
-                    title="余额已到账",
+                    title="Balance credited",
                     source="system",
                     payload={
                         "payout": policy.payout,
@@ -148,7 +148,7 @@ class ClaimEngine:
                     flight_id=policy.flight_id,
                     claim_id=claim.id,
                     event_type="flight.landed",
-                    title="航班已落地",
+                    title="Flight landed",
                     source="system",
                     payload={
                         "landed_at": landed_at,
@@ -216,7 +216,7 @@ class ClaimEngine:
             policy_id=policy.id,
             flight_id=policy.flight_id,
             event_type="observation.received",
-            title="收到延误观测",
+            title="Delay observation received",
             source="engine",
             payload={
                 "delay_minutes": delay_minutes,
@@ -229,7 +229,7 @@ class ClaimEngine:
             policy_id=policy.id,
             flight_id=policy.flight_id,
             event_type="condition.matched",
-            title="赔付条件已命中",
+            title="Payout condition matched",
             source="engine",
             payload={
                 "delay_minutes": delay_minutes,
@@ -280,7 +280,7 @@ class ClaimEngine:
                         policy_id=persistent.id,
                         flight_id=persistent.flight_id,
                         event_type="claim.triggered",
-                        title="赔付已触发",
+                        title="Claim triggered",
                         source="engine",
                         payload={
                             "delay_minutes": payload.delay_minutes,

@@ -4,6 +4,7 @@ import { CopilotPromptChip } from "./CopilotPromptChip";
 import { useCopilot } from "./CopilotProvider";
 import { filterEvidenceByAnswer, hasSuccessfulFinalAnswer } from "./evidence";
 import type { CopilotSource } from "../../api/copilot";
+import { SignalPill, type CommandTone } from "../../design/commandCenter";
 
 const focusableSelector = [
   'button:not([disabled])',
@@ -27,6 +28,21 @@ function scopeLabel(subjectType: string) {
     case "overview":
     default:
       return "Overview scope";
+  }
+}
+
+function sourceTone(type: string): CommandTone {
+  switch (type) {
+    case "flight":
+      return "weather";
+    case "policy":
+      return "radar";
+    case "claim":
+      return "elevated";
+    case "evidence":
+      return "guarded";
+    default:
+      return "neutral";
   }
 }
 
@@ -79,6 +95,21 @@ export function RialoCopilotPanel() {
   const announcedStatus = errorMessage
     ? "error"
     : liveStatus ?? (response ? "Answer ready" : null);
+  const providerStatus = (() => {
+    if (errorMessage) {
+      return "provider: DeepSeek / error";
+    }
+
+    if (response?.status === "unavailable") {
+      return "provider: DeepSeek / unavailable";
+    }
+
+    if (response?.model) {
+      return `provider: DeepSeek / active model ${response.model}`;
+    }
+
+    return "provider: DeepSeek / waiting for stream context";
+  })();
 
   useEffect(() => {
     if (!isOpen) {
@@ -194,6 +225,7 @@ export function RialoCopilotPanel() {
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        className="rialo-copilot-panel command-surface command-safe-area"
         tabIndex={-1}
         style={{
           position: "fixed",
@@ -201,14 +233,16 @@ export function RialoCopilotPanel() {
           right: 0,
           bottom: 0,
           width: "min(100vw, 35rem)",
-          background: "var(--surface-1)",
-          borderLeft: "1px solid var(--border-emphasis)",
-          boxShadow: "var(--elev-2)",
+          background: "var(--command-surface-panel)",
+          borderLeft: "1px solid var(--command-border)",
+          boxShadow: "var(--elev-2), var(--glow-command)",
           zIndex: 90,
           display: "grid",
           gridTemplateRows: "auto auto auto minmax(0, 1fr)",
+          overflow: "hidden",
         }}
       >
+        <div aria-hidden="true" className="command-decorative-layer command-scanline" />
         <button
           ref={closeButtonRef}
           type="button"
@@ -272,6 +306,13 @@ export function RialoCopilotPanel() {
           >
             <span>{scopeLabel(activeSubjectType)}</span>
             {activeSubjectId ? <span>ID: {activeSubjectId}</span> : null}
+            <SignalPill
+              tone="radar"
+              label="Copilot provider status"
+              className="rialo-copilot-panel__provider-status"
+            >
+              {providerStatus}
+            </SignalPill>
           </div>
         </header>
 
@@ -550,18 +591,13 @@ export function RialoCopilotPanel() {
                     }}
                   >
                     {visibleEvidence.map((source) => (
-                      <div
+                      <SignalPill
+                        as="div"
                         key={`${source.type}:${source.id}`}
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 8,
-                          padding: "8px 10px",
-                          border: "1px solid var(--border-subtle)",
-                          borderRadius: "999px",
-                          background: "rgba(20, 24, 31, 0.72)",
-                          maxWidth: "100%",
-                        }}
+                        role="group"
+                        tone={sourceTone(source.type)}
+                        label={`${source.type} source ${source.label}`}
+                        className="copilot-source-reference"
                       >
                         <div
                           style={{
@@ -600,7 +636,7 @@ export function RialoCopilotPanel() {
                             {source.label}
                           </div>
                         )}
-                      </div>
+                      </SignalPill>
                     ))}
                   </div>
                 </section>

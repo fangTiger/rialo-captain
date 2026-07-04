@@ -239,9 +239,9 @@ async def test_create_policy_records_evidence_events_without_changing_response_s
 
     created_event, watched_event = events
     assert created_event.source == "user"
-    assert created_event.title == "保单已创建"
+    assert created_event.title == "Policy created"
     assert watched_event.source == "contract"
-    assert watched_event.title == "合约监听已建立"
+    assert watched_event.title == "Contract watch established"
 
     assert created_event.payload_json is not None
     assert watched_event.payload_json is not None

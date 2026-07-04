@@ -179,10 +179,15 @@ describe("MyHangar", () => {
     expect(within(summary).getByText("MAX POTENTIAL PAYOUT")).toBeInTheDocument();
     expect(within(summary).getByText("SETTLED PAYOUT")).toBeInTheDocument();
     expect(within(summary).getByText("AT RISK")).toBeInTheDocument();
+    expect(within(summary).getByText("HIGHEST RISK")).toBeInTheDocument();
+    expect(within(summary).getByText("LIVE SIGNALS")).toBeInTheDocument();
     expect(within(summary).getByText("22 RIA")).toBeInTheDocument();
     expect(within(summary).getByText("120 RIA")).toBeInTheDocument();
     expect(within(summary).getByText("30 RIA")).toBeInTheDocument();
     expect(within(summary).getByText("1 policy")).toBeInTheDocument();
+    expect(within(summary).getByText("TRIGGERED")).toBeInTheDocument();
+    expect(within(summary).getByText("2 live")).toBeInTheDocument();
+    expect(summary).toHaveClass("command-panel");
   });
 
   it("renders zeroed summary values and keeps empty lanes visible", async () => {

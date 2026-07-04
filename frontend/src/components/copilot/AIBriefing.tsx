@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useCopilot } from "./CopilotProvider";
 import { filterEvidenceByAnswer, hasSuccessfulFinalAnswer } from "./evidence";
+import { SignalPill, type CommandTone } from "../../design/commandCenter";
 
 const OVERVIEW_PROMPTS = [
   "What needs attention right now?",
@@ -10,6 +11,21 @@ const OVERVIEW_PROMPTS = [
   "What should I verify first in evidence?",
 ] as const;
 const AI_BRIEFING_BODY_ID = "ai-briefing-body";
+
+function sourceTone(type: string): CommandTone {
+  switch (type) {
+    case "flight":
+      return "weather";
+    case "policy":
+      return "radar";
+    case "claim":
+      return "elevated";
+    case "evidence":
+      return "guarded";
+    default:
+      return "neutral";
+  }
+}
 
 export function AIBriefing() {
   const {
@@ -22,7 +38,7 @@ export function AIBriefing() {
     response,
     stop,
   } = useCopilot();
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(true);
   const [question, setQuestion] = useState("");
 
   const isOverviewActive = activeSubjectType === "overview";
@@ -69,11 +85,13 @@ export function AIBriefing() {
 
   return (
     <section
+      aria-label="AI Briefing"
+      className="ai-briefing command-surface command-panel"
       data-testid="ai-briefing"
       data-collapsed={isCollapsed ? "true" : "false"}
       style={{
         width: isCollapsed ? "fit-content" : "min(100%, 28rem)",
-        maxWidth: isCollapsed ? "min(100%, 13rem)" : "min(100%, 28rem)",
+        maxWidth: isCollapsed ? "min(100%, 18rem)" : "min(100%, 28rem)",
         padding: isCollapsed ? "8px 10px" : "18px 18px 16px",
         border: `1px solid ${
           isCollapsed ? "var(--border-subtle)" : "var(--border-emphasis)"
@@ -87,6 +105,7 @@ export function AIBriefing() {
         gap: isCollapsed ? 8 : 12,
       }}
     >
+      <div aria-hidden="true" className="command-decorative-layer command-scanline" />
       <div
         style={{
           display: "flex",
@@ -107,6 +126,13 @@ export function AIBriefing() {
           >
             AI Briefing
           </div>
+          <SignalPill
+            tone="radar"
+            label="AI Briefing provider status"
+            className="ai-briefing__provider-status"
+          >
+            provider: DeepSeek
+          </SignalPill>
           {!isCollapsed ? (
             <div
               style={{
@@ -403,21 +429,14 @@ export function AIBriefing() {
                       }}
                     >
                       {visibleEvidence.map((source) => (
-                        <span
+                        <SignalPill
                           key={`${source.type}:${source.id}`}
-                          style={{
-                            padding: "6px 8px",
-                            border: "1px solid var(--border-subtle)",
-                            borderRadius: "var(--radius-sharp)",
-                            color: "var(--text-secondary)",
-                            fontFamily: "var(--font-mono)",
-                            fontSize: 10,
-                            lineHeight: 1.3,
-                            overflowWrap: "anywhere",
-                          }}
+                          tone={sourceTone(source.type)}
+                          label={`${source.type} source ${source.label}`}
+                          className="copilot-source-reference"
                         >
                           {source.label}
-                        </span>
+                        </SignalPill>
                       ))}
                     </div>
                   </div>

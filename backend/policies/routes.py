@@ -113,7 +113,7 @@ async def _record_policy_evidence(
         policy_id=policy.id,
         flight_id=flight.id,
         event_type="policy.created",
-        title="保单已创建",
+        title="Policy created",
         source="user",
         payload={
             "premium": policy.premium,
@@ -126,7 +126,7 @@ async def _record_policy_evidence(
         policy_id=policy.id,
         flight_id=flight.id,
         event_type="contract.watched",
-        title="合约监听已建立",
+        title="Contract watch established",
         source="contract",
         payload={
             "contract_ref": contract_ref.id,

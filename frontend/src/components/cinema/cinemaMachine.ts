@@ -59,8 +59,9 @@ const REAL_EVENT_LOOKBACK_MS = 60_000;
 const REAL_QUEUE_CAP = 3;
 export const REAL_INJECT_ERROR_MS = 3_000;
 
-interface RouteRealProtagonistOptions {
+export interface RouteRealProtagonistOptions {
   playbackLockMs?: number;
+  force?: boolean;
 }
 
 export function phaseForElapsed(elapsedMs: number): CinemaPhase {
@@ -349,8 +350,10 @@ export function routeRealProtagonistState(
   now: number,
   options: RouteRealProtagonistOptions = {},
 ): CinemaState {
-  if (now - event.createdAt > REAL_EVENT_LOOKBACK_MS) return state;
-  if (hasSeenRealEventPolicy(state, event)) return state;
+  if (!options.force && now - event.createdAt > REAL_EVENT_LOOKBACK_MS) {
+    return state;
+  }
+  if (!options.force && hasSeenRealEventPolicy(state, event)) return state;
 
   const lastRealTakeoverEventAt = state.lastRealTakeoverEventAt;
   const isBurst =
@@ -360,7 +363,7 @@ export function routeRealProtagonistState(
       : state.lastRealTakeoverAt !== null &&
         now - state.lastRealTakeoverAt < 1_000;
 
-  if (isBurst) {
+  if (!options.force && isBurst) {
     return {
       ...state,
       realQueue: [...state.realQueue, event].slice(-REAL_QUEUE_CAP),

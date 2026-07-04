@@ -1,12 +1,22 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { TowerShell } from "../routes/TowerShell";
 import type { CameraTarget } from "../components/cinema/CinemaContext";
+import type { TowerRiskSignal } from "../components/tower/riskSignals";
 import type { FlightPublic } from "../hooks/useFlights";
+import { useEventStore } from "../store/eventStore";
+
+const riskIntelligencePanelCss = readFileSync(
+  resolve(process.cwd(), "src/components/tower/RiskIntelligencePanel.css"),
+  "utf8",
+);
 
 interface TrailDrawMockOptions {
   userElectedFlight?: { callsign: string } | null;
+  suppressProtagonistTrail?: boolean;
   ttlMs?: number;
 }
 
@@ -93,6 +103,29 @@ const globeHarness = vi.hoisted(() => ({
     | ((viewport: { k: number; x: number; y: number }) => void)
     | undefined
   >,
+  weatherLayerVisible: [] as boolean[],
+  riskSignalExists: [] as boolean[],
+  riskSubjectLabels: [] as Array<string | null>,
+  weatherSnapshots: [] as Array<
+    Array<{
+      id: string;
+      longitude: number;
+      latitude: number;
+      radiusDeg: number;
+      level: string;
+    }>
+  >,
+  weatherBandSnapshots: [] as Array<
+    Array<{
+      id: string;
+      points: Array<[number, number]>;
+      widthDeg: number;
+      level: string;
+      kind: string;
+    }>
+  >,
+  corridorSubjects: [] as Array<string | null>,
+  corridorSegments: [] as string[][],
 }));
 
 const copilotHarness = vi.hoisted(() => ({
@@ -128,7 +161,9 @@ const keyMomentHarness = vi.hoisted(() => {
     clearAllMoments: vi.fn(() => {
       harness.order.push("clear");
     }),
-    enqueue: vi.fn(),
+    enqueue: vi.fn((moment: { kind: string }) => {
+      harness.order.push(`enqueue:${moment.kind}`);
+    }),
     resetForProtagonist: vi.fn(),
     useKeyMomentQueue: vi.fn(() => ({
       activeMoments: [],
@@ -139,6 +174,11 @@ const keyMomentHarness = vi.hoisted(() => {
   };
   return harness;
 });
+
+const evidenceDrawerHarness = vi.hoisted(() => ({
+  subject: null as null | { kind: "claim" | "policy"; id: string },
+  closeCalls: 0,
+}));
 
 vi.mock("../hooks/useFlights", () => ({
   useFlights: () => ({
@@ -316,6 +356,37 @@ vi.mock("../components/drawer/BuyDrawer", () => ({
   ),
 }));
 
+vi.mock("../components/evidence/EvidenceDrawer", () => ({
+  EvidenceDrawer: ({
+    subject,
+    onClose,
+  }: {
+    subject: { kind: "claim" | "policy"; id: string } | null;
+    onClose: () => void;
+  }) => {
+    evidenceDrawerHarness.subject = subject;
+    if (!subject) return null;
+    return (
+      <div
+        data-testid="evidence-drawer"
+        data-subject-kind={subject.kind}
+        data-subject-id={subject.id}
+      >
+        evidence drawer
+        <button
+          type="button"
+          onClick={() => {
+            evidenceDrawerHarness.closeCalls += 1;
+            onClose();
+          }}
+        >
+          close evidence drawer
+        </button>
+      </div>
+    );
+  },
+}));
+
 vi.mock("../components/tower/GlobeMap", () => ({
   GlobeMap: ({
     cameraTarget,
@@ -323,15 +394,47 @@ vi.mock("../components/tower/GlobeMap", () => ({
     onUserGesture,
     onSelectFlight,
     protagonistHighlight,
+    weatherLayerVisible,
+    riskSignal,
   }: {
     cameraTarget?: CameraTarget | null;
     onViewportChange?: (viewport: { k: number; x: number; y: number }) => void;
     onUserGesture?: () => void;
     onSelectFlight?: (callsign: string) => void;
     protagonistHighlight?: { callsign: string } | null;
+    weatherLayerVisible?: boolean;
+    riskSignal?: TowerRiskSignal | null;
   }) => {
     globeHarness.cameraTargets.push(cameraTarget ?? null);
     globeHarness.viewportChangeHandlers.push(onViewportChange);
+    globeHarness.weatherLayerVisible.push(Boolean(weatherLayerVisible));
+    globeHarness.riskSignalExists.push(Boolean(riskSignal));
+    globeHarness.riskSubjectLabels.push(riskSignal?.market.subjectLabel ?? null);
+    globeHarness.weatherSnapshots.push(
+      riskSignal?.weatherCells.map((cell) => ({
+        id: cell.id,
+        longitude: cell.longitude,
+        latitude: cell.latitude,
+        radiusDeg: cell.radiusDeg,
+        level: cell.level,
+      })) ?? [],
+    );
+    globeHarness.weatherBandSnapshots.push(
+      (riskSignal?.weatherBands ?? []).map((band) => ({
+        id: band.id,
+        points: band.points,
+        widthDeg: band.widthDeg,
+        level: band.level,
+        kind: band.kind,
+      })) ?? [],
+    );
+    globeHarness.corridorSubjects.push(riskSignal?.corridor?.callsign ?? null);
+    globeHarness.corridorSegments.push(
+      riskSignal?.corridor?.segments.map(
+        (segment) =>
+          `${segment.id}:${segment.from.join(",")}:${segment.to.join(",")}`,
+      ) ?? [],
+    );
 
     return (
       <div>
@@ -345,6 +448,9 @@ vi.mock("../components/tower/GlobeMap", () => ({
           data-camera-duration-ms={cameraTarget?.durationMs ?? "none"}
           data-protagonist-highlight={protagonistHighlight?.callsign ?? "none"}
           data-has-on-viewport-change={String(Boolean(onViewportChange))}
+          data-weather-layer-visible={String(Boolean(weatherLayerVisible))}
+          data-has-risk-signal={String(Boolean(riskSignal))}
+          data-risk-subject-label={riskSignal?.market.subjectLabel ?? "none"}
           onClick={() => onSelectFlight?.("BA178")}
         >
           mock globe
@@ -422,6 +528,20 @@ function LocationProbe() {
   return <div data-testid="location-probe">{location.pathname}</div>;
 }
 
+function ensureAiBriefingExpanded() {
+  const expand = screen.queryByRole("button", { name: "Expand AI Briefing" });
+  if (expand) {
+    fireEvent.click(expand);
+  }
+}
+
+function collapseAiBriefing() {
+  const collapse = screen.queryByRole("button", { name: "Collapse AI Briefing" });
+  if (collapse) {
+    fireEvent.click(collapse);
+  }
+}
+
 describe("TowerShell", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -441,6 +561,13 @@ describe("TowerShell", () => {
     trailHarness.useTrailDraw.mockImplementation(() => ({ activeTrail: null }));
     globeHarness.cameraTargets = [];
     globeHarness.viewportChangeHandlers = [];
+    globeHarness.weatherLayerVisible = [];
+    globeHarness.riskSignalExists = [];
+    globeHarness.riskSubjectLabels = [];
+    globeHarness.weatherSnapshots = [];
+    globeHarness.weatherBandSnapshots = [];
+    globeHarness.corridorSubjects = [];
+    globeHarness.corridorSegments = [];
     buyDrawerHarness.purchaseRequests = 0;
     buyDrawerHarness.purchaseMode = "immediate";
     buyDrawerHarness.pendingComplete = null;
@@ -457,7 +584,10 @@ describe("TowerShell", () => {
     keyMomentHarness.enqueue.mockClear();
     keyMomentHarness.resetForProtagonist.mockClear();
     keyMomentHarness.useKeyMomentQueue.mockClear();
+    evidenceDrawerHarness.subject = null;
+    evidenceDrawerHarness.closeCalls = 0;
     towerHarness.providerMounts = 0;
+    useEventStore.setState({ flares: [], toasts: [], events: [], wsState: "idle" });
     copilotHarness.ask.mockReset();
     copilotHarness.stop.mockReset();
     copilotHarness.openPanel.mockReset();
@@ -534,6 +664,12 @@ describe("TowerShell", () => {
     expect(screen.getByTestId("cinema-overlay")).toContainElement(
       screen.getByTestId("traildraw-layer"),
     );
+    expect(trailHarness.useTrailDraw).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        suppressProtagonistTrail: false,
+        userElectedFlight: null,
+      }),
+    );
     expect(screen.getByTestId("mode-indicator")).toHaveTextContent("CINEMA");
     expect(screen.getByTestId("protagonist-badge")).toHaveTextContent("DEMO");
     expect(screen.getByTestId("mock-globe")).toHaveAttribute(
@@ -583,6 +719,523 @@ describe("TowerShell", () => {
     expect(screen.getByTestId("location-probe")).toHaveTextContent("/");
   });
 
+  it("renders compact weather and market odds by default, then expands details on demand", () => {
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByRole("switch", { name: "Weather risk layer" }),
+    ).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByTestId("mock-globe")).toHaveAttribute(
+      "data-weather-layer-visible",
+      "true",
+    );
+    expect(screen.getByTestId("mock-globe")).toHaveAttribute(
+      "data-has-risk-signal",
+      "true",
+    );
+    expect(globeHarness.weatherLayerVisible.at(-1)).toBe(true);
+    expect(globeHarness.riskSignalExists.at(-1)).toBe(true);
+    expect(globeHarness.riskSubjectLabels.at(-1)).toBe("BA178");
+    expect(globeHarness.corridorSubjects.at(-1)).toBeNull();
+    expect(globeHarness.corridorSegments.at(-1)).toHaveLength(0);
+    expect(screen.getByTestId("risk-intelligence-panel")).toHaveTextContent(
+      "MARKET ODDS",
+    );
+    expect(screen.getByTestId("risk-intelligence-panel")).toHaveTextContent(
+      /\d+\.\d+x/,
+    );
+    expect(screen.getByTestId("risk-intelligence-panel")).toHaveStyle({
+      maxHeight: "100%",
+      overflowY: "auto",
+    });
+    expect(
+      screen.getByTestId("risk-intelligence-panel-summary"),
+    ).toHaveStyle({
+      overflow: "visible",
+    });
+    expect(screen.getByText(/Market implied/i)).toBeInTheDocument();
+    expect(screen.getByText(/Rialo model/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("meter", { name: "Model-vs-market divergence" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Market more bearish|Model more cautious|Market aligned/)).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Weather pressure contribution"),
+    ).toHaveTextContent(/BA178|Sky overview/);
+    expect(
+      screen.queryByRole("group", { name: "Read-only odds watchlist" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Signal only · not settlement trigger"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Simulated signal")).not.toBeInTheDocument();
+    expect(screen.queryByText("Rialo demo risk v2")).not.toBeInTheDocument();
+    expect(screen.queryByText("Medium confidence")).not.toBeInTheDocument();
+    expect(screen.queryByText("15m forecast window")).not.toBeInTheDocument();
+
+    const detailsButton = screen.getByRole("button", { name: "DETAILS" });
+    const detailsId = detailsButton.getAttribute("aria-controls");
+
+    expect(detailsButton).toHaveAttribute("aria-expanded", "false");
+    expect(detailsId).toMatch(/^risk-intelligence-details-/);
+    expect(screen.getByTestId("risk-intelligence-panel-details")).toHaveAttribute(
+      "hidden",
+    );
+    expect(screen.getByTestId("risk-intelligence-panel-details")).toHaveAttribute(
+      "id",
+      detailsId ?? "",
+    );
+
+    fireEvent.click(detailsButton);
+
+    const details = screen.getByTestId("risk-intelligence-panel-details");
+    const detailsScroll = screen.getByTestId("risk-intelligence-panel-details-scroll");
+
+    expect(screen.getByRole("button", { name: "HIDE" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    expect(details).toHaveAttribute("id", detailsId ?? "");
+    expect(detailsScroll).toHaveClass(
+      "risk-intelligence-panel__details-scroll",
+      "risk-intelligence-panel__themed-scrollbar",
+    );
+    expect(detailsScroll).toHaveAttribute("tabindex", "0");
+    expect(detailsScroll).toHaveAttribute("aria-label", "Risk intelligence details");
+    expect(detailsScroll).toHaveStyle({
+      maxHeight: "min(12rem, calc(100dvh - var(--top-nav-height, 64px) - 272px))",
+      overflowY: "auto",
+    });
+    expect(screen.getByRole("group", { name: "Read-only odds watchlist" })).toBeInTheDocument();
+    expect(screen.getByText("Signal only · not settlement trigger")).toBeInTheDocument();
+    expect(screen.getByText("Simulated signal")).toBeInTheDocument();
+    expect(screen.getByText("Rialo demo risk v2")).toBeInTheDocument();
+    expect(screen.getByText("Medium confidence")).toBeInTheDocument();
+    expect(screen.getByText("15m forecast window")).toBeInTheDocument();
+
+    const rightStack = screen.getByTestId("tower-right-hud-stack");
+    const riskPanelSlot = screen.getByTestId("tower-risk-panel-slot");
+    const railContainer = screen.getByTestId("guided-demo-rail-container");
+    const aiBriefingSlot = screen.getByTestId("tower-ai-briefing-slot");
+
+    expect(rightStack).toContainElement(riskPanelSlot);
+    expect(riskPanelSlot).toContainElement(screen.getByTestId("risk-intelligence-panel"));
+    expect(rightStack).toContainElement(railContainer);
+    expect(rightStack).not.toContainElement(aiBriefingSlot);
+    expect(rightStack).toHaveStyle({
+      top: "20px",
+      right: "20px",
+      display: "grid",
+      height: "calc(100dvh - var(--top-nav-height, 64px) - 72px)",
+      maxHeight: "calc(100dvh - var(--top-nav-height, 64px) - 72px)",
+      minHeight: "0",
+      overflow: "hidden",
+      gridTemplateRows:
+        "minmax(0, min(24rem, calc(100% - 13rem))) minmax(12rem, 1fr)",
+    });
+    expect(riskPanelSlot).toHaveStyle({
+      pointerEvents: "auto",
+      width: "100%",
+      minHeight: "0",
+      height: "100%",
+      maxHeight: "100%",
+      overflow: "hidden",
+    });
+    expect(screen.getByTestId("risk-intelligence-panel")).toHaveStyle({
+      maxHeight: "100%",
+      overflowY: "auto",
+    });
+    expect(railContainer).toHaveAttribute("data-layout", "stacked");
+    expect(railContainer).toHaveStyle({
+      position: "static",
+      top: "auto",
+      right: "auto",
+      minHeight: "0",
+      height: "100%",
+    });
+    expect(screen.getByTestId("guided-demo-rail")).toHaveStyle({
+      width: "100%",
+      minHeight: "0",
+      maxHeight: "100%",
+      overflowY: "auto",
+    });
+  });
+
+  it("opens weather details from the weather summary without relying on the generic details toggle", () => {
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const weatherButton = screen.getByRole("button", {
+      name: "Weather pressure contribution",
+    });
+    const weatherDetailsId = weatherButton.getAttribute("aria-controls");
+
+    expect(weatherButton).toHaveAttribute("aria-expanded", "false");
+    expect(weatherDetailsId).toMatch(/^risk-intelligence-weather-details-/);
+    expect(
+      screen.getByTestId("risk-intelligence-weather-details"),
+    ).toHaveAttribute("hidden");
+    expect(
+      screen.queryByText(/corridor model risk; signal-only context/i),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("group", { name: "Weather risk watchlist" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "DETAILS" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+
+    fireEvent.click(weatherButton);
+
+    const weatherDetails = screen.getByTestId("risk-intelligence-weather-details");
+
+    expect(weatherButton).toHaveAttribute("aria-expanded", "true");
+    expect(weatherDetails).toHaveAttribute("id", weatherDetailsId ?? "");
+    expect(weatherDetails).not.toHaveAttribute("hidden");
+    expect(weatherDetails).toHaveTextContent(
+      /corridor model risk; signal-only context/i,
+    );
+    expect(weatherDetails).toHaveTextContent("Simulated signal");
+    expect(weatherDetails).toHaveTextContent("Medium confidence");
+    expect(weatherDetails).toHaveTextContent("15m forecast window");
+    expect(
+      screen.getByRole("group", { name: "Weather risk watchlist" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "DETAILS" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+  });
+
+  it("keeps market odds and weather corridor aligned with the current cinema focus", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    cinemaState.protagonist = {
+      kind: "DEMO",
+      flightId: "DL101",
+      callsign: "DL101",
+      longitude: -118.41,
+      latitude: 33.94,
+      name: "Bob",
+    };
+    towerHarness.flights = [
+      {
+        icao24: "a1b2c3",
+        callsign: "BA178",
+        origin_country: "United Kingdom",
+        longitude: -73.78,
+        latitude: 40.64,
+        velocity: 240,
+        heading: 90,
+        on_ground: false,
+        delay_rate: 0.31,
+      },
+      {
+        icao24: "d4e5f6",
+        callsign: "DL101",
+        origin_country: "United States",
+        longitude: -118.41,
+        latitude: 33.94,
+        velocity: 230,
+        heading: 80,
+        on_ground: false,
+        delay_rate: 0.2,
+      },
+    ];
+
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId("mock-globe")).toHaveAttribute(
+      "data-protagonist-highlight",
+      "DL101",
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("risk-intelligence-panel")).toHaveTextContent(
+        "DL101",
+      );
+      expect(globeHarness.riskSubjectLabels.at(-1)).toBe("DL101");
+      expect(globeHarness.corridorSubjects.at(-1)).toBeNull();
+      expect(globeHarness.corridorSegments.at(-1)).toHaveLength(0);
+    });
+  });
+
+  it("flows AI Briefing and the risk HUD in a compact top stack while keeping the guide on the bottom rail", () => {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      writable: true,
+      value: 640,
+    });
+
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const compactTopStack = screen.getByTestId("tower-compact-top-stack");
+    const aiBriefingSlot = screen.getByTestId("tower-ai-briefing-slot");
+    const riskPanel = screen.getByTestId("risk-intelligence-panel");
+    const railContainer = screen.getByTestId("guided-demo-rail-container");
+
+    expect(compactTopStack).toContainElement(aiBriefingSlot);
+    expect(compactTopStack).toContainElement(riskPanel);
+    expect(screen.queryByTestId("tower-right-hud-stack")).not.toBeInTheDocument();
+    expect(compactTopStack).toHaveStyle({
+      top: "20px",
+      left: "20px",
+      right: "20px",
+      display: "grid",
+    });
+    expect(railContainer).toHaveAttribute("data-layout", "bottom");
+    expect(compactTopStack).not.toContainElement(railContainer);
+    expect(railContainer).toHaveStyle({
+      top: "auto",
+      bottom: "20px",
+      left: "20px",
+      right: "20px",
+    });
+  });
+
+  it("toggles weather visibility without opening drawers, asking Copilot, navigating, or remounting cinema", () => {
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <LocationProbe />
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+          <Route path="/flight/:id" element={<FlightDetailProbe />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(towerHarness.providerMounts).toBe(1);
+    expect(screen.queryByTestId("buy-drawer")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("switch", { name: "Weather risk layer" }));
+
+    expect(
+      screen.getByRole("switch", { name: "Weather risk layer" }),
+    ).toHaveAttribute("aria-checked", "false");
+    expect(globeHarness.weatherLayerVisible.at(-1)).toBe(false);
+    expect(screen.queryByTestId("buy-drawer")).not.toBeInTheDocument();
+    expect(buyDrawerHarness.purchaseRequests).toBe(0);
+    expect(copilotHarness.ask).not.toHaveBeenCalled();
+    expect(copilotHarness.openPanel).not.toHaveBeenCalled();
+    expect(screen.getByTestId("location-probe")).toHaveTextContent("/");
+    expect(
+      screen.queryByText("flight detail BA178-20260614"),
+    ).not.toBeInTheDocument();
+    expect(towerHarness.providerMounts).toBe(1);
+    expect(cinemaState.routeRealProtagonist).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("switch", { name: "Weather risk layer" }));
+
+    expect(
+      screen.getByRole("switch", { name: "Weather risk layer" }),
+    ).toHaveAttribute("aria-checked", "true");
+    expect(globeHarness.weatherLayerVisible.at(-1)).toBe(true);
+    expect(towerHarness.providerMounts).toBe(1);
+  });
+
+  it("keeps the prediction HUD and watchlist read-only", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-14T08:00:00.000Z"));
+    towerHarness.flights = [
+      {
+        icao24: "a1b2c3",
+        callsign: "BA178",
+        origin_country: "United Kingdom",
+        longitude: -73.78,
+        latitude: 40.64,
+        velocity: 240,
+        heading: 90,
+        on_ground: false,
+        delay_rate: 0.31,
+      },
+      {
+        icao24: "ua200x",
+        callsign: "UA200",
+        origin_country: "United States",
+        longitude: -0.46,
+        latitude: 51.47,
+        velocity: 220,
+        heading: 270,
+        on_ground: false,
+        delay_rate: 0.18,
+      },
+    ];
+
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <LocationProbe />
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+          <Route path="/flight/:id" element={<FlightDetailProbe />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const panel = screen.getByTestId("risk-intelligence-panel");
+    fireEvent.click(screen.getByRole("button", { name: "DETAILS" }));
+
+    const watchlist = screen.getByRole("group", {
+      name: "Read-only odds watchlist",
+    });
+    const watchlistScope = within(watchlist);
+
+    expect(towerHarness.providerMounts).toBe(1);
+    expect(panel).toContainElement(watchlist);
+    expect(screen.getByRole("meter", { name: "Model-vs-market divergence" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Weather pressure contribution")).toHaveTextContent(
+      /weather|pressure|corridor/i,
+    );
+    expect(watchlist).toHaveTextContent("signal-only");
+    expect(watchlistScope.getByText("BA178")).toBeInTheDocument();
+    expect(watchlistScope.getByText("UA200")).toBeInTheDocument();
+    expect(watchlist).toHaveTextContent(/UP|DOWN|FLAT/);
+
+    fireEvent.click(watchlist);
+    fireEvent.click(panel);
+
+    expect(screen.queryByTestId("buy-drawer")).not.toBeInTheDocument();
+    expect(buyDrawerHarness.purchaseRequests).toBe(0);
+    expect(copilotHarness.ask).not.toHaveBeenCalled();
+    expect(copilotHarness.openPanel).not.toHaveBeenCalled();
+    expect(screen.getByTestId("location-probe")).toHaveTextContent("/");
+    expect(towerHarness.providerMounts).toBe(1);
+    expect(useEventStore.getState().events).toEqual([]);
+  });
+
+  it("defines themed scrollbars for the expanded risk intelligence details", () => {
+    const detailsScrollRule =
+      riskIntelligencePanelCss.match(
+        /\.risk-intelligence-panel__themed-scrollbar\s*\{[^}]*\}/s,
+      )?.[0] ?? "";
+
+    expect(detailsScrollRule).toContain("scrollbar-width: thin");
+    expect(detailsScrollRule).toContain("scrollbar-color");
+    expect(detailsScrollRule).toContain("var(--warn-amber)");
+    expect(detailsScrollRule).toContain("rgba(232, 227, 213, 0.06)");
+    expect(detailsScrollRule).not.toContain("var(--command-bg)");
+    expect(riskIntelligencePanelCss).toContain(
+      ".risk-intelligence-panel__themed-scrollbar::-webkit-scrollbar-track",
+    );
+    expect(riskIntelligencePanelCss).toContain(
+      ".risk-intelligence-panel__themed-scrollbar::-webkit-scrollbar-thumb",
+    );
+    expect(riskIntelligencePanelCss).toContain(
+      ".risk-intelligence-panel__themed-scrollbar::-webkit-scrollbar-thumb:hover",
+    );
+    expect(riskIntelligencePanelCss).toContain("var(--accent-weather)");
+  });
+
+  it("updates market odds to the selected flight without creating a policy", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-14T08:00:00.000Z"));
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    towerHarness.flights = [
+      {
+        icao24: "a1b2c3",
+        callsign: "BA178",
+        origin_country: "United Kingdom",
+        longitude: -73.78,
+        latitude: 40.64,
+        velocity: 240,
+        heading: 90,
+        on_ground: false,
+        delay_rate: 0.31,
+      },
+      {
+        icao24: "ua200x",
+        callsign: "UA200",
+        origin_country: "United States",
+        longitude: -0.46,
+        latitude: 51.47,
+        velocity: 220,
+        heading: 270,
+        on_ground: false,
+        delay_rate: 0.18,
+      },
+    ];
+
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId("risk-intelligence-panel")).toHaveTextContent(
+      "BA178",
+    );
+    const initialWeatherSnapshot = globeHarness.weatherSnapshots.at(-1);
+    const initialWeatherBandSnapshot = globeHarness.weatherBandSnapshots.at(-1);
+    expect(initialWeatherSnapshot).toBeDefined();
+    expect(initialWeatherBandSnapshot).toBeDefined();
+    expect(globeHarness.corridorSubjects.at(-1)).toBeNull();
+    expect(globeHarness.corridorSegments.at(-1)).toHaveLength(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "pick UA200" }));
+
+    expect(screen.getByTestId("risk-intelligence-panel")).toHaveTextContent(
+      "UA200",
+    );
+    expect(globeHarness.riskSubjectLabels.at(-1)).toBe("UA200");
+    expect(globeHarness.weatherSnapshots.at(-1)).toEqual(initialWeatherSnapshot);
+    expect(globeHarness.weatherBandSnapshots.at(-1)).toEqual(
+      initialWeatherBandSnapshot,
+    );
+    expect(globeHarness.corridorSubjects.at(-1)).toBe("UA200");
+    expect(globeHarness.corridorSegments.at(-1)).toHaveLength(3);
+    expect(
+      globeHarness.corridorSegments
+        .at(-1)
+        ?.every((segment) => segment.startsWith("UA200-corridor-")),
+    ).toBe(true);
+    expect(buyDrawerHarness.purchaseRequests).toBe(0);
+    expect(useEventStore.getState().events).toEqual([]);
+  });
+
   it("passes the selected flight as the user-elected trail protagonist", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-14T08:00:00.000Z"));
@@ -611,6 +1264,7 @@ describe("TowerShell", () => {
 
     expect(trailHarness.useTrailDraw).toHaveBeenLastCalledWith(
       expect.objectContaining({
+        suppressProtagonistTrail: true,
         userElectedFlight: expect.objectContaining({
           callsign: "BA178",
           latitude: 40.64,
@@ -642,7 +1296,7 @@ describe("TowerShell", () => {
     );
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Start guided demo" }),
+      screen.getByRole("button", { name: "Start guide" }),
     );
     fireEvent.click(
       screen.getByRole("button", { name: "Use recommended flight" }),
@@ -660,13 +1314,12 @@ describe("TowerShell", () => {
     });
     expect(lastCameraTarget?.zoom ?? 0).toBeGreaterThan(1);
     expect(lastCameraTarget?.zoom ?? 99).toBeLessThanOrEqual(12);
-    expect(lastCameraTarget?.durationMs ?? 0).toBeGreaterThanOrEqual(500);
-    expect(lastCameraTarget?.durationMs ?? 9_999).toBeLessThanOrEqual(4_000);
+    expect(lastCameraTarget?.durationMs).toBe(2_000);
     expect(screen.getByTestId("mock-globe")).toHaveAttribute(
       "data-camera-reason",
       "protagonist",
     );
-    expect(lastTrailOptions?.ttlMs ?? 0).toBeGreaterThan(1_000);
+    expect(lastTrailOptions?.ttlMs).toBe(8_000);
     expect(trailHarness.useTrailDraw).toHaveBeenLastCalledWith(
       expect.objectContaining({
         userElectedFlight: expect.objectContaining({
@@ -699,7 +1352,7 @@ describe("TowerShell", () => {
     );
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Start guided demo" }),
+      screen.getByRole("button", { name: "Start guide" }),
     );
     fireEvent.click(
       screen.getByRole("button", { name: "Use recommended flight" }),
@@ -759,7 +1412,7 @@ describe("TowerShell", () => {
     );
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Start guided demo" }),
+      screen.getByRole("button", { name: "Start guide" }),
     );
     fireEvent.click(
       screen.getByRole("button", { name: "Use recommended flight" }),
@@ -829,7 +1482,7 @@ describe("TowerShell", () => {
       ];
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Start guided demo" }),
+      screen.getByRole("button", { name: "Start guide" }),
     );
     fireEvent.click(
       screen.getByRole("button", { name: "Use recommended flight" }),
@@ -935,6 +1588,22 @@ describe("TowerShell", () => {
     );
 
     expect(screen.getByText("AI Briefing")).toBeInTheDocument();
+    expect(screen.getByTestId("ai-briefing")).toHaveAttribute(
+      "data-collapsed",
+      "true",
+    );
+    expect(
+      screen.getByRole("button", { name: "Expand AI Briefing" }),
+    ).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.queryByRole("button", { name: "Submit AI Briefing question" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "What needs attention right now?" }),
+    ).not.toBeInTheDocument();
+
+    ensureAiBriefingExpanded();
+
     expect(screen.queryByText("ANSWER")).not.toBeInTheDocument();
     expect(screen.queryByText("ANSWER BUFFER")).not.toBeInTheDocument();
     expect(
@@ -1013,6 +1682,20 @@ describe("TowerShell", () => {
     const briefing = screen.getByTestId("ai-briefing");
     const briefingBody = document.getElementById("ai-briefing-body");
 
+    expect(briefing).toHaveAttribute("data-collapsed", "true");
+    expect(briefing).toHaveStyle({ width: "fit-content" });
+    expect(briefingBody).toBeInTheDocument();
+    expect(briefingBody).toHaveAttribute("hidden");
+    expect(
+      screen.getByRole("button", { name: "Expand AI Briefing" }),
+    ).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.queryByText("BA178 is building payout pressure right now."),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("ANSWER BUFFER")).not.toBeInTheDocument();
+
+    ensureAiBriefingExpanded();
+
     fireEvent.click(
       screen.getByRole("button", { name: "What needs attention right now?" }),
     );
@@ -1040,9 +1723,7 @@ describe("TowerShell", () => {
       screen.getByRole("button", { name: "Stop AI Briefing stream" }),
     ).toBeInTheDocument();
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Collapse AI Briefing" }),
-    );
+    collapseAiBriefing();
 
     expect(copilotHarness.ask).not.toHaveBeenCalled();
     expect(copilotHarness.stop).not.toHaveBeenCalled();
@@ -1112,6 +1793,8 @@ describe("TowerShell", () => {
       </MemoryRouter>,
     );
 
+    ensureAiBriefingExpanded();
+
     fireEvent.change(screen.getByRole("textbox", { name: "AI Briefing question" }), {
       target: { value: "Where is settlement risk building?" },
     });
@@ -1167,6 +1850,8 @@ describe("TowerShell", () => {
       </MemoryRouter>,
     );
 
+    ensureAiBriefingExpanded();
+
     expect(
       screen.getByText("Tower is already streaming BA178 risk."),
     ).toBeInTheDocument();
@@ -1204,6 +1889,8 @@ describe("TowerShell", () => {
       </MemoryRouter>,
     );
 
+    ensureAiBriefingExpanded();
+
     expect(
       screen.getByText("Tower activity is elevated around BA178 and EK202 today."),
     ).toBeInTheDocument();
@@ -1233,6 +1920,8 @@ describe("TowerShell", () => {
         </Routes>
       </MemoryRouter>,
     );
+
+    ensureAiBriefingExpanded();
 
     const answerScroll = screen.getByTestId("ai-briefing-answer-scroll");
 
@@ -1265,6 +1954,8 @@ describe("TowerShell", () => {
         </Routes>
       </MemoryRouter>,
     );
+
+    ensureAiBriefingExpanded();
 
     fireEvent.click(
       screen.getByRole("button", { name: "Stop AI Briefing stream" }),
@@ -1311,6 +2002,8 @@ describe("TowerShell", () => {
         </Routes>
       </MemoryRouter>,
     );
+
+    ensureAiBriefingExpanded();
 
     fireEvent.click(screen.getByRole("button", { name: "Question 2" }));
     fireEvent.click(
@@ -1362,6 +2055,8 @@ describe("TowerShell", () => {
       </MemoryRouter>,
     );
 
+    ensureAiBriefingExpanded();
+
     expect(
       screen.getByText("BA178 is the flight I would watch first right now."),
     ).toBeInTheDocument();
@@ -1399,6 +2094,8 @@ describe("TowerShell", () => {
       </MemoryRouter>,
     );
 
+    ensureAiBriefingExpanded();
+
     expect(screen.getByText("Tower activity is elevated today.")).toBeInTheDocument();
     expect(screen.queryByText("Evidence used")).not.toBeInTheDocument();
     expect(screen.queryByText("Flight BA178 LHR->JFK")).not.toBeInTheDocument();
@@ -1432,6 +2129,8 @@ describe("TowerShell", () => {
         </Routes>
       </MemoryRouter>,
     );
+
+    ensureAiBriefingExpanded();
 
     expect(
       screen.getByText("BA178 is still the flight I would watch first right now."),
@@ -1597,7 +2296,7 @@ describe("TowerShell", () => {
     );
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Start guided demo" }),
+      screen.getByRole("button", { name: "Start guide" }),
     );
 
     expect(screen.getByText("Recommended flight")).toBeInTheDocument();
@@ -1609,6 +2308,51 @@ describe("TowerShell", () => {
       "BA178",
     );
     expect(screen.queryByTestId("buy-drawer")).not.toBeInTheDocument();
+    expect(buyDrawerHarness.purchaseRequests).toBe(0);
+  });
+
+  it("selects a demo scenario and asks copilot without opening buy cover or purchasing", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-14T08:00:00.000Z"));
+
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Start guide" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Evidence deep dive" }),
+    );
+
+    expect(
+      screen.getByText("Open the evidence story and explain how settlement was proven."),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("buy-drawer")).not.toBeInTheDocument();
+    expect(buyDrawerHarness.purchaseRequests).toBe(0);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Ask how the evidence chain proves settlement",
+      }),
+    );
+
+    expect(copilotHarness.ask).toHaveBeenCalledWith(
+      {
+        question: "How does the evidence chain prove this settlement step by step?",
+        subjectType: "overview",
+      },
+      { openPanel: false },
+    );
+    expect(copilotHarness.openPanel).not.toHaveBeenCalled();
     expect(buyDrawerHarness.purchaseRequests).toBe(0);
   });
 
@@ -1651,7 +2395,7 @@ describe("TowerShell", () => {
     );
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Start guided demo" }),
+      screen.getByRole("button", { name: "Start guide" }),
     );
     fireEvent.click(
       screen.getByRole("button", { name: "Use recommended flight" }),
@@ -1689,7 +2433,7 @@ describe("TowerShell", () => {
     );
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Start guided demo" }),
+      screen.getByRole("button", { name: "Start guide" }),
     );
     fireEvent.click(
       screen.getByRole("button", { name: "Use recommended flight" }),
@@ -1724,7 +2468,7 @@ describe("TowerShell", () => {
     );
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Start guided demo" }),
+      screen.getByRole("button", { name: "Start guide" }),
     );
     fireEvent.click(
       screen.getByRole("button", { name: "Use recommended flight" }),
@@ -1744,7 +2488,364 @@ describe("TowerShell", () => {
         playbackLockMs: expect.any(Number),
       }),
     );
+    expect(trailHarness.useTrailDraw).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        suppressProtagonistTrail: true,
+        userElectedFlight: null,
+      }),
+    );
     expect(buyDrawerHarness.purchaseRequests).toBe(1);
+  });
+
+  it("delays the purchased trail until about 2 seconds after checkout completes and keeps it visible through the 2-5 second window", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-14T08:00:00.000Z"));
+
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Start guide" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use recommended flight" }),
+    );
+    fireEvent.click(screen.getByText("confirm purchase"));
+
+    expect(screen.queryByTestId("trail-draw")).not.toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(1_999);
+    });
+
+    expect(screen.queryByTestId("trail-draw")).not.toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+
+    expect(screen.getByTestId("trail-draw")).toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(2_900);
+    });
+
+    expect(screen.getByTestId("trail-draw")).toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+
+    expect(screen.queryByTestId("trail-draw")).not.toBeInTheDocument();
+  });
+
+  it("opens the evidence story for the purchased policy without triggering purchase or replay", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-14T08:00:00.000Z"));
+
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Start guide" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use recommended flight" }),
+    );
+    fireEvent.click(screen.getByText("confirm purchase"));
+
+    const routeCallsBeforeOpen = cinemaState.routeRealProtagonist.mock.calls.length;
+    const replayCallsBeforeOpen = keyMomentHarness.enqueue.mock.calls.length;
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open evidence story" }),
+    );
+
+    expect(screen.getByTestId("evidence-drawer")).toHaveAttribute(
+      "data-subject-kind",
+      "policy",
+    );
+    expect(screen.getByTestId("evidence-drawer")).toHaveAttribute(
+      "data-subject-id",
+      "policy-guided-1",
+    );
+    expect(evidenceDrawerHarness.subject).toEqual({
+      kind: "policy",
+      id: "policy-guided-1",
+    });
+    expect(buyDrawerHarness.purchaseRequests).toBe(1);
+    expect(cinemaState.routeRealProtagonist.mock.calls.length).toBe(
+      routeCallsBeforeOpen,
+    );
+    expect(keyMomentHarness.enqueue.mock.calls.length).toBe(
+      replayCallsBeforeOpen,
+    );
+  });
+
+  it("replays settlement visuals on the 250ms/1s/2s/3s timeline without purchasing again or appending duplicate local policy events", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-14T08:00:00.000Z"));
+
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Start guide" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use recommended flight" }),
+    );
+    fireEvent.click(screen.getByText("confirm purchase"));
+
+    act(() => {
+      vi.advanceTimersByTime(2_999);
+    });
+
+    expect(useEventStore.getState().events).toEqual([]);
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+
+    expect(useEventStore.getState().events.map((event) => event.id)).toEqual([
+      "manual-buy:policy-guided-1:claim-triggered",
+    ]);
+
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
+
+    expect(useEventStore.getState().events.map((event) => event.id)).toEqual([
+      "manual-buy:policy-guided-1:flare",
+      "manual-buy:policy-guided-1:claim-settled",
+      "manual-buy:policy-guided-1:claim-triggered",
+    ]);
+
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
+
+    const initialSettlementEvent = useEventStore
+      .getState()
+      .events.find((event) => event.id === "manual-buy:policy-guided-1:claim-settled");
+    const initialEventIds = useEventStore.getState().events.map((event) => event.id);
+    expect(initialEventIds).toEqual([
+      "manual-buy:policy-guided-1:flight-landed",
+      "manual-buy:policy-guided-1:flare",
+      "manual-buy:policy-guided-1:claim-settled",
+      "manual-buy:policy-guided-1:claim-triggered",
+    ]);
+
+    keyMomentHarness.enqueue.mockClear();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Restart replay" }),
+    );
+
+    expect(screen.getByText("Replay running #2")).toBeInTheDocument();
+    expect(screen.queryByTestId("trail-draw")).not.toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(249);
+    });
+
+    expect(screen.queryByTestId("trail-draw")).not.toBeInTheDocument();
+    expect(keyMomentHarness.enqueue).not.toHaveBeenCalled();
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+
+    expect(screen.getByTestId("trail-draw")).toBeInTheDocument();
+    expect(keyMomentHarness.enqueue).not.toHaveBeenCalled();
+
+    act(() => {
+      vi.advanceTimersByTime(749);
+    });
+
+    expect(keyMomentHarness.enqueue).not.toHaveBeenCalled();
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+
+    expect(keyMomentHarness.enqueue.mock.calls.map(([moment]) => moment.kind)).toEqual([
+      "shockwave",
+    ]);
+
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
+
+    expect(keyMomentHarness.enqueue.mock.calls.map(([moment]) => moment.kind)).toEqual([
+      "shockwave",
+      "chainbeam",
+    ]);
+
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
+
+    expect(buyDrawerHarness.purchaseRequests).toBe(1);
+    expect(useEventStore.getState().events.map((event) => event.id)).toEqual(
+      initialEventIds,
+    );
+    expect(keyMomentHarness.enqueue).toHaveBeenCalledTimes(3);
+    expect(keyMomentHarness.enqueue.mock.calls.map(([moment]) => moment.kind)).toEqual([
+      "shockwave",
+      "chainbeam",
+      "flareland",
+    ]);
+    expect(cinemaState.routeRealProtagonist).toHaveBeenCalledTimes(2);
+    expect(cinemaState.routeRealProtagonist).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        policyId: "policy-guided-1",
+      }),
+      expect.objectContaining({
+        playbackLockMs: expect.any(Number),
+        force: true,
+      }),
+    );
+    const replayChainBeamCall = keyMomentHarness.enqueue.mock.calls.find(
+      ([moment]) => moment.kind === "chainbeam",
+    );
+    expect(replayChainBeamCall?.[0]).toMatchObject({
+      txHash: initialSettlementEvent?.payload.tx_hash,
+      policyId: "policy-guided-1",
+    });
+    expect(screen.getByText("Policy policy-guided-1")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Exit guide" })).toBeInTheDocument();
+  });
+
+  it("clears active replay key moments before starting another replay timeline", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-14T08:00:00.000Z"));
+
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Start guide" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use recommended flight" }),
+    );
+    fireEvent.click(screen.getByText("confirm purchase"));
+
+    act(() => {
+      vi.advanceTimersByTime(5_000);
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Restart replay" }),
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
+
+    expect(keyMomentHarness.enqueue.mock.calls.map(([moment]) => moment.kind)).toEqual([
+      "shockwave",
+    ]);
+
+    keyMomentHarness.clearAllMoments.mockClear();
+    keyMomentHarness.enqueue.mockClear();
+    keyMomentHarness.order.length = 0;
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Restart replay" }),
+    );
+
+    expect(screen.getByText("Replay running #3")).toBeInTheDocument();
+    expect(keyMomentHarness.clearAllMoments).toHaveBeenCalledTimes(1);
+    expect(keyMomentHarness.order).toEqual(["clear"]);
+
+    act(() => {
+      vi.advanceTimersByTime(999);
+    });
+
+    expect(keyMomentHarness.enqueue).not.toHaveBeenCalled();
+    expect(keyMomentHarness.order).toEqual(["clear"]);
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+
+    expect(keyMomentHarness.order).toEqual([
+      "clear",
+      "enqueue:shockwave",
+    ]);
+  });
+
+  it("clears replay timers and purchased trail when exiting the guide from replay", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-14T08:00:00.000Z"));
+
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Start guide" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use recommended flight" }),
+    );
+    fireEvent.click(screen.getByText("confirm purchase"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Restart replay" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Exit guide" }));
+
+    act(() => {
+      vi.advanceTimersByTime(12_000);
+    });
+
+    expect(keyMomentHarness.enqueue).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("trail-draw")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Start guide" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Exit guide" })).not.toBeInTheDocument();
   });
 
   it("keeps guided demo active through manual gestures and replacing the selected flight without remounting the provider", () => {
@@ -1786,7 +2887,7 @@ describe("TowerShell", () => {
     );
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Start guided demo" }),
+      screen.getByRole("button", { name: "Start guide" }),
     );
     fireEvent.click(
       screen.getByRole("button", { name: "Use recommended flight" }),
@@ -1823,7 +2924,7 @@ describe("TowerShell", () => {
     );
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Start guided demo" }),
+      screen.getByRole("button", { name: "Start guide" }),
     );
     fireEvent.click(
       screen.getByRole("button", { name: "Use recommended flight" }),
@@ -1836,10 +2937,10 @@ describe("TowerShell", () => {
     );
 
     fireEvent.click(screen.getByText("close drawer"));
-    fireEvent.click(screen.getByRole("button", { name: "Exit demo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Exit guide" }));
 
     expect(
-      screen.getByRole("button", { name: "Start guided demo" }),
+      screen.getByRole("button", { name: "Start guide" }),
     ).toBeInTheDocument();
 
     act(() => {
@@ -1847,10 +2948,10 @@ describe("TowerShell", () => {
     });
 
     expect(
-      screen.getByRole("button", { name: "Start guided demo" }),
+      screen.getByRole("button", { name: "Start guide" }),
     ).toBeInTheDocument();
     expect(screen.queryByText("Policy policy-guided-1")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Exit demo" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Exit guide" })).not.toBeInTheDocument();
   });
 
   it("ignores a delayed purchase from an exited guided demo after a new demo starts", () => {
@@ -1870,7 +2971,7 @@ describe("TowerShell", () => {
     );
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Start guided demo" }),
+      screen.getByRole("button", { name: "Start guide" }),
     );
     fireEvent.click(
       screen.getByRole("button", { name: "Use recommended flight" }),
@@ -1879,9 +2980,9 @@ describe("TowerShell", () => {
     const staleCompletePurchase = buyDrawerHarness.pendingComplete;
 
     fireEvent.click(screen.getByText("close drawer"));
-    fireEvent.click(screen.getByRole("button", { name: "Exit demo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Exit guide" }));
     fireEvent.click(
-      screen.getByRole("button", { name: "Start guided demo" }),
+      screen.getByRole("button", { name: "Start guide" }),
     );
     fireEvent.click(
       screen.getByRole("button", { name: "Use recommended flight" }),
@@ -1896,7 +2997,7 @@ describe("TowerShell", () => {
       "data-flight-id",
       "BA178-20260614",
     );
-    expect(screen.getByRole("button", { name: "Exit demo" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Exit guide" })).toBeInTheDocument();
   });
 
   it("shows waiting state when no projectable flight is available and does not enter buy cover", () => {
@@ -1927,7 +3028,7 @@ describe("TowerShell", () => {
     );
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Start guided demo" }),
+      screen.getByRole("button", { name: "Start guide" }),
     );
 
     expect(screen.getByText("Waiting for live flight")).toBeInTheDocument();

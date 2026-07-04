@@ -35,7 +35,6 @@ import {
 import { useAmbientHeatmap } from "../components/cinema/useAmbientHeatmap";
 import { useKeyMomentQueue } from "../components/cinema/useKeyMomentQueue";
 import {
-  TRAIL_DRAW_START_MS,
   TRAIL_DRAW_TTL_MS,
   useTrailDraw,
   type ActiveTrailDraw,
@@ -45,9 +44,15 @@ import {
   type ProtagonistHighlight,
 } from "../components/tower/GlobeMap";
 import { RadarSweep } from "../components/tower/RadarSweep";
+import { RiskIntelligencePanel } from "../components/tower/RiskIntelligencePanel";
 import { EventFeedSidebar } from "../components/tower/EventFeedSidebar";
 import { KPIBand } from "../components/tower/KPIBand";
 import { DataStaleBadge } from "../components/tower/DataStaleBadge";
+import {
+  buildTowerRiskSignal,
+  type TowerRiskSignal,
+  type TowerRiskSubject,
+} from "../components/tower/riskSignals";
 import { AIBriefing } from "../components/copilot/AIBriefing";
 import {
   BuyDrawer,
@@ -58,17 +63,25 @@ import {
   GuidedDemoRail,
 } from "../components/demo/GuidedDemoRail";
 import {
+  completeGuidedDemoReplay,
   completeGuidedDemoPurchase,
   createIdleGuidedDemoState,
   exitGuidedDemo,
+  getGuidedDemoScenario,
   isGuidedDemoActive,
   pauseGuidedDemo,
+  requestGuidedDemoReplay,
   resumeGuidedDemo,
+  selectGuidedDemoScenario,
   selectGuidedDemoFlight,
   startGuidedDemo,
   type GuidedDemoFlight,
+  type GuidedDemoScenarioId,
 } from "../components/demo/demoDirector";
+import { EvidenceDrawer } from "../components/evidence/EvidenceDrawer";
+import { useCopilot } from "../components/copilot/CopilotProvider";
 import { useFlights, type FlightPublic } from "../hooks/useFlights";
+import type { EvidenceSubject } from "../hooks/useEvidenceTimeline";
 import { useEventStore, type FlareEvent } from "../store/eventStore";
 import {
   hangarAnchorForSize,
@@ -77,10 +90,23 @@ import {
 } from "../components/cinema/keyMomentGeometry";
 import type { MapViewport, ViewportSize } from "../components/cinema/cameraMath";
 import type { ActiveKeyMoment } from "../components/cinema/keyMomentTimeline";
-import type { CoordinateLocator, MomentLocator } from "../components/cinema/keyMoments";
+import {
+  shortTxHash,
+  type ChainBeamMoment,
+  type CoordinateLocator,
+  type FlareLandMoment,
+  type MomentLocator,
+  type ShockWaveMoment,
+} from "../components/cinema/keyMoments";
+
+const TOWER_RIGHT_HUD_HEIGHT =
+  "calc(100dvh - var(--top-nav-height, 64px) - 72px)";
+const TOWER_RIGHT_HUD_RISK_SLOT_MAX_HEIGHT =
+  "min(24rem, calc(100% - 13rem))";
 
 export function TowerShell() {
   const { flights } = useFlights();
+  const { ask } = useCopilot();
   const [drawerFlightId, setDrawerFlightId] = useState<string | null>(null);
   const [drawerGuidedDemoSessionId, setDrawerGuidedDemoSessionId] = useState<
     number | null
@@ -92,9 +118,16 @@ export function TowerShell() {
   const [guidedDemoState, setGuidedDemoState] = useState(
     createIdleGuidedDemoState,
   );
+  const [evidenceSubject, setEvidenceSubject] = useState<EvidenceSubject>(null);
   const [purchasedPolicy, setPurchasedPolicy] = useState<PurchasedPolicy | null>(
     null,
   );
+  const [weatherLayerVisible, setWeatherLayerVisible] = useState(true);
+  const [isCompactTowerHud, setIsCompactTowerHud] = useState(() =>
+    readIsCompactTowerHudViewport(),
+  );
+  const [cinemaFocusProtagonist, setCinemaFocusProtagonist] =
+    useState<CinemaProtagonist | null>(null);
   const purchaseCompletedRef = useRef(false);
   const guidedDemoSessionIdRef = useRef(0);
   const demoSelectionOffsetRef = useRef<number | null>(null);
@@ -106,10 +139,72 @@ export function TowerShell() {
     () => chooseDemoProtagonist(flights, demoSelectionOffset),
     [demoSelectionOffset, flights],
   );
+  const currentRiskProtagonist = cinemaFocusProtagonist ?? protagonist;
   const electedFlight = useMemo(() => {
     if (!electedCallsign) return null;
     return findFlightByCallsign(flights, electedCallsign);
   }, [electedCallsign, flights]);
+  const selectedGuidedDemoFlight = useMemo(() => {
+    if (!guidedDemoState.selectedFlight) return null;
+    return findFlightByCallsign(flights, guidedDemoState.selectedFlight.callsign);
+  }, [flights, guidedDemoState.selectedFlight]);
+  const activeRiskSubject = useMemo<TowerRiskSubject | null>(() => {
+    if (electedFlight) {
+      return riskSubjectFromFlight(
+        electedFlight,
+        flightIdForCallsign(electedFlight.callsign),
+      );
+    }
+    if (electedCallsign) {
+      return {
+        callsign: electedCallsign,
+        flightId: flightIdForCallsign(electedCallsign),
+      };
+    }
+    if (selectedGuidedDemoFlight && guidedDemoState.selectedFlight) {
+      return riskSubjectFromFlight(
+        selectedGuidedDemoFlight,
+        guidedDemoState.selectedFlight.flightId,
+      );
+    }
+    if (guidedDemoState.selectedFlight) {
+      return {
+        callsign: guidedDemoState.selectedFlight.callsign,
+        flightId: guidedDemoState.selectedFlight.flightId,
+      };
+    }
+    if (currentRiskProtagonist) {
+      return {
+        callsign: currentRiskProtagonist.callsign,
+        flightId: currentRiskProtagonist.flightId,
+        longitude: currentRiskProtagonist.longitude,
+        latitude: currentRiskProtagonist.latitude,
+      };
+    }
+    return null;
+  }, [
+    currentRiskProtagonist,
+    electedCallsign,
+    electedFlight,
+    guidedDemoState.selectedFlight,
+    selectedGuidedDemoFlight,
+  ]);
+  const riskSignal = useMemo(
+    () => buildTowerRiskSignal(flights, activeRiskSubject),
+    [activeRiskSubject, flights],
+  );
+  const shouldShowWeatherCorridor = Boolean(
+    electedCallsign || guidedDemoState.selectedFlight,
+  );
+  const mapRiskSignal = useMemo<TowerRiskSignal>(() => {
+    if (shouldShowWeatherCorridor || !riskSignal.corridor) {
+      return riskSignal;
+    }
+    return {
+      ...riskSignal,
+      corridor: null,
+    };
+  }, [riskSignal, shouldShowWeatherCorridor]);
   const recommendedDemoFlight = useMemo(() => {
     if (!protagonist) return null;
     const flight = findFlightByCallsign(flights, protagonist.callsign);
@@ -124,6 +219,7 @@ export function TowerShell() {
     setElectedCallsign(normalized);
     setElectedCameraTarget(cameraTargetForElectedFlight(flight));
     setPurchasedPolicy(null);
+    setEvidenceSubject(null);
     setElectedTrailToken((token) => token + 1);
     setDrawerGuidedDemoSessionId(null);
     setDrawerFlightId(flightIdForCallsign(normalized));
@@ -136,6 +232,7 @@ export function TowerShell() {
     setElectedCallsign(flight.callsign);
     setElectedCameraTarget(cameraTargetForElectedFlight(liveFlight));
     setPurchasedPolicy(null);
+    setEvidenceSubject(null);
     setElectedTrailToken((token) => token + 1);
     setDrawerGuidedDemoSessionId(guidedDemoSessionIdRef.current);
     setDrawerFlightId(flight.flightId);
@@ -149,8 +246,31 @@ export function TowerShell() {
     setElectedCallsign(null);
     setElectedCameraTarget(null);
     setPurchasedPolicy(null);
-    setGuidedDemoState(startGuidedDemo(recommendedDemoFlight));
+    setEvidenceSubject(null);
+    setGuidedDemoState((current) =>
+      startGuidedDemo(recommendedDemoFlight, current),
+    );
   }, [recommendedDemoFlight]);
+
+  const handleSelectScenario = useCallback(
+    (scenarioId: GuidedDemoScenarioId) => {
+      setGuidedDemoState((current) =>
+        selectGuidedDemoScenario(current, scenarioId),
+      );
+    },
+    [],
+  );
+
+  const handleAskScenario = useCallback(() => {
+    const scenario = getGuidedDemoScenario(guidedDemoState.selectedScenarioId);
+    void ask(
+      {
+        question: scenario.promptQuestion,
+        subjectType: "overview",
+      },
+      { openPanel: false },
+    );
+  }, [ask, guidedDemoState.selectedScenarioId]);
 
   const handleUseRecommendedFlight = useCallback(() => {
     if (!guidedDemoState.recommendedFlight) return;
@@ -174,9 +294,22 @@ export function TowerShell() {
     setDrawerGuidedDemoSessionId(null);
     setElectedCallsign(null);
     setElectedCameraTarget(null);
+    setEvidenceSubject(null);
     if (!hasPurchasedPolicy) {
       setPurchasedPolicy(null);
     }
+  }, [purchasedPolicy]);
+
+  const handleReplaySettlement = useCallback(() => {
+    setGuidedDemoState((current) => requestGuidedDemoReplay(current));
+  }, []);
+
+  const handleOpenEvidenceStory = useCallback(() => {
+    if (!purchasedPolicy) return;
+    setEvidenceSubject({
+      kind: "policy",
+      id: purchasedPolicy.id,
+    });
   }, [purchasedPolicy]);
 
   const handleSelectFlight = useCallback(
@@ -205,6 +338,38 @@ export function TowerShell() {
     [flights, guidedDemoState.status, openGuidedDemoFlight, openManualFlight],
   );
 
+  useEffect(() => {
+    const handleResize = () => {
+      setIsCompactTowerHud(readIsCompactTowerHudViewport());
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  const riskPanel = (
+    <RiskIntelligencePanel
+      signal={riskSignal}
+      weatherLayerVisible={weatherLayerVisible}
+      onWeatherLayerVisibleChange={setWeatherLayerVisible}
+      viewportMaxHeight={isCompactTowerHud ? undefined : "100%"}
+    />
+  );
+  const guidedDemoRail = (
+    <GuidedDemoRail
+      embedded
+      state={guidedDemoState}
+      onExit={handleExitGuidedDemo}
+      onResume={handleResumeGuidedDemo}
+      onAskScenario={handleAskScenario}
+      onOpenEvidenceStory={handleOpenEvidenceStory}
+      onReplaySettlement={handleReplaySettlement}
+      onSelectScenario={handleSelectScenario}
+      onStart={handleStartGuidedDemo}
+      onUseRecommendedFlight={handleUseRecommendedFlight}
+    />
+  );
+
   return (
     <div
       style={{
@@ -214,31 +379,102 @@ export function TowerShell() {
         bottom: 32,
       }}
     >
-      <div
-        style={{
-          position: "absolute",
-          top: 20,
-          left: 20,
-          right: 20,
-          zIndex: 18,
-          pointerEvents: "none",
-          display: "flex",
-        }}
-      >
-        <div style={{ pointerEvents: "auto", maxWidth: "min(100%, 28rem)" }}>
-          <AIBriefing />
+      {isCompactTowerHud ? (
+        <div
+          data-testid="tower-compact-top-stack"
+          style={{
+            position: "absolute",
+            top: 20,
+            left: 20,
+            right: 20,
+            zIndex: 19,
+            pointerEvents: "none",
+            display: "grid",
+            gap: 12,
+            justifyItems: "start",
+          }}
+        >
+          <div
+            data-testid="tower-ai-briefing-slot"
+            style={{ pointerEvents: "auto", maxWidth: "min(100%, 28rem)" }}
+          >
+            <AIBriefing />
+          </div>
+          <div
+            style={{
+              pointerEvents: "auto",
+              width: "min(100%, 22rem)",
+              maxWidth: "100%",
+            }}
+          >
+            {riskPanel}
+          </div>
         </div>
-      </div>
-      <GuidedDemoRail
-        state={guidedDemoState}
-        onExit={handleExitGuidedDemo}
-        onResume={handleResumeGuidedDemo}
-        onStart={handleStartGuidedDemo}
-        onUseRecommendedFlight={handleUseRecommendedFlight}
-      />
+      ) : (
+        <>
+          <div
+            style={{
+              position: "absolute",
+              top: 20,
+              left: 20,
+              right: 20,
+              zIndex: 18,
+              pointerEvents: "none",
+              display: "flex",
+            }}
+          >
+            <div
+              data-testid="tower-ai-briefing-slot"
+              style={{ pointerEvents: "auto", maxWidth: "min(100%, 28rem)" }}
+            >
+              <AIBriefing />
+            </div>
+          </div>
+          <div
+            data-testid="tower-right-hud-stack"
+            data-layout="stacked"
+            style={{
+              position: "absolute",
+              top: 20,
+              right: 20,
+              zIndex: 19,
+              pointerEvents: "none",
+              display: "grid",
+              gap: 12,
+              gridTemplateRows: `minmax(0, ${TOWER_RIGHT_HUD_RISK_SLOT_MAX_HEIGHT}) minmax(12rem, 1fr)`,
+              justifyContent: "flex-end",
+              justifyItems: "stretch",
+              width: "min(calc(100% - 40px), 21rem)",
+              height: TOWER_RIGHT_HUD_HEIGHT,
+              maxHeight: TOWER_RIGHT_HUD_HEIGHT,
+              minHeight: 0,
+              overflow: "hidden",
+            }}
+          >
+            <div
+              data-testid="tower-risk-panel-slot"
+              style={{
+                pointerEvents: "auto",
+                width: "100%",
+                minHeight: 0,
+                height: "100%",
+                maxHeight: "100%",
+                overflow: "hidden",
+              }}
+            >
+              {riskPanel}
+            </div>
+            {guidedDemoRail}
+          </div>
+        </>
+      )}
+      {isCompactTowerHud ? (
+        guidedDemoRail
+      ) : null}
       <CinemaProvider
         initialProtagonist={protagonist}
       >
+        <CinemaFocusSync onFocusChange={setCinemaFocusProtagonist} />
         <CinemaController />
         <AutoSeeder
           demoLocked={Boolean(electedCallsign)}
@@ -252,7 +488,13 @@ export function TowerShell() {
           flights={flights}
           onSelectFlight={handleSelectFlight}
           electedTrailToken={electedTrailToken}
+          weatherLayerVisible={weatherLayerVisible}
+          riskSignal={mapRiskSignal}
           purchasedPolicy={purchasedPolicy}
+          replayToken={guidedDemoState.replayToken}
+          onReplayComplete={() =>
+            setGuidedDemoState((current) => completeGuidedDemoReplay(current))
+          }
         />
       </CinemaProvider>
       {drawerFlightId && (
@@ -307,8 +549,26 @@ export function TowerShell() {
           }}
         />
       )}
+      <EvidenceDrawer
+        subject={evidenceSubject}
+        onClose={() => setEvidenceSubject(null)}
+      />
     </div>
   );
+}
+
+function CinemaFocusSync({
+  onFocusChange,
+}: {
+  onFocusChange: (protagonist: CinemaProtagonist | null) => void;
+}) {
+  const cinema = useCinema();
+
+  useEffect(() => {
+    onFocusChange(cinema.protagonist);
+  }, [cinema.protagonist, onFocusChange]);
+
+  return null;
 }
 
 function normalizeCallsign(callsign: string) {
@@ -348,6 +608,22 @@ function toGuidedDemoFlight(
   };
 }
 
+function riskSubjectFromFlight(
+  flight: FlightPublic,
+  flightId: string,
+): TowerRiskSubject {
+  return {
+    callsign: normalizeCallsign(flight.callsign),
+    flightId,
+    longitude: flight.longitude,
+    latitude: flight.latitude,
+  };
+}
+
+function readIsCompactTowerHudViewport() {
+  return window.innerWidth < GUIDED_DEMO_NARROW_BREAKPOINT_PX;
+}
+
 interface TowerCinemaLayersProps {
   electedCameraTarget: CameraTarget | null;
   electedFlight: FlightPublic | null;
@@ -355,19 +631,31 @@ interface TowerCinemaLayersProps {
   flights: FlightPublic[];
   onSelectFlight: (callsign: string) => void;
   electedTrailToken: number;
+  weatherLayerVisible: boolean;
+  riskSignal: TowerRiskSignal;
   purchasedPolicy: PurchasedPolicy | null;
+  replayToken: number;
+  onReplayComplete: () => void;
 }
 
 const DEFAULT_OVERLAY_SIZE: ViewportSize = { width: 1200, height: 720 };
-const PURCHASE_SHOCKWAVE_AT_MS = 6_000;
-const PURCHASE_CHAIN_AT_MS = 8_000;
-const PURCHASE_LANDED_AT_MS = 10_000;
+const PURCHASE_TRAIL_START_MS = 2_000;
+const PURCHASE_TRAIL_TTL_MS = 3_000;
+const PURCHASE_SHOCKWAVE_AT_MS = 3_000;
+const PURCHASE_CHAIN_AT_MS = 4_000;
+const PURCHASE_LANDED_AT_MS = 5_000;
+const REPLAY_TRAIL_START_MS = 250;
+const REPLAY_TRAIL_TTL_MS = 3_000;
+const REPLAY_SHOCKWAVE_AT_MS = 1_000;
+const REPLAY_CHAIN_AT_MS = 2_000;
+const REPLAY_LANDED_AT_MS = 3_000;
 const PURCHASE_DELAY_MINUTES = 45;
 const PURCHASE_SETTLE_DURATION_MS = 1_400;
-const PURCHASE_PLAYBACK_LOCK_MS = 12_000;
+const PURCHASE_PLAYBACK_LOCK_MS = 6_000;
+const REPLAY_PLAYBACK_LOCK_MS = 3_500;
 const ELECTED_CAMERA_ZOOM = 5;
 const ELECTED_CAMERA_DURATION_MS = 2_000;
-const ELECTED_TRAIL_TTL_MS = 3_000;
+const ELECTED_TRAIL_TTL_MS = 8_000;
 const ELECTED_CAMERA_DESKTOP_SAFE_AREA_INSETS: NonNullable<
   CameraTarget["safeAreaInsets"]
 > = {
@@ -451,6 +739,10 @@ function TowerCinemaLayers({
   manualFocusLocked,
   onSelectFlight,
   purchasedPolicy,
+  weatherLayerVisible,
+  riskSignal,
+  replayToken,
+  onReplayComplete,
 }: TowerCinemaLayersProps) {
   const cinema = useCinema();
   const setCyclePromotionLocked = cinema.setCyclePromotionLocked;
@@ -486,11 +778,13 @@ function TowerCinemaLayers({
     flights,
     userElectedFlight: purchasedPolicy ? null : electedFlight,
     userElectedTrailToken: electedTrailToken,
+    suppressProtagonistTrail: Boolean(electedFlight) || Boolean(purchasedPolicy),
     resetToken: cinema.storyResetId,
-    ttlMs:
-      purchasedPolicy || !electedFlight
-        ? TRAIL_DRAW_TTL_MS
-        : ELECTED_TRAIL_TTL_MS,
+    ttlMs: purchasedPolicy
+      ? TRAIL_DRAW_TTL_MS
+      : electedFlight
+        ? ELECTED_TRAIL_TTL_MS
+        : TRAIL_DRAW_TTL_MS,
   });
   const displayedTrail = activeTrail ?? purchasedTrail;
   const trailPoints = projectTrailPoints(
@@ -545,15 +839,22 @@ function TowerCinemaLayers({
   }, [clearPurchaseTimelineTimers]);
 
   useEffect(() => {
-    if (purchasedPolicy) return;
-    routedPurchasedPolicyRef.current = null;
+    if (!purchasedPolicy) {
+      routedPurchasedPolicyRef.current = null;
+      clearPurchaseTimelineTimers();
+      setPurchasedTrail(null);
+      return;
+    }
+
+    if (electedFlight) return;
     clearPurchaseTimelineTimers();
     setPurchasedTrail(null);
-  }, [clearPurchaseTimelineTimers, purchasedPolicy]);
+  }, [clearPurchaseTimelineTimers, electedFlight, purchasedPolicy]);
 
   useEffect(() => {
     if (!purchasedPolicy || !electedFlight) return;
-    if (routedPurchasedPolicyRef.current === purchasedPolicy.id) return;
+    const replayKey = `${purchasedPolicy.id}:${replayToken}`;
+    if (routedPurchasedPolicyRef.current === replayKey) return;
     if (
       typeof electedFlight.longitude !== "number" ||
       typeof electedFlight.latitude !== "number"
@@ -561,10 +862,34 @@ function TowerCinemaLayers({
       return;
     }
 
-    routedPurchasedPolicyRef.current = purchasedPolicy.id;
+    routedPurchasedPolicyRef.current = replayKey;
     const now = Date.now();
     const policyId = purchasedPolicy.id;
     const flightId = purchasedPolicy.flight_id;
+    const isReplayRequest = replayToken > 1;
+    const trailStartMs = isReplayRequest
+      ? REPLAY_TRAIL_START_MS
+      : PURCHASE_TRAIL_START_MS;
+    const trailTtlMs = isReplayRequest
+      ? REPLAY_TRAIL_TTL_MS
+      : PURCHASE_TRAIL_TTL_MS;
+    const shockwaveAtMs = isReplayRequest
+      ? REPLAY_SHOCKWAVE_AT_MS
+      : PURCHASE_SHOCKWAVE_AT_MS;
+    const chainAtMs = isReplayRequest ? REPLAY_CHAIN_AT_MS : PURCHASE_CHAIN_AT_MS;
+    const landedAtMs = isReplayRequest
+      ? REPLAY_LANDED_AT_MS
+      : PURCHASE_LANDED_AT_MS;
+    const playbackLockMs = isReplayRequest
+      ? REPLAY_PLAYBACK_LOCK_MS
+      : PURCHASE_PLAYBACK_LOCK_MS;
+
+    clearPurchaseTimelineTimers();
+    setPurchasedTrail(null);
+    if (isReplayRequest) {
+      clearKeyMoments();
+    }
+
     cinema.routeRealProtagonist(
       {
         id: `manual-buy:${policyId}`,
@@ -577,12 +902,10 @@ function TowerCinemaLayers({
         source: "real",
       },
       {
-        playbackLockMs: PURCHASE_PLAYBACK_LOCK_MS,
+        playbackLockMs,
+        force: isReplayRequest,
       },
     );
-
-    clearPurchaseTimelineTimers();
-    setPurchasedTrail(null);
     const schedule = (targetMs: number, callback: () => void) => {
       const timerId = window.setTimeout(() => {
         callback();
@@ -590,7 +913,7 @@ function TowerCinemaLayers({
       purchaseTimelineTimersRef.current.push(timerId);
     };
 
-    schedule(TRAIL_DRAW_START_MS, () => {
+    schedule(trailStartMs, () => {
       const points = buildTrailPoints({
         longitude: electedFlight.longitude,
         latitude: electedFlight.latitude,
@@ -604,7 +927,7 @@ function TowerCinemaLayers({
         id: `manual-buy:${policyId}:traildraw`,
         flightId,
         startedAt,
-        expiresAt: startedAt + TRAIL_DRAW_TTL_MS,
+        expiresAt: startedAt + trailTtlMs,
         points,
       };
       setPurchasedTrail(trail);
@@ -612,11 +935,17 @@ function TowerCinemaLayers({
         setPurchasedTrail((current) =>
           current?.id === trail.id ? null : current,
         );
-      }, TRAIL_DRAW_TTL_MS);
+      }, trailTtlMs);
       purchaseTimelineTimersRef.current.push(clearTimerId);
     });
 
-    schedule(PURCHASE_SHOCKWAVE_AT_MS, () => {
+    schedule(shockwaveAtMs, () => {
+      if (isReplayRequest) {
+        keyMomentQueue.enqueue(
+          replayShockwaveMoment(policyId, flightId, electedFlight, replayToken),
+        );
+        return;
+      }
       if (hasPolicyEvent("claim.triggered", policyId)) return;
       useEventStore.getState().addEvent({
         id: `manual-buy:${policyId}:claim-triggered`,
@@ -631,7 +960,18 @@ function TowerCinemaLayers({
       });
     });
 
-    schedule(PURCHASE_CHAIN_AT_MS, () => {
+    schedule(chainAtMs, () => {
+      if (isReplayRequest) {
+        keyMomentQueue.enqueue(
+          replayChainBeamMoment(
+            policyId,
+            flightId,
+            electedFlight,
+            replayToken,
+          ),
+        );
+        return;
+      }
       if (hasPolicyEvent("claim.settled", policyId)) return;
       const signature = fallbackSignature(policyId);
       const flare: FlareEvent = {
@@ -661,7 +1001,13 @@ function TowerCinemaLayers({
       });
     });
 
-    schedule(PURCHASE_LANDED_AT_MS, () => {
+    schedule(landedAtMs, () => {
+      if (isReplayRequest) {
+        keyMomentQueue.enqueue(
+          replayFlareLandMoment(policyId, flightId, electedFlight, replayToken),
+        );
+        return;
+      }
       if (hasPolicyEvent("flight.landed", policyId)) return;
       useEventStore.getState().addEvent({
         id: `manual-buy:${policyId}:flight-landed`,
@@ -674,11 +1020,19 @@ function TowerCinemaLayers({
         },
       });
     });
+
+    schedule(playbackLockMs, () => {
+      onReplayComplete();
+    });
   }, [
     cinema,
     clearPurchaseTimelineTimers,
     electedFlight,
+    onReplayComplete,
     purchasedPolicy,
+    replayToken,
+    clearKeyMoments,
+    keyMomentQueue,
   ]);
 
   useEffect(() => {
@@ -729,6 +1083,8 @@ function TowerCinemaLayers({
             onUserGesture={cinema.interrupt}
             onSelectFlight={handleSelectFlight}
             protagonistHighlight={protagonistHighlight}
+            weatherLayerVisible={weatherLayerVisible}
+            riskSignal={riskSignal}
           />
         )}
       </CameraDirector>
@@ -772,6 +1128,77 @@ function TowerCinemaLayers({
       <ModeIndicator />
     </>
   );
+}
+
+function replayShockwaveMoment(
+  policyId: string,
+  flightId: string,
+  flight: FlightPublic,
+  replayToken: number,
+): ShockWaveMoment {
+  return {
+    id: `manual-replay:${policyId}:${replayToken}:shockwave`,
+    eventId: `manual-replay:${policyId}:${replayToken}:claim-triggered`,
+    kind: "shockwave",
+    flightId,
+    policyId,
+    delayMinutes: PURCHASE_DELAY_MINUTES,
+    receivedAt: Date.now(),
+    source: "demo-replay",
+    locator: {
+      kind: "coordinates",
+      longitude: flight.longitude ?? 0,
+      latitude: flight.latitude ?? 0,
+    },
+  };
+}
+
+function replayChainBeamMoment(
+  policyId: string,
+  flightId: string,
+  flight: FlightPublic,
+  replayToken: number,
+): ChainBeamMoment {
+  const txHash = fallbackTxHash(policyId);
+  return {
+    id: `manual-replay:${policyId}:${replayToken}:chainbeam`,
+    eventId: `manual-replay:${policyId}:${replayToken}:claim-settled`,
+    kind: "chainbeam",
+    flightId,
+    policyId,
+    txHash,
+    shortTxHash: shortTxHash(txHash),
+    receivedAt: Date.now(),
+    source: "demo-replay",
+    locator: {
+      kind: "coordinates",
+      longitude: flight.longitude ?? 0,
+      latitude: flight.latitude ?? 0,
+    },
+  };
+}
+
+function replayFlareLandMoment(
+  policyId: string,
+  flightId: string,
+  flight: FlightPublic,
+  replayToken: number,
+): FlareLandMoment {
+  return {
+    id: `manual-replay:${policyId}:${replayToken}:flareland`,
+    eventId: `manual-replay:${policyId}:${replayToken}:flight-landed`,
+    kind: "flareland",
+    flightId,
+    policyId,
+    landedAt: Date.now(),
+    receivedAt: Date.now(),
+    source: "demo-replay",
+    locator: {
+      kind: "coordinates",
+      longitude: flight.longitude ?? 0,
+      latitude: flight.latitude ?? 0,
+    },
+  };
 }
 
 function MapAtmosphereLayer({ children }: { children: ReactNode }) {

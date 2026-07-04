@@ -336,6 +336,20 @@ describe("RialoCopilotPanel", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: /open ask rialo/i }));
+    expect(screen.getByRole("dialog")).toHaveClass(
+      "rialo-copilot-panel",
+      "command-surface",
+      "command-safe-area",
+    );
+    expect(screen.getByLabelText("Copilot provider status")).toHaveClass(
+      "signal-pill",
+      "signal-pill--radar",
+    );
+    expect(screen.getByLabelText("Copilot provider status")).toHaveTextContent(
+      /provider:\s*deepseek/i,
+    );
+    expect(screen.queryByText(/fake|mock|offline/i)).not.toBeInTheDocument();
+
     fireEvent.change(screen.getByRole("textbox", { name: /question/i }), {
       target: { value: "What needs attention right now?" },
     });
@@ -359,6 +373,12 @@ describe("RialoCopilotPanel", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Evidence used")).toBeInTheDocument();
     expect(screen.getByText("Flight BA178")).toBeInTheDocument();
+    expect(screen.getByLabelText("flight source Flight BA178")).toHaveClass(
+      "signal-pill",
+      "signal-pill--weather",
+      "copilot-source-reference",
+    );
+    expect(screen.getByLabelText("flight source Flight BA178").tagName).toBe("DIV");
     expect(screen.queryByText("Claim claim-one")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: "Flight BA178" }),
@@ -376,6 +396,84 @@ describe("RialoCopilotPanel", () => {
       }),
     ).toBeInTheDocument();
     expect(screen.queryByText("Sources")).not.toBeInTheDocument();
+  });
+
+  it("renders matched policy, claim, and evidence references as readable Command Center source chips", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          status: "ok",
+          answer:
+            "Policy policy-22 is tied to Claim claim-22 and Evidence ev-22 in the settlement path.",
+          sources: [
+            {
+              type: "policy",
+              id: "policy-22",
+              label: "Policy policy-22",
+              href: "/policies/policy-22",
+            },
+            {
+              type: "claim",
+              id: "claim-22",
+              label: "Claim claim-22",
+              href: "/claims/claim-22/timeline",
+            },
+            {
+              type: "evidence",
+              id: "ev-22",
+              label: "Evidence ev-22",
+              href: "/claims/claim-22/timeline#ev-22",
+            },
+          ],
+          suggested_prompts: [],
+          confidence: 0.86,
+          model: "deepseek-v4-pro",
+        }),
+        { status: 200 },
+      ),
+    );
+
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <CopilotProvider>
+          <LocationProbe />
+          <OpenCopilotButton />
+          <RialoCopilotPanel />
+        </CopilotProvider>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /open ask rialo/i }));
+    fireEvent.change(screen.getByRole("textbox", { name: /question/i }), {
+      target: { value: "Explain the settlement path." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /submit question/i }));
+
+    expect(
+      await screen.findByText(
+        "Policy policy-22 is tied to Claim claim-22 and Evidence ev-22 in the settlement path.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Evidence used")).toBeInTheDocument();
+
+    for (const [type, label] of [
+      ["policy", "Policy policy-22"],
+      ["claim", "Claim claim-22"],
+      ["evidence", "Evidence ev-22"],
+    ]) {
+      expect(screen.getByLabelText(`${type} source ${label}`)).toHaveClass(
+        "copilot-source-reference",
+        "signal-pill",
+      );
+      expect(screen.getByLabelText(`${type} source ${label}`).tagName).toBe("DIV");
+      expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
+    }
+
+    fireEvent.click(screen.getByRole("button", { name: "Evidence ev-22" }));
+    expect(screen.getByTestId("location-path")).toHaveTextContent("/claims");
   });
 
   it("renders partial stream output inline and caps suggestions at five", async () => {
@@ -582,6 +680,12 @@ describe("RialoCopilotPanel", () => {
     expect(
       await screen.findByText("DeepSeek request timed out. Please try again."),
     ).toBeInTheDocument();
+    expect(screen.getByLabelText("Copilot provider status")).toHaveTextContent(
+      /provider:\s*deepseek.*error/i,
+    );
+    expect(screen.getByLabelText("Copilot provider status")).not.toHaveTextContent(
+      /active model/i,
+    );
     expect(screen.queryByText("Evidence used")).not.toBeInTheDocument();
     expect(screen.queryByText("Flight BA178")).not.toBeInTheDocument();
   });
@@ -623,6 +727,13 @@ describe("RialoCopilotPanel", () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/status: unavailable/i)).toBeInTheDocument();
     expect(screen.getByText(/model: deepseek-v4-flash/i)).toBeInTheDocument();
+    expect(screen.getByLabelText("Copilot provider status")).toHaveTextContent(
+      /provider:\s*deepseek.*unavailable/i,
+    );
+    expect(screen.getByLabelText("Copilot provider status")).not.toHaveTextContent(
+      /active model/i,
+    );
+    expect(screen.queryByText(/fake|mock|offline/i)).not.toBeInTheDocument();
   });
 
   it("hides the evidence section when the answer does not cite any source", async () => {

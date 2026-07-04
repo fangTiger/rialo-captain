@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { SWRConfig } from "swr";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
@@ -78,12 +78,14 @@ describe("App routes", () => {
             JSON.stringify([
               {
                 callsign: "BA178",
+                flight_id: "BA178-20260614",
                 policy_count: 5,
                 delay_rate: 0.6,
                 samples: 5,
               },
               {
                 callsign: "DL101",
+                flight_id: "DL101-20260614",
                 policy_count: 3,
                 delay_rate: 0.2,
                 samples: 3,
@@ -114,7 +116,11 @@ describe("App routes", () => {
     await waitFor(() =>
       expect(screen.getByText("BA178-20260614")).toBeInTheDocument(),
     );
-    expect(screen.getByText("MY HANGAR")).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("region", { name: "Hangar risk summary" })).getByText(
+        "MY HANGAR",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("990 RIA")).toBeInTheDocument();
     expect(screen.getByTestId("search-hotkey")).toBeInTheDocument();
   });
@@ -133,7 +139,7 @@ describe("App routes", () => {
     );
     expect(screen.getByText("1 claims, paid by reactive contract")).toBeInTheDocument();
     expect(screen.getByText("policy-alp…")).toBeInTheDocument();
-    expect(screen.getByText("+80 RIA")).toBeInTheDocument();
+    expect(screen.getAllByText("+80 RIA").length).toBeGreaterThan(0);
     expect(screen.getByText("990 RIA")).toBeInTheDocument();
   });
 
@@ -146,10 +152,10 @@ describe("App routes", () => {
       </SWRConfig>,
     );
 
-    await waitFor(() => expect(screen.getByText("BA178")).toBeInTheDocument());
-    expect(screen.getByText("DL101")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByText("BA178").length).toBeGreaterThan(0));
+    expect(screen.getAllByText("DL101").length).toBeGreaterThan(0);
     expect(screen.getByText("5 pol")).toBeInTheDocument();
-    expect(screen.getByText("60%")).toBeInTheDocument();
+    expect(screen.getAllByText("60%").length).toBeGreaterThan(0);
     expect(screen.getByText("990 RIA")).toBeInTheDocument();
   });
 

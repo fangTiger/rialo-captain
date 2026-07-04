@@ -65,7 +65,11 @@ export function Login() {
   }
 
   return (
-    <main className={`login-page${devPanelOpen ? " login-page--dev-open" : ""}`}>
+    <main
+      className={`login-page command-center-shell login-command-center${
+        devPanelOpen ? " login-page--dev-open" : ""
+      }`}
+    >
       <div
         className="login-radar-field"
         data-testid="login-radar-field"
@@ -100,17 +104,6 @@ export function Login() {
 
       <div className="login-shell" ref={shellRef}>
         <header className="login-nav">
-          <div className="login-brand" aria-label="Rialo Captain">
-            <span
-              className="login-brand-logo"
-              data-testid="rialo-logo-mark"
-              aria-hidden="true"
-            >
-              <span className="login-brand-logo__orbit" />
-              <span className="login-brand-logo__glyph">R</span>
-            </span>
-            <span>Rialo Captain</span>
-          </div>
           <div className="login-nav-links" aria-hidden="true">
             <span>Field</span>
             <span>Routes</span>
@@ -119,7 +112,7 @@ export function Login() {
           {deployConfig.devLoginEnabled && (
             <button
               type="button"
-              className="login-app-trigger"
+              className="login-app-trigger command-focus-ring"
               ref={launcherRef}
               aria-expanded={devPanelOpen}
               aria-haspopup="dialog"
@@ -133,7 +126,6 @@ export function Login() {
 
         <section className="login-hero" aria-labelledby="login-title">
           <div className="login-hero-copyblock">
-            <div className="login-hero-kicker">RIALO · CAPTAIN</div>
             <h1 id="login-title">
               <span>Latch Tower</span>
               <span>before the sky turns.</span>
@@ -158,7 +150,10 @@ export function Login() {
           </div>
 
           <div className="login-access-stack">
-            <div className="login-access-panel" aria-label="Production sign in">
+            <div
+              className="login-access-panel command-surface"
+              aria-label="Production sign in"
+            >
               <div>
                 <span className="login-panel-eyebrow">Production access</span>
                 <h2>Enter the live tower</h2>
@@ -171,7 +166,10 @@ export function Login() {
               </div>
             </div>
 
-            <div className="login-signal-panel" aria-label="Tower field indicators">
+            <div
+              className="login-signal-panel command-surface"
+              aria-label="Tower field indicators"
+            >
               <div className="login-signal-panel__row">
                 <span>Radar</span>
                 <span className="login-signal-value">Sweep live</span>
@@ -268,7 +266,7 @@ function DevLoginCard({
   return (
     <form
       id="dev-access-card"
-      className="dev-login-card"
+      className="dev-login-card command-panel command-surface"
       ref={dialogRef}
       role="dialog"
       aria-modal="true"
@@ -283,7 +281,7 @@ function DevLoginCard({
         </div>
         <button
           type="button"
-          className="dev-login-card__close"
+          className="dev-login-card__close command-focus-ring"
           aria-label="Close DEV access"
           onClick={onClose}
         >
@@ -298,6 +296,7 @@ function DevLoginCard({
         <input
           aria-label="Dev login email"
           autoComplete="email"
+          className="command-focus-ring"
           placeholder="captain@local.dev"
           ref={emailInputRef}
           type="email"
@@ -307,7 +306,7 @@ function DevLoginCard({
       </label>
       <button
         type="submit"
-        className="dev-login-card__submit"
+        className="dev-login-card__submit command-focus-ring"
         disabled={busy}
       >
         {busy ? "Logging in..." : "Dev Login"}

@@ -597,6 +597,14 @@ async def test_run_once_records_evidence_events_in_settlement_order(
         "balance.credited",
         "flight.landed",
     ]
+    assert [event.title for event in events] == [
+        "Delay observation received",
+        "Payout condition matched",
+        "Claim triggered",
+        "Claim settled",
+        "Balance credited",
+        "Flight landed",
+    ]
 
     observation_payload = json.loads(events[0].payload_json)
     condition_payload = json.loads(events[1].payload_json)

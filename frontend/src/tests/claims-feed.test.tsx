@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { SWRConfig } from "swr";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -67,6 +67,35 @@ describe("ClaimsFeed", () => {
     vi.unstubAllGlobals();
     copilotHarness.ask.mockReset();
     copilotHarness.openPanel.mockReset();
+  });
+
+  it("renders a command center claims posture with settlement, evidence, and route risk context", async () => {
+    render(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <MemoryRouter
+          initialEntries={["/claims"]}
+          future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+        >
+          <ClaimsFeed />
+        </MemoryRouter>
+      </SWRConfig>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByText("policy-alp…")).toBeInTheDocument(),
+    );
+
+    const commandPanel = screen.getByRole("region", {
+      name: /claims command center/i,
+    });
+
+    expect(commandPanel).toHaveClass("command-panel");
+    expect(within(commandPanel).getByText("RECENT CLAIMS")).toBeInTheDocument();
+    expect(within(commandPanel).getByText("SETTLEMENT STATUS")).toBeInTheDocument();
+    expect(within(commandPanel).getByText("EVIDENCE AVAILABILITY")).toBeInTheDocument();
+    expect(within(commandPanel).getByText("ROUTE / FLIGHT RISK")).toBeInTheDocument();
+    expect(within(commandPanel).getByText("1 claim")).toBeInTheDocument();
+    expect(within(commandPanel).getByText("+80 RIA")).toBeInTheDocument();
   });
 
   it("opens claim evidence without leaving the claims route", async () => {

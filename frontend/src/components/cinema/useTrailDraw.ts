@@ -40,6 +40,7 @@ interface UseTrailDrawOptions {
   flights?: TrailFlight[];
   userElectedFlight?: TrailFlight | null;
   userElectedTrailToken?: number;
+  suppressProtagonistTrail?: boolean;
   resetToken?: number;
   ttlMs?: number;
 }
@@ -105,6 +106,7 @@ export function useTrailDraw({
   flights = [],
   userElectedFlight = null,
   userElectedTrailToken = 0,
+  suppressProtagonistTrail = false,
   resetToken = 0,
   ttlMs = TRAIL_DRAW_TTL_MS,
 }: UseTrailDrawOptions) {
@@ -226,6 +228,17 @@ export function useTrailDraw({
       }
     }
 
+    if (suppressProtagonistTrail) {
+      setActiveTrail((current) =>
+        current && !current.id.startsWith("elected:") ? null : current,
+      );
+      if (timeoutRef.current !== null) {
+        window.clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+      return;
+    }
+
     if (
       mode !== "cinema" ||
       (phase !== "establish" && phase !== "zoom-in" && phase !== "story") ||
@@ -306,6 +319,7 @@ export function useTrailDraw({
     mode,
     phase,
     protagonist,
+    suppressProtagonistTrail,
     ttlMs,
     userElectedFlight,
     userElectedTrailToken,

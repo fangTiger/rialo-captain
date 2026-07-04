@@ -5,6 +5,247 @@
   will-change: opacity, transform;
 }
 
+.weather-risk-layer {
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+
+.weather-risk-cell {
+  transform-box: fill-box;
+  transform-origin: center;
+  pointer-events: none;
+}
+
+.weather-forecast-band {
+  pointer-events: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.weather-forecast-band-halo {
+  opacity: 0.16;
+  filter: blur(2px);
+}
+
+.weather-forecast-band-core {
+  opacity: 0.28;
+  filter: blur(0.6px);
+  animation: weather-forecast-band-flow 5.8s ease-in-out infinite;
+}
+
+.weather-forecast-band-radar-line {
+  opacity: 0.55;
+  animation: weather-forecast-band-scan 6.4s linear infinite;
+}
+
+.weather-forecast-band-low .weather-forecast-band-halo,
+.weather-forecast-band-low .weather-forecast-band-core {
+  stroke: rgba(48, 242, 218, 0.5);
+}
+
+.weather-forecast-band-low .weather-forecast-band-radar-line {
+  stroke: rgba(126, 255, 235, 0.58);
+}
+
+.weather-forecast-band-elevated .weather-forecast-band-halo,
+.weather-forecast-band-elevated .weather-forecast-band-core {
+  stroke: rgba(255, 206, 96, 0.54);
+}
+
+.weather-forecast-band-elevated .weather-forecast-band-radar-line {
+  stroke: rgba(255, 229, 142, 0.64);
+}
+
+.weather-forecast-band-severe .weather-forecast-band-halo,
+.weather-forecast-band-severe .weather-forecast-band-core {
+  stroke: rgba(255, 68, 112, 0.58);
+}
+
+.weather-forecast-band-severe .weather-forecast-band-radar-line {
+  stroke: rgba(255, 146, 184, 0.72);
+}
+
+.weather-forecast-band-front .weather-forecast-band-radar-line {
+  stroke-dasharray: 16 8 4 8;
+}
+
+.weather-forecast-band-rain .weather-forecast-band-radar-line {
+  stroke-dasharray: 6 7;
+}
+
+.weather-forecast-band-wind .weather-forecast-band-radar-line {
+  stroke-dasharray: 18 5;
+}
+
+.weather-risk-cell-field {
+  opacity: 0.24;
+  filter: blur(0.8px);
+  animation: weather-cell-breathe 3.6s ease-in-out infinite;
+}
+
+.weather-storm-mass {
+  opacity: 0.16;
+  filter: blur(1.4px);
+  animation: weather-storm-mass-drift 7.2s ease-in-out infinite;
+}
+
+.weather-risk-cell-core {
+  opacity: 0.32;
+  filter: blur(0.3px);
+}
+
+.weather-risk-cell-lobe {
+  opacity: 0.24;
+  filter: blur(0.45px);
+}
+
+.weather-risk-cell-radar-line {
+  opacity: 0.54;
+  stroke-dasharray: 7 5;
+  animation: weather-cell-scan 4.8s linear infinite;
+}
+
+.weather-severe-cell-pulse {
+  opacity: 0.72;
+  stroke: rgba(255, 162, 196, 0.74);
+  stroke-dasharray: 5 4;
+  animation: weather-severe-pulse 1.9s ease-out infinite;
+}
+
+.weather-risk-cell-low .weather-storm-mass {
+  fill: rgba(48, 242, 218, 0.2);
+}
+
+.weather-risk-cell-low .weather-risk-cell-field {
+  fill: rgba(28, 214, 198, 0.34);
+}
+
+.weather-risk-cell-low .weather-risk-cell-core {
+  fill: rgba(48, 242, 218, 0.32);
+}
+
+.weather-risk-cell-low .weather-risk-cell-lobe {
+  fill: rgba(88, 255, 227, 0.26);
+}
+
+.weather-risk-cell-low .weather-risk-cell-radar-line {
+  stroke: rgba(88, 255, 227, 0.54);
+}
+
+.weather-risk-cell-elevated .weather-risk-cell-field {
+  fill: rgba(255, 184, 77, 0.38);
+}
+
+.weather-risk-cell-elevated .weather-risk-cell-core {
+  fill: rgba(255, 206, 96, 0.34);
+}
+
+.weather-risk-cell-elevated .weather-risk-cell-lobe {
+  fill: rgba(255, 218, 121, 0.28);
+}
+
+.weather-risk-cell-elevated .weather-risk-cell-radar-line {
+  stroke: rgba(255, 218, 121, 0.58);
+}
+
+.weather-risk-cell-elevated .weather-storm-mass {
+  fill: rgba(255, 206, 96, 0.22);
+}
+
+.weather-risk-cell-severe .weather-storm-mass {
+  fill: rgba(255, 68, 112, 0.24);
+}
+
+.weather-risk-cell-severe .weather-risk-cell-field {
+  fill: rgba(255, 68, 112, 0.36);
+}
+
+.weather-risk-cell-severe .weather-risk-cell-core {
+  fill: rgba(255, 47, 144, 0.42);
+}
+
+.weather-risk-cell-severe .weather-risk-cell-lobe {
+  fill: rgba(255, 118, 176, 0.28);
+}
+
+.weather-risk-cell-severe .weather-risk-cell-radar-line {
+  stroke: rgba(255, 118, 176, 0.7);
+}
+
+.weather-risk-corridor {
+  pointer-events: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.weather-active-corridor {
+  pointer-events: none;
+}
+
+.weather-risk-corridor-segment-halo {
+  opacity: 0.24;
+  stroke: rgba(255, 255, 255, 0.45);
+  filter: blur(1.2px);
+}
+
+.weather-risk-corridor-segment-core {
+  opacity: 0.82;
+  animation: weather-corridor-flow 2.8s linear infinite;
+}
+
+.weather-risk-corridor-segment-low .weather-risk-corridor-segment-core {
+  stroke: rgba(48, 242, 218, 0.86);
+}
+
+.weather-risk-corridor-segment-elevated .weather-risk-corridor-segment-core {
+  stroke: rgba(255, 206, 96, 0.9);
+}
+
+.weather-risk-corridor-segment-severe .weather-risk-corridor-segment-core {
+  stroke: rgba(255, 86, 144, 0.92);
+}
+
+.weather-risk-pressure-ring {
+  opacity: 0.62;
+  stroke: rgba(232, 227, 213, 0.54);
+  stroke-dasharray: 4 4;
+}
+
+.weather-corridor-intercept-marker {
+  opacity: 0.88;
+  pointer-events: none;
+}
+
+.weather-corridor-intercept-marker circle,
+.weather-corridor-intercept-marker path {
+  stroke: rgba(255, 240, 178, 0.86);
+  filter: drop-shadow(0 0 8px rgba(255, 206, 96, 0.35));
+}
+
+.weather-corridor-intercept-marker-severe circle,
+.weather-corridor-intercept-marker-severe path {
+  stroke: rgba(255, 142, 180, 0.92);
+  filter: drop-shadow(0 0 10px rgba(255, 68, 112, 0.42));
+}
+
+.weather-pressure-label {
+  pointer-events: none;
+}
+
+.weather-pressure-label rect {
+  fill: rgba(7, 10, 14, 0.86);
+  stroke: rgba(255, 206, 96, 0.46);
+  stroke-width: 1;
+}
+
+.weather-pressure-label text {
+  fill: rgba(255, 244, 204, 0.92);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
 .protagonist-spotlight-ring-animated {
   animation-duration: 1.8s;
   animation-iteration-count: infinite;
@@ -44,9 +285,84 @@
   }
 }
 
+@keyframes weather-cell-breathe {
+  0%,
+  100% {
+    opacity: 0.18;
+    transform: scale(0.94);
+  }
+  50% {
+    opacity: 0.32;
+    transform: scale(1.06);
+  }
+}
+
+@keyframes weather-cell-scan {
+  to {
+    stroke-dashoffset: -24;
+  }
+}
+
+@keyframes weather-storm-mass-drift {
+  0%,
+  100% {
+    opacity: 0.1;
+    transform: scale(0.98) translateX(-1%);
+  }
+  50% {
+    opacity: 0.2;
+    transform: scale(1.04) translateX(1%);
+  }
+}
+
+@keyframes weather-severe-pulse {
+  0% {
+    opacity: 0.74;
+    transform: scale(0.72);
+  }
+  70% {
+    opacity: 0.18;
+    transform: scale(1.12);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.22);
+  }
+}
+
+@keyframes weather-forecast-band-flow {
+  0%,
+  100% {
+    opacity: 0.22;
+  }
+  50% {
+    opacity: 0.38;
+  }
+}
+
+@keyframes weather-forecast-band-scan {
+  to {
+    stroke-dashoffset: -36;
+  }
+}
+
+@keyframes weather-corridor-flow {
+  to {
+    stroke-dashoffset: -17;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .protagonist-spotlight-ring-animated,
-  .protagonist-spotlight-pulse-animated {
+  .protagonist-spotlight-pulse-animated,
+  .weather-risk-cell,
+  .weather-risk-cell-field,
+  .weather-storm-mass,
+  .weather-severe-cell-pulse,
+  .weather-risk-cell-radar-line,
+  .weather-forecast-band-core,
+  .weather-forecast-band-radar-line,
+  .weather-risk-corridor-segment-core {
     animation: none !important;
   }
 }

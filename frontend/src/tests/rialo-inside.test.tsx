@@ -15,6 +15,20 @@ describe("RialoInside", () => {
     expect(screen.getByText("Reactive Contract")).toBeInTheDocument();
     expect(screen.getByText(/The Tower/)).toBeInTheDocument();
   });
+
+  it("renders Rialo Inside as a dense command center system topology", () => {
+    render(<RialoInside />);
+
+    const commandPanel = screen.getByRole("region", {
+      name: /rialo inside command center/i,
+    });
+
+    expect(commandPanel).toHaveClass("command-panel");
+    expect(screen.getByText("SYSTEM TOPOLOGY")).toBeInTheDocument();
+    expect(screen.getByText("RISK CONTROLS")).toBeInTheDocument();
+    expect(screen.getByText("SETTLEMENT LOOP")).toBeInTheDocument();
+    expect(screen.getByText("SIGNAL PATH")).toBeInTheDocument();
+  });
 });
 
 describe("ReactiveDiagram", () => {

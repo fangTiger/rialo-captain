@@ -1,0 +1,12 @@
+- [x] 1. Add deterministic weather and market signal helpers with focused tests.
+- [x] 2. Add GlobeMap weather overlay rendering and visual CSS with focused tests.
+- [x] 3. Add Tower weather switch and market odds HUD wiring with focused tests.
+- [x] 4. Verify no settlement, policy, Copilot write, dev login, or provider behavior changed.
+- [x] 5. Run focused verification, update this task list, and rebuild graphify if code changed.
+- [x] 6. Revise weather visuals into a global forecast-style layer across the full map.
+- [x] 7. Verify active focus changes keep global weather stable while moving the corridor and market subject.
+- [x] 8. Add explicit simulated-source provenance, model version, confidence, and forecast window metadata to Tower risk signals.
+- [x] 9. Make global weather drift by deterministic forecast window while preserving same-window stability.
+- [x] 10. Derive active corridor segment pressure levels from nearby weather cells/bands instead of forcing low/elevated/severe.
+- [x] 11. Surface risk signal provenance and freshness in the HUD without implying real trades or settlement triggers.
+- [x] 12. Run focused verification, update this task list, and rebuild graphify after the optimization pass.
