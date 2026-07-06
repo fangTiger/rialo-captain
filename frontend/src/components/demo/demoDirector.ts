@@ -177,7 +177,7 @@ export function requestGuidedDemoReplay(
   };
 }
 
-export function exitGuidedDemo(_: GuidedDemoState): GuidedDemoState {
+export function exitGuidedDemo(): GuidedDemoState {
   return createIdleGuidedDemoState();
 }
 

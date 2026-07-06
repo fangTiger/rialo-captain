@@ -6,6 +6,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useLocation } from "react-router-dom";
 import { AutoSeeder } from "../components/cinema/AutoSeeder";
 import { CameraDirector } from "../components/cinema/CameraDirector";
 import { CinemaController } from "../components/cinema/CinemaController";
@@ -103,8 +104,10 @@ const TOWER_RIGHT_HUD_HEIGHT =
   "calc(100dvh - var(--top-nav-height, 64px) - 72px)";
 const TOWER_RIGHT_HUD_RISK_SLOT_MAX_HEIGHT =
   "min(24rem, calc(100% - 13rem))";
+const TOWER_GUIDED_DEMO_QUERY_PARAM = "guidedDemo";
 
 export function TowerShell() {
+  const location = useLocation();
   const { flights } = useFlights();
   const { ask } = useCopilot();
   const [drawerFlightId, setDrawerFlightId] = useState<string | null>(null);
@@ -128,6 +131,10 @@ export function TowerShell() {
   );
   const [cinemaFocusProtagonist, setCinemaFocusProtagonist] =
     useState<CinemaProtagonist | null>(null);
+  const guidedDemoEnabled = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return params.get(TOWER_GUIDED_DEMO_QUERY_PARAM) === "1";
+  }, [location.search]);
   const purchaseCompletedRef = useRef(false);
   const guidedDemoSessionIdRef = useRef(0);
   const demoSelectionOffsetRef = useRef<number | null>(null);
@@ -289,7 +296,7 @@ export function TowerShell() {
     const hasPurchasedPolicy = purchasedPolicy !== null;
     guidedDemoSessionIdRef.current += 1;
     purchaseCompletedRef.current = false;
-    setGuidedDemoState((current) => exitGuidedDemo(current));
+    setGuidedDemoState(() => exitGuidedDemo());
     setDrawerFlightId(null);
     setDrawerGuidedDemoSessionId(null);
     setElectedCallsign(null);
@@ -352,10 +359,16 @@ export function TowerShell() {
       signal={riskSignal}
       weatherLayerVisible={weatherLayerVisible}
       onWeatherLayerVisibleChange={setWeatherLayerVisible}
-      viewportMaxHeight={isCompactTowerHud ? undefined : "100%"}
+      viewportMaxHeight={
+        isCompactTowerHud
+          ? undefined
+          : guidedDemoEnabled
+          ? "100%"
+          : TOWER_RIGHT_HUD_HEIGHT
+      }
     />
   );
-  const guidedDemoRail = (
+  const guidedDemoRail = guidedDemoEnabled ? (
     <GuidedDemoRail
       embedded
       state={guidedDemoState}
@@ -368,7 +381,7 @@ export function TowerShell() {
       onStart={handleStartGuidedDemo}
       onUseRecommendedFlight={handleUseRecommendedFlight}
     />
-  );
+  ) : null;
 
   return (
     <div
@@ -432,23 +445,26 @@ export function TowerShell() {
           </div>
           <div
             data-testid="tower-right-hud-stack"
-            data-layout="stacked"
+            data-layout={guidedDemoEnabled ? "stacked" : "risk-only"}
             style={{
               position: "absolute",
               top: 20,
               right: 20,
               zIndex: 19,
               pointerEvents: "none",
-              display: "grid",
-              gap: 12,
-              gridTemplateRows: `minmax(0, ${TOWER_RIGHT_HUD_RISK_SLOT_MAX_HEIGHT}) minmax(12rem, 1fr)`,
+              display: guidedDemoEnabled ? "grid" : "flex",
+              gap: guidedDemoEnabled ? 12 : 0,
+              gridTemplateRows: guidedDemoEnabled
+                ? `minmax(0, ${TOWER_RIGHT_HUD_RISK_SLOT_MAX_HEIGHT}) minmax(12rem, 1fr)`
+                : undefined,
+              alignItems: "flex-start",
               justifyContent: "flex-end",
-              justifyItems: "stretch",
-              width: "min(calc(100% - 40px), 21rem)",
-              height: TOWER_RIGHT_HUD_HEIGHT,
+              justifyItems: guidedDemoEnabled ? "stretch" : undefined,
+              width: "min(calc(100% - 40px), 22rem)",
+              height: guidedDemoEnabled ? TOWER_RIGHT_HUD_HEIGHT : "auto",
               maxHeight: TOWER_RIGHT_HUD_HEIGHT,
               minHeight: 0,
-              overflow: "hidden",
+              overflow: guidedDemoEnabled ? "hidden" : "visible",
             }}
           >
             <div
@@ -457,9 +473,9 @@ export function TowerShell() {
                 pointerEvents: "auto",
                 width: "100%",
                 minHeight: 0,
-                height: "100%",
-                maxHeight: "100%",
-                overflow: "hidden",
+                height: guidedDemoEnabled ? "100%" : "auto",
+                maxHeight: guidedDemoEnabled ? "100%" : TOWER_RIGHT_HUD_HEIGHT,
+                overflow: guidedDemoEnabled ? "hidden" : "visible",
               }}
             >
               {riskPanel}
@@ -468,7 +484,7 @@ export function TowerShell() {
           </div>
         </>
       )}
-      {isCompactTowerHud ? (
+      {isCompactTowerHud && guidedDemoEnabled ? (
         guidedDemoRail
       ) : null}
       <CinemaProvider

@@ -13,6 +13,7 @@ const riskIntelligencePanelCss = readFileSync(
   resolve(process.cwd(), "src/components/tower/RiskIntelligencePanel.css"),
   "utf8",
 );
+const GUIDED_TOWER_ENTRY = "/?guidedDemo=1";
 
 interface TrailDrawMockOptions {
   userElectedFlight?: { callsign: string } | null;
@@ -535,6 +536,13 @@ function ensureAiBriefingExpanded() {
   }
 }
 
+function ensureRiskPanelExpanded() {
+  const expand = screen.queryByRole("button", { name: "Expand risk panel" });
+  if (expand) {
+    fireEvent.click(expand);
+  }
+}
+
 function collapseAiBriefing() {
   const collapse = screen.queryByRole("button", { name: "Collapse AI Briefing" });
   if (collapse) {
@@ -719,7 +727,7 @@ describe("TowerShell", () => {
     expect(screen.getByTestId("location-probe")).toHaveTextContent("/");
   });
 
-  it("renders compact weather and market odds by default, then expands details on demand", () => {
+  it("renders the collapsed risk prediction card by default without the guided rail", () => {
     render(
       <MemoryRouter
         initialEntries={["/"]}
@@ -731,9 +739,22 @@ describe("TowerShell", () => {
       </MemoryRouter>,
     );
 
+    const riskPanel = screen.getByTestId("risk-intelligence-panel");
+
     expect(
-      screen.getByRole("switch", { name: "Weather risk layer" }),
-    ).toHaveAttribute("aria-checked", "true");
+      screen.getByRole("button", { name: "Expand risk panel" }),
+    ).toHaveAttribute("aria-expanded", "false");
+    expect(riskPanel).toHaveAttribute("data-collapsed", "true");
+    expect(screen.getByTestId("risk-intelligence-collapsed-summary")).toHaveTextContent(
+      "BA178",
+    );
+    expect(screen.getByTestId("risk-intelligence-collapsed-summary")).toHaveTextContent(
+      /\d+\.\d+x/,
+    );
+    expect(
+      screen.queryByRole("switch", { name: "Weather risk layer" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "DETAILS" })).not.toBeInTheDocument();
     expect(screen.getByTestId("mock-globe")).toHaveAttribute(
       "data-weather-layer-visible",
       "true",
@@ -747,14 +768,14 @@ describe("TowerShell", () => {
     expect(globeHarness.riskSubjectLabels.at(-1)).toBe("BA178");
     expect(globeHarness.corridorSubjects.at(-1)).toBeNull();
     expect(globeHarness.corridorSegments.at(-1)).toHaveLength(0);
-    expect(screen.getByTestId("risk-intelligence-panel")).toHaveTextContent(
-      "MARKET ODDS",
-    );
-    expect(screen.getByTestId("risk-intelligence-panel")).toHaveTextContent(
-      /\d+\.\d+x/,
-    );
-    expect(screen.getByTestId("risk-intelligence-panel")).toHaveStyle({
-      maxHeight: "100%",
+    expect(riskPanel).toHaveTextContent("MARKET ODDS");
+    expect(
+      screen.queryByRole("button", { name: "Start guide" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("guided-demo-rail-container")).not.toBeInTheDocument();
+    expect(riskPanel).toHaveTextContent(/\d+\.\d+x/);
+    expect(riskPanel).toHaveStyle({
+      maxHeight: "calc(100dvh - var(--top-nav-height, 64px) - 72px)",
       overflowY: "auto",
     });
     expect(
@@ -762,6 +783,15 @@ describe("TowerShell", () => {
     ).toHaveStyle({
       overflow: "visible",
     });
+
+    ensureRiskPanelExpanded();
+
+    expect(
+      screen.getByRole("button", { name: "Collapse risk panel" }),
+    ).toHaveAttribute("aria-expanded", "true");
+    expect(
+      screen.getByRole("switch", { name: "Weather risk layer" }),
+    ).toHaveAttribute("aria-checked", "true");
     expect(screen.getByText(/Market implied/i)).toBeInTheDocument();
     expect(screen.getByText(/Rialo model/i)).toBeInTheDocument();
     expect(
@@ -824,50 +854,100 @@ describe("TowerShell", () => {
 
     const rightStack = screen.getByTestId("tower-right-hud-stack");
     const riskPanelSlot = screen.getByTestId("tower-risk-panel-slot");
-    const railContainer = screen.getByTestId("guided-demo-rail-container");
     const aiBriefingSlot = screen.getByTestId("tower-ai-briefing-slot");
 
     expect(rightStack).toContainElement(riskPanelSlot);
     expect(riskPanelSlot).toContainElement(screen.getByTestId("risk-intelligence-panel"));
-    expect(rightStack).toContainElement(railContainer);
     expect(rightStack).not.toContainElement(aiBriefingSlot);
+    expect(rightStack).not.toHaveStyle({
+      gridTemplateRows:
+        "minmax(0, min(24rem, calc(100% - 13rem))) minmax(12rem, 1fr)",
+    });
     expect(rightStack).toHaveStyle({
       top: "20px",
       right: "20px",
-      display: "grid",
-      height: "calc(100dvh - var(--top-nav-height, 64px) - 72px)",
+      display: "flex",
       maxHeight: "calc(100dvh - var(--top-nav-height, 64px) - 72px)",
       minHeight: "0",
-      overflow: "hidden",
-      gridTemplateRows:
-        "minmax(0, min(24rem, calc(100% - 13rem))) minmax(12rem, 1fr)",
+      overflow: "visible",
     });
     expect(riskPanelSlot).toHaveStyle({
       pointerEvents: "auto",
       width: "100%",
       minHeight: "0",
-      height: "100%",
-      maxHeight: "100%",
-      overflow: "hidden",
+      maxHeight: "calc(100dvh - var(--top-nav-height, 64px) - 72px)",
+      overflow: "visible",
     });
     expect(screen.getByTestId("risk-intelligence-panel")).toHaveStyle({
-      maxHeight: "100%",
+      maxHeight: "calc(100dvh - var(--top-nav-height, 64px) - 72px)",
       overflowY: "auto",
     });
-    expect(railContainer).toHaveAttribute("data-layout", "stacked");
-    expect(railContainer).toHaveStyle({
-      position: "static",
-      top: "auto",
-      right: "auto",
-      minHeight: "0",
-      height: "100%",
-    });
-    expect(screen.getByTestId("guided-demo-rail")).toHaveStyle({
-      width: "100%",
-      minHeight: "0",
-      maxHeight: "100%",
-      overflowY: "auto",
-    });
+  });
+
+  it("defaults the right risk prediction card to collapsed and preserves expand/collapse", () => {
+    render(
+      <MemoryRouter
+        initialEntries={["/"]}
+        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+      >
+        <Routes>
+          <Route path="/" element={<TowerShell />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Expand risk panel" }),
+    ).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByTestId("risk-intelligence-panel")).toHaveAttribute(
+      "data-collapsed",
+      "true",
+    );
+    expect(
+      screen.getByTestId("risk-intelligence-collapsed-summary"),
+    ).toHaveTextContent("BA178");
+    expect(
+      screen.getByTestId("risk-intelligence-collapsed-summary"),
+    ).toHaveTextContent(/\d+\.\d+x/);
+    expect(
+      screen.queryByRole("switch", { name: "Weather risk layer" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "DETAILS" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("guided-demo-rail-container")).not.toBeInTheDocument();
+    expect(screen.getByTestId("mock-globe")).toHaveAttribute(
+      "data-weather-layer-visible",
+      "true",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand risk panel" }));
+
+    expect(
+      screen.getByRole("button", { name: "Collapse risk panel" }),
+    ).toHaveAttribute("aria-expanded", "true");
+    expect(
+      screen.getByRole("switch", { name: "Weather risk layer" }),
+    ).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("button", { name: "DETAILS" })).toBeInTheDocument();
+    expect(screen.getByTestId("risk-intelligence-panel")).toHaveAttribute(
+      "data-collapsed",
+      "false",
+    );
+    expect(screen.queryByTestId("guided-demo-rail-container")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Collapse risk panel" }));
+
+    expect(
+      screen.getByRole("button", { name: "Expand risk panel" }),
+    ).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByTestId("risk-intelligence-panel")).toHaveAttribute(
+      "data-collapsed",
+      "true",
+    );
+    expect(
+      screen.queryByRole("switch", { name: "Weather risk layer" }),
+    ).not.toBeInTheDocument();
   });
 
   it("opens weather details from the weather summary without relying on the generic details toggle", () => {
@@ -881,6 +961,8 @@ describe("TowerShell", () => {
         </Routes>
       </MemoryRouter>,
     );
+
+    ensureRiskPanelExpanded();
 
     const weatherButton = screen.getByRole("button", {
       name: "Weather pressure contribution",
@@ -985,7 +1067,7 @@ describe("TowerShell", () => {
     });
   });
 
-  it("flows AI Briefing and the risk HUD in a compact top stack while keeping the guide on the bottom rail", () => {
+  it("flows AI Briefing and the risk HUD in a compact top stack without a bottom guide rail", () => {
     Object.defineProperty(window, "innerWidth", {
       configurable: true,
       writable: true,
@@ -1006,24 +1088,19 @@ describe("TowerShell", () => {
     const compactTopStack = screen.getByTestId("tower-compact-top-stack");
     const aiBriefingSlot = screen.getByTestId("tower-ai-briefing-slot");
     const riskPanel = screen.getByTestId("risk-intelligence-panel");
-    const railContainer = screen.getByTestId("guided-demo-rail-container");
 
     expect(compactTopStack).toContainElement(aiBriefingSlot);
     expect(compactTopStack).toContainElement(riskPanel);
     expect(screen.queryByTestId("tower-right-hud-stack")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("guided-demo-rail-container")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Start guide" }),
+    ).not.toBeInTheDocument();
     expect(compactTopStack).toHaveStyle({
       top: "20px",
       left: "20px",
       right: "20px",
       display: "grid",
-    });
-    expect(railContainer).toHaveAttribute("data-layout", "bottom");
-    expect(compactTopStack).not.toContainElement(railContainer);
-    expect(railContainer).toHaveStyle({
-      top: "auto",
-      bottom: "20px",
-      left: "20px",
-      right: "20px",
     });
   });
 
@@ -1043,6 +1120,8 @@ describe("TowerShell", () => {
 
     expect(towerHarness.providerMounts).toBe(1);
     expect(screen.queryByTestId("buy-drawer")).not.toBeInTheDocument();
+
+    ensureRiskPanelExpanded();
 
     fireEvent.click(screen.getByRole("switch", { name: "Weather risk layer" }));
 
@@ -1112,6 +1191,7 @@ describe("TowerShell", () => {
     );
 
     const panel = screen.getByTestId("risk-intelligence-panel");
+    ensureRiskPanelExpanded();
     fireEvent.click(screen.getByRole("button", { name: "DETAILS" }));
 
     const watchlist = screen.getByRole("group", {
@@ -1286,7 +1366,7 @@ describe("TowerShell", () => {
 
     render(
       <MemoryRouter
-        initialEntries={["/"]}
+        initialEntries={[GUIDED_TOWER_ENTRY]}
         future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
       >
         <Routes>
@@ -1342,7 +1422,7 @@ describe("TowerShell", () => {
 
     render(
       <MemoryRouter
-        initialEntries={["/"]}
+        initialEntries={[GUIDED_TOWER_ENTRY]}
         future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
       >
         <Routes>
@@ -1402,7 +1482,7 @@ describe("TowerShell", () => {
 
     render(
       <MemoryRouter
-        initialEntries={["/"]}
+        initialEntries={[GUIDED_TOWER_ENTRY]}
         future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
       >
         <Routes>
@@ -1467,7 +1547,7 @@ describe("TowerShell", () => {
 
     render(
       <MemoryRouter
-        initialEntries={["/"]}
+        initialEntries={[GUIDED_TOWER_ENTRY]}
         future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
       >
         <Routes>
@@ -2286,7 +2366,7 @@ describe("TowerShell", () => {
 
     render(
       <MemoryRouter
-        initialEntries={["/"]}
+        initialEntries={[GUIDED_TOWER_ENTRY]}
         future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
       >
         <Routes>
@@ -2317,7 +2397,7 @@ describe("TowerShell", () => {
 
     render(
       <MemoryRouter
-        initialEntries={["/"]}
+        initialEntries={[GUIDED_TOWER_ENTRY]}
         future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
       >
         <Routes>
@@ -2385,7 +2465,7 @@ describe("TowerShell", () => {
 
     render(
       <MemoryRouter
-        initialEntries={["/"]}
+        initialEntries={[GUIDED_TOWER_ENTRY]}
         future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
       >
         <Routes>
@@ -2423,7 +2503,7 @@ describe("TowerShell", () => {
 
     render(
       <MemoryRouter
-        initialEntries={["/"]}
+        initialEntries={[GUIDED_TOWER_ENTRY]}
         future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
       >
         <Routes>
@@ -2458,7 +2538,7 @@ describe("TowerShell", () => {
 
     render(
       <MemoryRouter
-        initialEntries={["/"]}
+        initialEntries={[GUIDED_TOWER_ENTRY]}
         future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
       >
         <Routes>
@@ -2503,7 +2583,7 @@ describe("TowerShell", () => {
 
     render(
       <MemoryRouter
-        initialEntries={["/"]}
+        initialEntries={[GUIDED_TOWER_ENTRY]}
         future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
       >
         <Routes>
@@ -2553,7 +2633,7 @@ describe("TowerShell", () => {
 
     render(
       <MemoryRouter
-        initialEntries={["/"]}
+        initialEntries={[GUIDED_TOWER_ENTRY]}
         future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
       >
         <Routes>
@@ -2604,7 +2684,7 @@ describe("TowerShell", () => {
 
     render(
       <MemoryRouter
-        initialEntries={["/"]}
+        initialEntries={[GUIDED_TOWER_ENTRY]}
         future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
       >
         <Routes>
@@ -2747,7 +2827,7 @@ describe("TowerShell", () => {
 
     render(
       <MemoryRouter
-        initialEntries={["/"]}
+        initialEntries={[GUIDED_TOWER_ENTRY]}
         future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
       >
         <Routes>
@@ -2815,7 +2895,7 @@ describe("TowerShell", () => {
 
     render(
       <MemoryRouter
-        initialEntries={["/"]}
+        initialEntries={[GUIDED_TOWER_ENTRY]}
         future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
       >
         <Routes>
@@ -2877,7 +2957,7 @@ describe("TowerShell", () => {
 
     render(
       <MemoryRouter
-        initialEntries={["/"]}
+        initialEntries={[GUIDED_TOWER_ENTRY]}
         future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
       >
         <Routes>
@@ -2914,7 +2994,7 @@ describe("TowerShell", () => {
 
     render(
       <MemoryRouter
-        initialEntries={["/"]}
+        initialEntries={[GUIDED_TOWER_ENTRY]}
         future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
       >
         <Routes>
@@ -2961,7 +3041,7 @@ describe("TowerShell", () => {
 
     render(
       <MemoryRouter
-        initialEntries={["/"]}
+        initialEntries={[GUIDED_TOWER_ENTRY]}
         future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
       >
         <Routes>
@@ -3018,7 +3098,7 @@ describe("TowerShell", () => {
 
     render(
       <MemoryRouter
-        initialEntries={["/"]}
+        initialEntries={[GUIDED_TOWER_ENTRY]}
         future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
       >
         <Routes>

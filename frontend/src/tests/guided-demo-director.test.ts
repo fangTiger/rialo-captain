@@ -169,7 +169,9 @@ describe("guided demo director", () => {
       },
     );
 
-    const state = exitGuidedDemo(replayState);
+    expect(replayState.status).toBe("replay");
+
+    const state = exitGuidedDemo();
 
     expect(state).toEqual(createIdleGuidedDemoState());
   });

@@ -1,7 +1,7 @@
 .risk-intelligence-panel {
   display: grid;
   gap: 0;
-  width: min(100%, 21rem);
+  width: min(100%, 22rem);
   border: 1px solid rgba(255, 206, 96, 0.42);
   border-radius: 8px;
   background:
@@ -19,8 +19,78 @@
   gap: 12px;
 }
 
+.risk-intelligence-panel__panel-control {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.risk-intelligence-panel__panel-toggle {
+  min-height: 30px;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 206, 96, 0.36);
+  border-radius: 999px;
+  background: rgba(255, 206, 96, 0.08);
+  color: var(--warn-amber);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.risk-intelligence-panel__panel-toggle:hover {
+  border-color: rgba(48, 242, 218, 0.62);
+  background: rgba(48, 242, 218, 0.1);
+  color: var(--accent-weather);
+}
+
+.risk-intelligence-panel__panel-toggle:focus-visible {
+  outline: 2px solid var(--accent-weather);
+  outline-offset: 2px;
+}
+
 .risk-intelligence-panel__summary {
   min-width: 0;
+}
+
+.risk-intelligence-panel__collapsed-summary {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(255, 206, 96, 0.2);
+  border-radius: 6px;
+  background: rgba(255, 206, 96, 0.045);
+}
+
+.risk-intelligence-panel__collapsed-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.risk-intelligence-panel__collapsed-metric {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.risk-intelligence-panel__collapsed-metric span {
+  color: var(--text-tertiary);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.risk-intelligence-panel__collapsed-metric strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
 }
 
 .risk-intelligence-panel__topline {

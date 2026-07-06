@@ -61,8 +61,11 @@ export function RiskIntelligencePanel({
 }: RiskIntelligencePanelProps) {
   const reactDetailsId = useId();
   const reactWeatherDetailsId = useId();
+  const reactPanelBodyId = useId();
   const detailsId = `risk-intelligence-details-${reactDetailsId.replace(/:/g, "")}`;
   const weatherDetailsId = `risk-intelligence-weather-details-${reactWeatherDetailsId.replace(/:/g, "")}`;
+  const panelBodyId = `risk-intelligence-body-${reactPanelBodyId.replace(/:/g, "")}`;
+  const [panelCollapsed, setPanelCollapsed] = useState(true);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
   const [weatherDetailsExpanded, setWeatherDetailsExpanded] = useState(false);
   const market = signal.market;
@@ -78,6 +81,20 @@ export function RiskIntelligencePanel({
   const weatherDetailsButtonLabel = weatherDetailsExpanded
     ? "Hide weather"
     : "Weather";
+  const panelToggleLabel = panelCollapsed
+    ? "Expand risk panel"
+    : "Collapse risk panel";
+  const panelToggleText = panelCollapsed ? "Expand" : "Collapse";
+  const handlePanelToggle = () => {
+    setPanelCollapsed((collapsed) => {
+      const nextCollapsed = !collapsed;
+      if (nextCollapsed) {
+        setDetailsExpanded(false);
+        setWeatherDetailsExpanded(false);
+      }
+      return nextCollapsed;
+    });
+  };
   const weatherForecastStartedAt = new Date(
     metadata.forecastWindowStartedAt,
   ).toLocaleTimeString("en-US", {
@@ -120,6 +137,7 @@ export function RiskIntelligencePanel({
         isViewportConstrained ? " risk-intelligence-panel__themed-scrollbar" : ""
       }`}
       data-testid="risk-intelligence-panel"
+      data-collapsed={panelCollapsed}
       aria-label="Risk intelligence"
       style={{
         ...panelViewportStyle,
@@ -127,11 +145,54 @@ export function RiskIntelligencePanel({
         overflowY: isViewportConstrained ? "auto" : panelViewportStyle.overflowY,
       }}
     >
+      <div className="risk-intelligence-panel__panel-control">
+        <button
+          type="button"
+          aria-controls={panelBodyId}
+          aria-expanded={!panelCollapsed}
+          aria-label={panelToggleLabel}
+          className="risk-intelligence-panel__panel-toggle"
+          onClick={handlePanelToggle}
+        >
+          {panelToggleText}
+        </button>
+      </div>
       <div
+        id={panelBodyId}
         className="risk-intelligence-panel__summary"
         data-testid="risk-intelligence-panel-summary"
         style={summaryViewportStyle}
       >
+        {panelCollapsed ? (
+          <div
+            aria-label="Collapsed risk intelligence summary"
+            className="risk-intelligence-panel__collapsed-summary"
+            data-testid="risk-intelligence-collapsed-summary"
+          >
+            <div className="risk-intelligence-panel__collapsed-grid">
+              <div className="risk-intelligence-panel__collapsed-metric">
+                <span>Subject</span>
+                <strong>{market.subjectLabel}</strong>
+              </div>
+              <div className="risk-intelligence-panel__collapsed-metric">
+                <span>Odds</span>
+                <strong>{market.marketOdds.toFixed(1)}x</strong>
+              </div>
+              <div className="risk-intelligence-panel__collapsed-metric">
+                <span>Model</span>
+                <strong>{formatProbability(market.modelProbability)}%</strong>
+              </div>
+              <div className="risk-intelligence-panel__collapsed-metric">
+                <span>Weather</span>
+                <strong>+{weatherContribution.contributionPp.toFixed(1)}pp</strong>
+              </div>
+            </div>
+            <SignalPill tone={pressureTone(weatherContribution.pressureLevel)}>
+              {weatherContribution.pressureLevel} pressure
+            </SignalPill>
+          </div>
+        ) : (
+          <>
         <div className="risk-intelligence-panel__topline">
           <button
             type="button"
@@ -302,6 +363,8 @@ export function RiskIntelligencePanel({
             </div>
           ) : null}
         </div>
+          </>
+        )}
       </div>
     </CommandPanel>
   );
