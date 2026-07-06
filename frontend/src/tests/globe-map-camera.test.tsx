@@ -591,6 +591,30 @@ describe("GlobeMap spotlight and legacy camera target", () => {
     ).toBeInTheDocument();
   });
 
+  it("keeps the weather pressure label text counter-scaled during selected-flight zoom", () => {
+    render(
+      <GlobeMap
+        cameraTarget={target}
+        weatherLayerVisible
+        riskSignal={riskSignal}
+      />,
+    );
+
+    runNextFrame(0);
+    runNextFrame(1_000);
+
+    const expected = cameraTargetToViewport(target, size);
+    const pressureLabel = screen.getByTestId("weather-pressure-label");
+    const [headline, delta] = Array.from(
+      pressureLabel.querySelectorAll("text"),
+    );
+
+    expect(headline).toHaveAttribute("font-size", `${10 / expected.k}`);
+    expect(delta).toHaveAttribute("font-size", `${9 / expected.k}`);
+    expect(headline).toHaveAttribute("textLength", `${118 / expected.k}`);
+    expect(delta).toHaveAttribute("textLength", `${118 / expected.k}`);
+  });
+
   it("hides weather risk visuals when the weather layer is disabled", () => {
     render(<GlobeMap weatherLayerVisible={false} riskSignal={riskSignal} />);
 

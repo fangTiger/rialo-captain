@@ -241,7 +241,6 @@
 .weather-pressure-label text {
   fill: rgba(255, 244, 204, 0.92);
   font-family: var(--font-mono);
-  font-size: 10px;
   letter-spacing: 0;
   text-transform: uppercase;
 }

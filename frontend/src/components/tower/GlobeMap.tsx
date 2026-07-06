@@ -934,6 +934,9 @@ function WeatherRiskLayer({
                     pointerEvents="none"
                   />
                   <text
+                    fontSize={10 / viewport.k}
+                    lengthAdjust="spacingAndGlyphs"
+                    textLength={118 / viewport.k}
                     x={7 / viewport.k}
                     y={12 / viewport.k}
                     pointerEvents="none"
@@ -942,6 +945,9 @@ function WeatherRiskLayer({
                     {interceptSegment.level.toUpperCase()}
                   </text>
                   <text
+                    fontSize={9 / viewport.k}
+                    lengthAdjust="spacingAndGlyphs"
+                    textLength={118 / viewport.k}
                     x={7 / viewport.k}
                     y={24 / viewport.k}
                     pointerEvents="none"
