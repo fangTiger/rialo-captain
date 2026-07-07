@@ -1,7 +1,10 @@
 import { useState, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Claim } from "../../hooks/useClaims";
-import type { EvidenceSubject } from "../../hooks/useEvidenceTimeline";
+import type {
+  EvidenceSubject,
+  EvidenceTimeline,
+} from "../../hooks/useEvidenceTimeline";
 import { CopilotPromptChip } from "../copilot/CopilotPromptChip";
 
 interface ClaimRowProps {
@@ -26,6 +29,31 @@ const claimTimeFormatter = new Intl.DateTimeFormat("en-US", {
   minute: "2-digit",
   second: "2-digit",
 });
+
+function fallbackTimelineForClaim(claim: Claim): EvidenceTimeline {
+  return {
+    subject: {
+      policy_id: claim.policy_id,
+      flight_id: claim.flight_id,
+      claim_id: claim.id,
+    },
+    events: [
+      {
+        id: `fallback-${claim.id}-settled`,
+        type: "claim.settled",
+        title: "Claim settled",
+        source: "client",
+        created_at: claim.settled_at,
+        payload: {
+          payout: claim.payout,
+          delay_minutes: claim.delay_minutes,
+          signature: claim.signature,
+          settle_duration_ms: claim.settle_duration_ms,
+        },
+      },
+    ],
+  };
+}
 
 export function ClaimRow({ c, onEvidence }: ClaimRowProps) {
   const navigate = useNavigate();
@@ -104,7 +132,11 @@ export function ClaimRow({ c, onEvidence }: ClaimRowProps) {
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
-            onEvidence?.({ kind: "claim", id: c.id });
+            onEvidence?.({
+              kind: "claim",
+              id: c.id,
+              fallbackTimeline: fallbackTimelineForClaim(c),
+            });
           }}
           onKeyDown={(event) => {
             if (event.key === "Enter" || event.key === " ") {

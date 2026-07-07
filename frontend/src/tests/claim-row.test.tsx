@@ -76,7 +76,31 @@ describe("ClaimRow", () => {
 
     fireEvent.click(evidenceButton);
 
-    expect(onEvidence).toHaveBeenCalledWith({ kind: "claim", id: "c1" });
+    expect(onEvidence).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "claim",
+        id: "c1",
+        fallbackTimeline: expect.objectContaining({
+          subject: {
+            policy_id: "policy-alpha-123",
+            flight_id: "BA178-20260614",
+            claim_id: "c1",
+          },
+          events: expect.arrayContaining([
+            expect.objectContaining({
+              type: "claim.settled",
+              title: "Claim settled",
+              source: "client",
+              payload: expect.objectContaining({
+                payout: 80,
+                delay_minutes: 45,
+                settle_duration_ms: 118,
+              }),
+            }),
+          ]),
+        }),
+      }),
+    );
     expect(navigateMock).not.toHaveBeenCalled();
   });
 
@@ -115,7 +139,13 @@ describe("ClaimRow", () => {
 
     fireEvent.click(evidenceButton);
 
-    expect(onEvidence).toHaveBeenCalledWith({ kind: "claim", id: "c1" });
+    expect(onEvidence).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "claim",
+        id: "c1",
+        fallbackTimeline: expect.any(Object),
+      }),
+    );
     expect(navigateMock).not.toHaveBeenCalled();
   });
 

@@ -4,6 +4,7 @@ import { SWRConfig } from "swr";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useClaimsForFlight } from "../hooks/useClaimsForFlight";
 import { useFlight } from "../hooks/useFlight";
+import { useEventStore } from "../store/eventStore";
 
 function Wrapper({ children }: { children: ReactNode }) {
   return (
@@ -15,11 +16,14 @@ function Wrapper({ children }: { children: ReactNode }) {
 
 describe("flight detail hooks", () => {
   beforeEach(() => {
+    vi.setSystemTime(new Date("2026-06-14T12:00:00Z"));
+    useEventStore.setState({ flares: [], toasts: [], events: [], wsState: "idle" });
     vi.stubGlobal("fetch", vi.fn());
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
   it("fetches a flight detail by id", async () => {
@@ -89,5 +93,39 @@ describe("flight detail hooks", () => {
     fetchMock.mockClear();
     rerender({ flightId: "" });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps current flare claims visible for a flight when the API no longer returns them", async () => {
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
+
+    useEventStore.getState().addFlare({
+      flight_id: "BA178-20260614",
+      policy_id: "policy-local",
+      payout: 55,
+      delay_minutes: 34,
+      signature: "0xlocalflare1234567890",
+      settle_duration_ms: 88,
+    });
+
+    const { result } = renderHook(
+      ({ flightId }) => useClaimsForFlight(flightId),
+      {
+        initialProps: { flightId: "BA178-20260614" },
+        wrapper: Wrapper,
+      },
+    );
+
+    await waitFor(() => expect(result.current.claims).toHaveLength(1));
+    expect(result.current.claims[0]).toMatchObject({
+      id: "optimistic-0xlocalflare1234",
+      policy_id: "policy-local",
+      flight_id: "BA178-20260614",
+      payout: 55,
+      delay_minutes: 34,
+      signature: "0xlocalflare1234567890",
+      settled_at: 1_781_438_400,
+      settle_duration_ms: 88,
+    });
   });
 });

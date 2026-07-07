@@ -7,10 +7,8 @@ VERCEL_SQLITE_URL = "sqlite+aiosqlite:////tmp/rialo-captain.db"
 
 
 def configure_vercel_defaults() -> None:
-    if os.environ.get("VERCEL") == "1":
+    if not os.environ.get("DATABASE_URL"):
         os.environ["DATABASE_URL"] = VERCEL_SQLITE_URL
-    else:
-        os.environ.setdefault("DATABASE_URL", VERCEL_SQLITE_URL)
     os.environ.setdefault("JWT_SECRET", "rialo-captain-vercel-dev-login-demo-secret-32-chars")
     os.environ.setdefault("COOKIE_SECURE", "true")
     os.environ.setdefault("DEV_LOGIN_ENABLED", "true")

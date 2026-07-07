@@ -3,10 +3,20 @@ import type { ReactNode } from "react";
 import { SWRConfig } from "swr";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { apiFetch } from "../api/client";
-import { useEvidenceTimeline } from "../hooks/useEvidenceTimeline";
+import { useEvidenceTimeline, type EvidenceTimeline } from "../hooks/useEvidenceTimeline";
+
+const MockApiError = vi.hoisted(
+  () =>
+    class ApiError extends Error {
+      constructor(public status: number, message: string) {
+        super(message);
+      }
+    },
+);
 
 vi.mock("../api/client", () => ({
   apiFetch: vi.fn(),
+  ApiError: MockApiError,
 }));
 
 function Wrapper({ children }: { children: ReactNode }) {
@@ -88,5 +98,44 @@ describe("useEvidenceTimeline", () => {
     expect(result.current.timeline).toBeNull();
     expect(result.current.events).toEqual([]);
     expect(result.current.isLoading).toBe(false);
+  });
+
+  it("uses a claim fallback timeline when the persisted claim timeline is missing", async () => {
+    const fallbackTimeline: EvidenceTimeline = {
+      subject: {
+        policy_id: "policy-local",
+        flight_id: "flight-local",
+        claim_id: "claim-local",
+      },
+      events: [
+        {
+          id: "fallback-claim-local-settled",
+          type: "claim.settled",
+          title: "Claim settled",
+          source: "client",
+          created_at: 1_800_000_000,
+          payload: {
+            payout: 55,
+          },
+        },
+      ],
+    };
+    vi.mocked(apiFetch).mockRejectedValue(
+      new MockApiError(404, "404 on /api/claims/claim-local/timeline"),
+    );
+
+    const { result } = renderHook(
+      () =>
+        useEvidenceTimeline({
+          kind: "claim",
+          id: "claim-local",
+          fallbackTimeline,
+        } as any),
+      { wrapper: Wrapper },
+    );
+
+    await waitFor(() => expect(result.current.timeline).toBe(fallbackTimeline));
+    expect(result.current.events).toHaveLength(1);
+    expect(result.current.error).toBeNull();
   });
 });

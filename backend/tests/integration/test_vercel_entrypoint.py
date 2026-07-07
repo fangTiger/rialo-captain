@@ -52,13 +52,14 @@ async def test_vercel_entrypoint_handles_dev_login_under_api_prefix(monkeypatch,
     assert "Secure" in res.headers["set-cookie"]
 
 
-def test_vercel_entrypoint_forces_writable_tmp_sqlite_on_vercel(monkeypatch):
+def test_vercel_entrypoint_respects_explicit_database_url_on_vercel(monkeypatch):
     monkeypatch.setenv("VERCEL", "1")
-    monkeypatch.setenv("DATABASE_URL", "sqlite+aiosqlite:///./rialo.db")
+    explicit_database_url = "sqlite+aiosqlite:///./rialo.db"
+    monkeypatch.setenv("DATABASE_URL", explicit_database_url)
 
     import_vercel_entrypoint()
 
-    assert get_settings().database_url == "sqlite+aiosqlite:////tmp/rialo-captain.db"
+    assert get_settings().database_url == explicit_database_url
 
 
 @pytest.mark.asyncio

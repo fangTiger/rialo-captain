@@ -1,8 +1,8 @@
 import useSWR from "swr";
-import { apiFetch } from "../api/client";
+import { ApiError, apiFetch } from "../api/client";
 
 export type EvidenceSubject =
-  | { kind: "claim"; id: string }
+  | { kind: "claim"; id: string; fallbackTimeline?: EvidenceTimeline }
   | { kind: "policy"; id: string }
   | null;
 
@@ -42,11 +42,19 @@ export function useEvidenceTimeline(subject: EvidenceSubject) {
     path,
     fetcher,
   );
+  const fallbackTimeline =
+    subject?.kind === "claim" ? subject.fallbackTimeline : undefined;
+  const useFallback =
+    !data &&
+    Boolean(fallbackTimeline) &&
+    error instanceof ApiError &&
+    error.status === 404;
+  const timeline = data ?? (useFallback ? fallbackTimeline ?? null : null);
 
   return {
-    timeline: data ?? null,
-    events: data?.events ?? [],
-    error,
+    timeline,
+    events: timeline?.events ?? [],
+    error: useFallback ? null : error,
     isLoading: path ? isLoading : false,
     refresh: mutate,
   };

@@ -323,6 +323,7 @@ class ClaimEngine:
                     {
                         "type": "flare",
                         "payload": {
+                            "claim_id": claim.id,
                             "flight_id": persistent.flight_id,
                             "policy_id": persistent.id,
                             "payout": persistent.payout,
@@ -336,6 +337,7 @@ class ClaimEngine:
                     {
                         "type": EventType.CLAIM_SETTLED.value,
                         "payload": {
+                            "claim_id": claim.id,
                             "flight_id": persistent.flight_id,
                             "policy_id": persistent.id,
                             "payout": persistent.payout,

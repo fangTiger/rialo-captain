@@ -3,6 +3,7 @@ import { create } from "zustand";
 export type WsState = "idle" | "connecting" | "open" | "retrying" | "closed";
 
 export interface FlareEvent {
+  claim_id?: string;
   flight_id: string;
   policy_id: string;
   payout: number;
