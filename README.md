@@ -4,7 +4,7 @@
 
 Watch every live flight on a global ATC-style radar. Insure a flight in one click. When it's delayed, a reactive contract reads OpenSky live, settles itself, and pays you out — no oracle, no keeper, no admin.
 
-· [设计文档](docs/superpowers/specs/2026-06-13-rialo-captain-design.md) · [OpenSpec proposal](openspec/changes/rialo-captain-mvp/) · [Plan 1 实现计划](docs/superpowers/plans/2026-06-13-rialo-captain-foundation.md)
+· [项目介绍与使用教程](docs/project-introduction-tutorial.md) · [设计文档](docs/superpowers/specs/2026-06-13-rialo-captain-design.md) · [OpenSpec proposal](openspec/changes/rialo-captain-mvp/) · [Plan 1 实现计划](docs/superpowers/plans/2026-06-13-rialo-captain-foundation.md)
 
 ---
 
