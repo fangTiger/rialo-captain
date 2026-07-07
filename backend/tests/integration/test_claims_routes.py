@@ -4,6 +4,7 @@ from httpx import ASGITransport, AsyncClient
 from backend.app import create_app
 from backend.auth import google
 from backend.auth.google import GoogleProfile
+from backend.auth.service import UserService
 from backend.db import Base, get_engine, get_session_factory
 from backend.models import Claim, Policy, PolicyStatus
 from backend.tests.factories import make_flight, make_user
@@ -38,7 +39,9 @@ async def app_client(monkeypatch, tmp_path):
         await conn.run_sync(Base.metadata.create_all)
 
     async with get_session_factory()() as s:
-        user = await make_user(s, email="x@y.com")
+        user = await UserService(s).create_or_get(
+            GoogleProfile(sub="g-1", email="x@y.com", name="X", avatar_url="")
+        )
         flight = await make_flight(s, callsign="BA178", date="20260614")
         policy = Policy(
             user_id=user.id,
@@ -110,11 +113,9 @@ async def test_claims_recent_filters_by_flight_id(app_client: AsyncClient):
     all_res = await app_client.get("/claims/recent")
     assert all_res.status_code == 200
     all_items = all_res.json()
-    assert len(all_items) == 2
-    assert {item["flight_id"] for item in all_items} == {"BA178-20260614", "UA900-20260615"}
+    assert len(all_items) == 1
+    assert all_items[0]["flight_id"] == "BA178-20260614"
 
     filtered_res = await app_client.get("/claims/recent", params={"flight_id": "UA900-20260615"})
     assert filtered_res.status_code == 200
-    filtered_items = filtered_res.json()
-    assert len(filtered_items) == 1
-    assert filtered_items[0]["flight_id"] == "UA900-20260615"
+    assert filtered_res.json() == []

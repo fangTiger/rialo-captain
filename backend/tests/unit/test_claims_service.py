@@ -66,5 +66,5 @@ async def test_recent_claims_returns_at_most_limit(db_session: AsyncSession):
             settle_duration_ms=100 + i,
         )
 
-    items = await service.recent(limit=10)
+    items = await service.recent(user_id=user.id, limit=10)
     assert len(items) == 3

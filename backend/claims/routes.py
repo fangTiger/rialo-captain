@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.auth.deps import CurrentUser
 from backend.claims.service import ClaimsService
 from backend.db import get_session
 
@@ -23,11 +24,16 @@ class ClaimPublic(BaseModel):
 
 @router.get("/claims/recent", response_model=list[ClaimPublic])
 async def claims_recent(
+    user: CurrentUser,
     session: Annotated[AsyncSession, Depends(get_session)],
     flight_id: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
 ) -> list[ClaimPublic]:
-    items = await ClaimsService(session).recent(limit=limit, flight_id=flight_id)
+    items = await ClaimsService(session).recent(
+        user_id=user.id,
+        limit=limit,
+        flight_id=flight_id,
+    )
     return [
         ClaimPublic(
             id=c.id,
