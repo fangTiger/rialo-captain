@@ -20,6 +20,7 @@ import type {
   WeatherCell,
   WeatherForecastBand,
 } from "./riskSignals";
+import { usePoolStore } from "../../store/pool";
 import "./GlobeMap.css";
 
 interface Props {
@@ -63,6 +64,13 @@ const protagonistRingStyle: CSSProperties = {
 const protagonistPulseStyle: CSSProperties = {
   animationName: "protagonist-spotlight-pulse-expand",
 };
+const UNDERWRITER_FLARE_TTL_MS = 1_400;
+
+interface UnderwriterFlare {
+  callsign: string;
+  token: string;
+}
+
 export function GlobeMap({
   cameraTarget = null,
   onUserGesture,
@@ -99,6 +107,15 @@ export function GlobeMap({
   // Hover 拉 OpenSky 后端 track (备用, 未来如果 OpenSky 重开 tracks endpoint)
   type TrackResult = "loading" | "failed" | [number, number][];
   const [tracks, setTracks] = useState<Record<string, TrackResult>>({});
+  const activePoolId = usePoolStore((state) => state.activePool?.id ?? null);
+  const underwrittenFlightIds = usePoolStore(
+    (state) => state.underwrittenFlightIds,
+  );
+  const poolTicker = usePoolStore((state) => state.ticker);
+  const seenPoolTickerRef = useRef<Set<string>>(new Set());
+  const [underwriterFlares, setUnderwriterFlares] = useState<
+    Record<string, UnderwriterFlare>
+  >({});
 
   useEffect(() => {
     viewportRef.current = viewport;
@@ -170,6 +187,41 @@ export function GlobeMap({
     }, TICK_INTERVAL_MS);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    const timers: number[] = [];
+    for (const event of poolTicker) {
+      if (event.type !== "paid" || seenPoolTickerRef.current.has(event.id)) {
+        continue;
+      }
+      seenPoolTickerRef.current.add(event.id);
+      const callsign =
+        typeof event.payload.callsign === "string" && event.payload.callsign
+          ? event.payload.callsign
+          : event.label.replace(/^Paid out\s+/i, "");
+      if (!callsign) continue;
+
+      const token = `${event.id}-${Date.now()}`;
+      setUnderwriterFlares((current) => ({
+        ...current,
+        [callsign]: { callsign, token },
+      }));
+      timers.push(
+        window.setTimeout(() => {
+          setUnderwriterFlares((current) => {
+            if (current[callsign]?.token !== token) return current;
+            const next = { ...current };
+            delete next[callsign];
+            return next;
+          });
+        }, UNDERWRITER_FLARE_TTL_MS),
+      );
+    }
+
+    return () => {
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [poolTicker]);
 
   // 当 SWR 拿到新数据，重置外推基准时间
   useEffect(() => {
@@ -519,6 +571,11 @@ export function GlobeMap({
                 f,
                 protagonistHighlight,
               );
+              const isMine =
+                Boolean(f.underwritten_by_pool_id) ||
+                (activePoolId !== null && f.underwritten_by_pool_id === activePoolId) ||
+                underwrittenFlightIds.has(f.callsign);
+              const underwriterFlare = underwriterFlares[f.callsign];
               const baseR = isHover ? 4 : 2.2;
               const r = baseR / viewport.k;
 
@@ -596,8 +653,20 @@ export function GlobeMap({
                       />
                     </g>
                   )}
+                  {underwriterFlare && (
+                    <circle
+                      className="underwriter-flare"
+                      data-testid={`underwriter-flare-${f.callsign}`}
+                      cx={x}
+                      cy={y}
+                      r={16 / viewport.k}
+                      pointerEvents="none"
+                    />
+                  )}
                   <circle
+                    className={isMine ? "flight-dot flight-dot--mine" : "flight-dot"}
                     data-testid={`flight-dot-${f.callsign}`}
+                    data-underwritten={isMine ? "true" : undefined}
                     data-protagonist={isProtagonist ? "true" : undefined}
                     cx={x}
                     cy={y}

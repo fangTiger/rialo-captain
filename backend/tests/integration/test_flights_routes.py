@@ -1,9 +1,12 @@
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 
 from backend.app import create_app, get_flight_cache
 from backend.db import Base, get_engine, get_session_factory
 from backend.flights.opensky import FlightState
+from backend.models import Policy, PolicyStatus, PresetStyle, User
+from backend.pools.service import PoolService
 from backend.tests.factories import make_flight
 
 
@@ -58,6 +61,48 @@ async def test_live_returns_cached_states(app_client: AsyncClient):
     assert body["data_stale"] is False
     assert len(body["flights"]) == 1
     assert body["flights"][0]["callsign"] == "BA178"
+
+
+@pytest.mark.asyncio
+async def test_live_marks_flights_underwritten_by_current_users_pool(app_client: AsyncClient):
+    login = await app_client.post(
+        "/auth/dev-login",
+        json={"email": "uw-flight@example.com", "name": "Underwriter"},
+    )
+    assert login.status_code == 200, login.text
+    async with get_session_factory()() as session:
+        user = (
+            await session.execute(select(User).where(User.email == "uw-flight@example.com"))
+        ).scalar_one()
+        flight = await make_flight(session, callsign="BA178", date="20260614")
+        pool = await PoolService(session).open_pool(
+            user=user,
+            preset_style=PresetStyle.STEADY,
+            delay_threshold_min=30,
+            payout_multiplier=3.0,
+            stake_ria=200,
+            include_hubs=True,
+            exclude_thunderstorm=True,
+            cover_red_eye=False,
+        )
+        policy = Policy(
+            user_id=user.id,
+            flight_id=flight.id,
+            underwriter_pool_id=pool.id,
+            premium=10,
+            payout=30,
+            condition_json='{"type":"delay","threshold_min":30}',
+            status=PolicyStatus.ACTIVE,
+        )
+        session.add(policy)
+        await session.commit()
+
+    res = await app_client.get("/flights/live")
+    assert res.status_code == 200
+
+    flight_payload = res.json()["flights"][0]
+    assert flight_payload["callsign"] == "BA178"
+    assert flight_payload["underwritten_by_pool_id"] == pool.id
 
 
 @pytest.mark.asyncio

@@ -133,6 +133,24 @@ async def test_cinema_inject_delay_without_admin_token_succeeds(app_client: Asyn
 
 
 @pytest.mark.asyncio
+async def test_dev_login_session_keeps_cinema_inject_delay_available(app_client: AsyncClient):
+    login = await app_client.post(
+        "/auth/dev-login",
+        json={"email": "underwriter@local.dev", "name": "Underwriter"},
+    )
+    assert login.status_code == 200, login.text
+    assert "rialo_session" in login.cookies
+
+    res = await app_client.post(
+        "/inject-delay",
+        json={"flight_id": "BA178-20260614", "delay_minutes": 45},
+    )
+
+    assert res.status_code == 200, res.text
+    assert res.json()["flight_id"] == "BA178-20260614"
+
+
+@pytest.mark.asyncio
 async def test_cinema_inject_delay_unknown_flight_returns_404(
     app_client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,

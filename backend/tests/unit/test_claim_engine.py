@@ -545,6 +545,7 @@ async def test_run_once_keeps_existing_settlement_event_payload_shapes(
     settled = next(event for event in captured if event["type"] == "claim.settled")
     landed = next(event for event in captured if event["type"] == "flight.landed")
     assert set(flare["payload"]) == {
+        "claim_id",
         "flight_id",
         "policy_id",
         "payout",
@@ -553,6 +554,7 @@ async def test_run_once_keeps_existing_settlement_event_payload_shapes(
         "settle_duration_ms",
     }
     assert set(settled["payload"]) == {
+        "claim_id",
         "flight_id",
         "policy_id",
         "payout",
@@ -562,6 +564,7 @@ async def test_run_once_keeps_existing_settlement_event_payload_shapes(
         "tx_hash",
         "block_height",
         "source",
+        "pool_id",
     }
     assert set(landed["payload"]) == {
         "flight_id",

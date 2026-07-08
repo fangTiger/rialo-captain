@@ -14,7 +14,10 @@ class UserService:
         self._session = session
 
     async def create_or_get(self, profile: GoogleProfile) -> User:
-        stmt = select(User).where(User.google_sub == profile.sub)
+        stmt = select(User).where(
+            User.google_sub == profile.sub,
+            User.is_system.is_(False),
+        )
         existing = (await self._session.execute(stmt)).scalar_one_or_none()
         if existing is not None:
             existing.email = profile.email
@@ -47,7 +50,11 @@ class UserService:
         if user_id:
             clauses.append(User.id == user_id)
         existing = (
-            await self._session.execute(select(User).where(or_(*clauses)).limit(1))
+            await self._session.execute(
+                select(User)
+                .where(or_(*clauses), User.is_system.is_(False))
+                .limit(1)
+            )
         ).scalar_one_or_none()
         if existing is not None:
             existing.email = email

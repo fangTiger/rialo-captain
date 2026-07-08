@@ -13,6 +13,7 @@ export interface FlightPublic {
   origin?: string | null;
   destination?: string | null;
   delay_rate?: number | null;
+  underwritten_by_pool_id?: string | null;
 }
 
 export interface LiveResponse {

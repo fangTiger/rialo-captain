@@ -4,6 +4,7 @@ import {
   type CinemaEventType,
   type FlareEvent,
 } from "../store/eventStore";
+import { POOL_EVENT_TYPES, usePoolStore, type PoolWsEventType } from "../store/pool";
 import { resolvePublicDeployConfig } from "../config/deployment";
 
 const BACKOFF_SCHEDULE = [1000, 2000, 4000, 8000, 16000, 30000];
@@ -119,6 +120,13 @@ export function useWebSocket(path = "/ws") {
           window.setTimeout(() => {
             useEventStore.getState().dismissToast(id);
           }, 4000);
+        } else if (
+          POOL_EVENT_TYPES.has(msg.type as PoolWsEventType) &&
+          isRecordPayload(msg.payload)
+        ) {
+          usePoolStore
+            .getState()
+            .applyPoolEvent(msg.type as PoolWsEventType, msg.payload);
         } else if (cinemaEventType && isRecordPayload(msg.payload)) {
           useEventStore.getState().addEvent({
             type: cinemaEventType,

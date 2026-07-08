@@ -12,6 +12,11 @@ class EventType(str, enum.Enum):
     CLAIM_TRIGGERED = "claim.triggered"
     CLAIM_SETTLED = "claim.settled"
     FLIGHT_LANDED = "flight.landed"
+    POOL_OPENED = "pool.opened"
+    POOL_POLICY_BOUND = "pool.policy_bound"
+    POOL_CLAIM_PAID = "pool.claim_paid"
+    POOL_RULE_UPDATED = "pool.rule_updated"
+    POOL_CLOSED = "pool.closed"
     TOAST = "toast"
 
 

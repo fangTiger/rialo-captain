@@ -129,6 +129,7 @@ class PolicyService:
         premium: int,
         condition: Condition,
         delay_rate: float,
+        charge_premium: bool = True,
     ) -> Policy:
         if premium not in ALLOWED_PREMIUMS:
             raise InvalidPremiumError(f"premium must be one of {ALLOWED_PREMIUMS}, got {premium}")
@@ -136,7 +137,8 @@ class PolicyService:
         multiplier = payout_multiplier_for_rate(delay_rate)
         payout = int(round(premium * multiplier))
 
-        await UserService(self._session).debit(user, premium)
+        if charge_premium and not user.is_system:
+            await UserService(self._session).debit(user, premium)
 
         policy = Policy(
             user_id=user.id,

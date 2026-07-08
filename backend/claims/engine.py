@@ -20,7 +20,8 @@ from backend.contracts.base import (
     ReactiveContractAdapter,
 )
 from backend.evidence.service import EvidenceService
-from backend.models import Claim, FailedTrigger, Flight, Policy, PolicyStatus, User
+from backend.models import Claim, FailedTrigger, Flight, Policy, PolicyStatus, Pool, User
+from backend.pools.service import PoolService
 from backend.ws.broadcaster import EventType
 
 logger = logging.getLogger(__name__)
@@ -294,11 +295,26 @@ class ClaimEngine:
                 delay_minutes=payload.delay_minutes,
                 signature=signature,
                 settle_duration_ms=tx.settle_duration_ms,
+                credit_user=persistent.underwriter_pool_id is None,
             )
             user = (
                 await session.execute(select(User).where(User.id == persistent.user_id))
             ).scalar_one()
             balance_after = user.balance
+            pool = None
+            if persistent.underwriter_pool_id is not None:
+                pool = await session.get(Pool, persistent.underwriter_pool_id)
+                if pool is not None:
+                    pool_service = PoolService(session, broadcaster=self._broadcaster)
+                    await pool_service.debit_claim_payout(
+                        pool=pool,
+                        policy=persistent,
+                        claim=claim,
+                        flight=flight,
+                    )
+                    if pool.balance <= 0 and pool.status.value == "active":
+                        await pool_service.close_pool(pool=pool, reason="bankrupt")
+                    balance_after = pool.balance
             tx_hash = self._mock_tx_hash(
                 claim_id=claim.id,
                 policy_id=persistent.id,
@@ -347,6 +363,7 @@ class ClaimEngine:
                             "tx_hash": tx_hash,
                             "block_height": block_height,
                             "source": "mock",
+                            "pool_id": persistent.underwriter_pool_id,
                         },
                     }
                 )

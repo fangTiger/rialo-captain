@@ -83,6 +83,13 @@ function defaultPrompts(subjectType: CopilotSubjectType) {
         "Which event should I verify first?",
         "What does this change?",
       ];
+    case "pool":
+      return [
+        "What changed in my underwriting pool?",
+        "Which bound flights carry the most payout risk?",
+        "Why did the latest pool claim pay out?",
+        "Which rule should I adjust next?",
+      ];
     case "overview":
     default:
       return [

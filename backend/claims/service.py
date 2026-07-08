@@ -19,10 +19,12 @@ class ClaimsService:
         delay_minutes: int,
         signature: str,
         settle_duration_ms: int,
+        credit_user: bool = True,
     ) -> Claim:
-        # 给用户加余额。
-        user = (await self._session.execute(select(User).where(User.id == policy.user_id))).scalar_one()
-        await UserService(self._session).credit(user, payout)
+        if credit_user:
+            # 给用户加余额。
+            user = (await self._session.execute(select(User).where(User.id == policy.user_id))).scalar_one()
+            await UserService(self._session).credit(user, payout)
 
         claim = Claim(
             policy_id=policy.id,

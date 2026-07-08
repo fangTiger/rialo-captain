@@ -5,11 +5,13 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.auth.jwt import JWTError, decode_session
+from backend.config import get_settings
 from backend.db import get_session
 from backend.flights.cache import FlightCache
 from backend.flights.opensky import OpenSkyClient, OpenSkyError
 from backend.flights.service import FlightService, live_delay_minutes_for_flight
-from backend.models import Flight
+from backend.models import Flight, Policy, PolicyStatus, Pool, PoolStatus
 
 router = APIRouter()
 
@@ -25,6 +27,7 @@ class FlightPublic(BaseModel):
     on_ground: bool
     origin: str | None = None
     destination: str | None = None
+    underwritten_by_pool_id: str | None = None
 
 
 class TrackPointPublic(BaseModel):
@@ -67,6 +70,18 @@ def _cache_from(request: Request) -> FlightCache:
     return request.app.state.flight_cache
 
 
+def _optional_user_id(request: Request) -> str | None:
+    token = request.cookies.get(get_settings().jwt_cookie_name)
+    if not token:
+        return None
+    try:
+        payload = decode_session(token)
+    except JWTError:
+        return None
+    subject = payload.get("sub")
+    return subject if isinstance(subject, str) else None
+
+
 @router.get("/flights/live", response_model=LiveResponse)
 async def flights_live(
     request: Request,
@@ -76,6 +91,7 @@ async def flights_live(
     entry = cache.get()
     callsigns = {state.callsign for state in entry.states if state.callsign}
     route_by_callsign: dict[str, tuple[str | None, str | None]] = {}
+    underwritten_by_callsign: dict[str, str] = {}
     if callsigns:
         rows = await session.execute(
             select(Flight.callsign, Flight.origin, Flight.destination).where(
@@ -86,6 +102,24 @@ async def flights_live(
             callsign: (origin or None, destination or None)
             for callsign, origin, destination in rows.all()
         }
+        user_id = _optional_user_id(request)
+        if user_id is not None:
+            underwritten_rows = await session.execute(
+                select(Flight.callsign, Policy.underwriter_pool_id)
+                .join(Policy, Policy.flight_id == Flight.id)
+                .join(Pool, Pool.id == Policy.underwriter_pool_id)
+                .where(
+                    Flight.callsign.in_(callsigns),
+                    Policy.status == PolicyStatus.ACTIVE,
+                    Pool.status == PoolStatus.ACTIVE,
+                    Pool.user_id == user_id,
+                )
+            )
+            underwritten_by_callsign = {
+                callsign: pool_id
+                for callsign, pool_id in underwritten_rows.all()
+                if pool_id is not None
+            }
     return LiveResponse(
         data_stale=entry.stale,
         stale_seconds=entry.stale_seconds,
@@ -101,6 +135,7 @@ async def flights_live(
                 on_ground=s.on_ground,
                 origin=route_by_callsign.get(s.callsign, (None, None))[0],
                 destination=route_by_callsign.get(s.callsign, (None, None))[1],
+                underwritten_by_pool_id=underwritten_by_callsign.get(s.callsign),
             )
             for s in entry.states
         ],

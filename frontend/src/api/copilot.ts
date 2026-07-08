@@ -6,7 +6,8 @@ export type CopilotSubjectType =
   | "flight"
   | "policy"
   | "claim"
-  | "evidence";
+  | "evidence"
+  | "pool";
 
 export interface CopilotAskInput {
   question: string;

@@ -58,6 +58,12 @@ class CopilotService:
                 "Which decision did this evidence affect?",
                 "Which event should I cross-check next?",
             ],
+            "pool": [
+                "What changed in my underwriting pool?",
+                "Which bound flights carry the most payout risk?",
+                "Why did the latest pool claim pay out?",
+                "Which rule should I adjust next?",
+            ],
         }
         return prompts_by_subject.get(subject_type, prompts_by_subject["overview"])
 

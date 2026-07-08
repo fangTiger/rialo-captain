@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     deepseek_model: str = "deepseek-v4-pro"
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_timeout_seconds: float = 20.0
+    pool_simulator_enabled: bool = True
+    pool_simulator_interval_min: int = 8
+    pool_simulator_interval_max: int = 15
+    pool_max_policies_per_pool: int = 100
     log_level: str = "INFO"
 
 

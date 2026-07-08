@@ -11,6 +11,7 @@ function Probe() {
   return (
     <div>
       <div>flights:{flights.length}</div>
+      <div>underwritten:{flights[0]?.underwritten_by_pool_id ?? "none"}</div>
       <div>stale:{String(stale)}</div>
       <div>seconds:{staleSeconds}</div>
     </div>
@@ -41,6 +42,7 @@ describe("useFlights", () => {
               velocity: 240,
               heading: 90,
               on_ground: false,
+              underwritten_by_pool_id: "pool-1",
             },
           ],
         }),
@@ -55,6 +57,7 @@ describe("useFlights", () => {
     );
 
     await waitFor(() => expect(screen.getByText("flights:1")).toBeInTheDocument());
+    expect(screen.getByText("underwritten:pool-1")).toBeInTheDocument();
     expect(screen.getByText("stale:false")).toBeInTheDocument();
     expect(screen.getByText("seconds:0")).toBeInTheDocument();
     expect(globalThis.fetch).toHaveBeenCalledWith(

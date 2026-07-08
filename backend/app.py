@@ -21,6 +21,8 @@ from backend.flights.mock import MockOpenSky
 from backend.flights.opensky import OpenSkyClient
 from backend.flights.routes import router as flights_router
 from backend.policies.routes import router as policies_router
+from backend.pools.routes import router as pools_router
+from backend.pools.simulator import PassengerSimulator
 from backend.ws.broadcaster import Broadcaster
 from backend.ws.routes import router as ws_router
 
@@ -51,7 +53,8 @@ async def lifespan(app: FastAPI):
     _opensky_singleton = _make_opensky_client()
     broadcaster = Broadcaster()
     adapter = get_contract_adapter()
-    opensky_enabled = get_settings().opensky_enabled
+    settings = get_settings()
+    opensky_enabled = settings.opensky_enabled
     engine = ClaimEngine(
         adapter=adapter,
         session_factory=get_session_factory(),
@@ -63,6 +66,13 @@ async def lifespan(app: FastAPI):
         cache=_flight_cache_singleton,
         session_factory=get_session_factory(),
     )
+    pool_simulator = PassengerSimulator(
+        session_factory=get_session_factory(),
+        interval_min_seconds=settings.pool_simulator_interval_min,
+        interval_max_seconds=settings.pool_simulator_interval_max,
+        enabled=settings.pool_simulator_enabled,
+        broadcaster=broadcaster,
+    )
 
     app.state.flight_cache = _flight_cache_singleton
     app.state.opensky = _opensky_singleton
@@ -70,20 +80,25 @@ async def lifespan(app: FastAPI):
     app.state.contract_adapter = adapter
     app.state.claim_engine = engine
     app.state.flight_fetcher = fetcher
+    app.state.pool_simulator = pool_simulator
 
     engine_task: asyncio.Task | None = None
     fetcher_task: asyncio.Task | None = None
+    pool_simulator_task: asyncio.Task | None = None
     if os.environ.get("CLAIM_ENGINE_ENABLED", "true").lower() != "false":
         engine_task = asyncio.create_task(engine.run_forever())
     if os.environ.get("FLIGHT_FETCHER_ENABLED", "true").lower() != "false":
         fetcher_task = asyncio.create_task(fetcher.run_forever())
+    if settings.pool_simulator_enabled:
+        pool_simulator_task = asyncio.create_task(pool_simulator.run_forever())
 
     try:
         yield
     finally:
         engine.stop()
         fetcher.stop()
-        for task in (engine_task, fetcher_task):
+        pool_simulator.stop()
+        for task in (engine_task, fetcher_task, pool_simulator_task):
             if task is not None:
                 task.cancel()
                 try:
@@ -123,6 +138,14 @@ def create_app() -> FastAPI:
         cache=_flight_cache_singleton,
         session_factory=get_session_factory(),
     )
+    settings = get_settings()
+    app.state.pool_simulator = PassengerSimulator(
+        session_factory=get_session_factory(),
+        interval_min_seconds=settings.pool_simulator_interval_min,
+        interval_max_seconds=settings.pool_simulator_interval_max,
+        enabled=settings.pool_simulator_enabled,
+        broadcaster=broadcaster,
+    )
 
     @app.get("/health")
     async def health() -> dict[str, str]:
@@ -132,6 +155,7 @@ def create_app() -> FastAPI:
     app.include_router(copilot_router)
     app.include_router(flights_router)
     app.include_router(policies_router)
+    app.include_router(pools_router)
     app.include_router(claims_router)
     app.include_router(evidence_router)
     app.include_router(admin_router)

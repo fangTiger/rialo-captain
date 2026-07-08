@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.flights.cache import FlightCache
 from backend.flights.opensky import FlightState
-from backend.models import Claim, Policy, PolicyEvent, PolicyStatus
+from backend.models import Claim, Policy, PolicyEvent, PolicyStatus, Pool, PoolStatus, PresetStyle
 from backend.tests.factories import make_flight, make_user
 
 
@@ -413,6 +413,81 @@ async def test_overview_context_caps_owned_history_but_keeps_full_summary_counts
     assert len(context.subject["policies"]) <= 5
     assert len(context.subject["claims"]) <= 5
     assert len(context.sources) <= 20
+
+
+@pytest.mark.asyncio
+async def test_pool_subject_injects_active_pool_context_with_bound_policies_and_claims(
+    db_session: AsyncSession,
+):
+    from backend.copilot.schemas import CopilotAskRequest
+    from backend.copilot.service import CopilotService
+
+    owner = await make_user(db_session, email="owner@example.com")
+    simulator_user = await make_user(db_session, email="simulator@example.com")
+    flight = await make_flight(db_session, callsign="BA178", date="20260708")
+    pool = Pool(
+        user_id=owner.id,
+        preset_style=PresetStyle.STEADY,
+        delay_threshold_min=30,
+        payout_multiplier=3.0,
+        stake_ria=200,
+        balance=130,
+        include_hubs=True,
+        exclude_thunderstorm=True,
+        cover_red_eye=False,
+        status=PoolStatus.ACTIVE,
+    )
+    db_session.add(pool)
+    await db_session.flush()
+    policy = await _make_policy(
+        db_session,
+        user_id=simulator_user.id,
+        flight_id=flight.id,
+        premium=10,
+        payout=80,
+    )
+    policy.underwriter_pool_id = pool.id
+    claim = await _make_claim(db_session, policy_id=policy.id, payout=80, delay_minutes=45)
+    await db_session.commit()
+
+    provider = _RecordingProvider()
+    service = CopilotService(
+        db_session,
+        provider=provider,
+        deepseek_api_key="test-deepseek-key",
+        deepseek_model="deepseek-v4-pro",
+    )
+
+    await service.ask(
+        owner,
+        CopilotAskRequest(
+            question="Brief my underwriting pool",
+            subject_type="pool",
+        ),
+    )
+
+    captured = provider.calls[0].context
+    assert captured.subject_type == "pool"
+    assert captured.subject["pool"] == {
+        "id": pool.id,
+        "preset_style": "steady",
+        "status": "active",
+        "stake_ria": 200,
+        "balance": 130,
+        "pl": -70,
+        "rule": {
+            "delay_threshold_min": 30,
+            "payout_multiplier": 3.0,
+            "include_hubs": True,
+            "exclude_thunderstorm": True,
+            "cover_red_eye": False,
+        },
+    }
+    assert captured.subject["bound_policies"][0]["id"] == policy.id
+    assert captured.subject["bound_policies"][0]["flight_id"] == flight.id
+    assert captured.subject["claims"][0]["id"] == claim.id
+    assert captured.subject["claims"][0]["payout"] == 80
+    assert {source.type for source in captured.sources} >= {"pool", "policy", "flight", "claim"}
 
 
 @pytest.mark.asyncio

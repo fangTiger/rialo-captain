@@ -5,6 +5,23 @@
   will-change: opacity, transform;
 }
 
+.flight-dot--mine {
+  fill: var(--accent-radar);
+  stroke: var(--accent-radar);
+  filter: drop-shadow(0 0 6px var(--accent-radar));
+}
+
+.underwriter-flare {
+  fill: color-mix(in srgb, var(--accent-radar) 16%, transparent);
+  stroke: var(--accent-radar);
+  stroke-width: 1;
+  opacity: 0.92;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: flare-burst 1.4s var(--motion-ease-out);
+  pointer-events: none;
+}
+
 .weather-risk-layer {
   mix-blend-mode: screen;
   pointer-events: none;
@@ -354,6 +371,7 @@
 @media (prefers-reduced-motion: reduce) {
   .protagonist-spotlight-ring-animated,
   .protagonist-spotlight-pulse-animated,
+  .underwriter-flare,
   .weather-risk-cell,
   .weather-risk-cell-field,
   .weather-storm-mass,

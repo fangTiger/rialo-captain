@@ -9,6 +9,7 @@ from backend.policies.service import (
     PolicyService,
     payout_multiplier_for_rate,
 )
+from backend.pools.service import ensure_system_sim_user
 from backend.tests.factories import make_flight
 
 
@@ -78,3 +79,23 @@ async def test_create_policy_rejects_when_balance_insufficient(db_session: Async
             delay_rate=0.0,
         )
     assert user.balance == 3
+
+
+@pytest.mark.asyncio
+async def test_create_policy_for_system_sim_user_does_not_debit_balance(
+    db_session: AsyncSession,
+):
+    user = await ensure_system_sim_user(db_session)
+    flight = await make_flight(db_session, callsign="SIM1", date="20260614")
+
+    policy = await PolicyService(db_session).create_policy(
+        user=user,
+        flight_id=flight.id,
+        premium=5,
+        condition=Condition(type=ConditionType.DELAY, threshold_min=30),
+        delay_rate=0.1,
+    )
+
+    assert policy.user_id == user.id
+    assert policy.premium == 5
+    assert user.balance == 0

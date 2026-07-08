@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.flights.cache import FlightCache
 from backend.flights.opensky import FlightState
 from backend.flights.service import DelayStats
-from backend.models import Claim, Flight, Policy, PolicyEvent, User
+from backend.models import Claim, Flight, Policy, PolicyEvent, Pool, PoolStatus, User
 
 from .schemas import CopilotAskRequest, CopilotContext, CopilotSource
 
@@ -51,6 +51,8 @@ class CopilotContextBuilder:
             return await self._build_claim(user, request.subject_id)
         if request.subject_type == "evidence":
             return await self._build_evidence(user, request.subject_id)
+        if request.subject_type == "pool":
+            return await self._build_pool(user, request.subject_id)
         raise CopilotNotFoundError("unsupported subject type")
 
     async def _build_overview(self, user: User) -> CopilotContext:
@@ -224,6 +226,41 @@ class CopilotContextBuilder:
             sources=sources,
         )
 
+    async def _build_pool(self, user: User, subject_id: str | None) -> CopilotContext:
+        pool = await self._owned_pool(user.id, subject_id)
+        if pool is None:
+            raise CopilotNotFoundError("pool not found")
+
+        policies = await self._policies_for_pool(pool.id, limit=OVERVIEW_CONTEXT_LIMIT)
+        claims = await self._claims_for_pool(pool.id, limit=OVERVIEW_CONTEXT_LIMIT)
+        flights = [
+            flight
+            for flight in [
+                await self._get_flight(policy.flight_id) for policy in policies
+            ]
+            if flight is not None
+        ]
+        sources = self._dedupe_sources(
+            [
+                self._pool_source(pool),
+                *[self._flight_source(flight) for flight in flights],
+                *[self._policy_source(policy) for policy in policies],
+                *[self._claim_source(claim) for claim in claims],
+            ]
+        )
+
+        return CopilotContext(
+            subject_type="pool",
+            subject_id=pool.id,
+            subject={
+                "pool": self._pool_summary(pool),
+                "bound_policies": [self._policy_summary(policy) for policy in policies],
+                "flights": [await self._flight_summary(user.id, flight) for flight in flights],
+                "claims": [self._claim_summary(claim) for claim in claims],
+            },
+            sources=sources,
+        )
+
     async def _flight_summary(self, user_id: str, flight: Flight) -> dict[str, Any]:
         stats = await self._user_delay_stats(user_id, flight.callsign)
         last_state = self._parse_json_dict(flight.last_state)
@@ -359,6 +396,23 @@ class CopilotContextBuilder:
             "created_at": policy.created_at,
         }
 
+    def _pool_summary(self, pool: Pool) -> dict[str, Any]:
+        return {
+            "id": pool.id,
+            "preset_style": pool.preset_style.value,
+            "status": pool.status.value,
+            "stake_ria": pool.stake_ria,
+            "balance": pool.balance,
+            "pl": pool.balance - pool.stake_ria,
+            "rule": {
+                "delay_threshold_min": pool.delay_threshold_min,
+                "payout_multiplier": pool.payout_multiplier,
+                "include_hubs": pool.include_hubs,
+                "exclude_thunderstorm": pool.exclude_thunderstorm,
+                "cover_red_eye": pool.cover_red_eye,
+            },
+        }
+
     def _claim_summary(self, claim: Claim) -> dict[str, Any]:
         return {
             "id": claim.id,
@@ -443,6 +497,14 @@ class CopilotContextBuilder:
             id=event.id,
             label=f"Evidence {event_reference}",
             href=href,
+        )
+
+    def _pool_source(self, pool: Pool) -> CopilotSource:
+        return CopilotSource(
+            type="pool",
+            id=pool.id,
+            label=f"Pool {pool.preset_style.value}",
+            href="/studio",
         )
 
     def _event_reference(self, event: PolicyEvent) -> str:
@@ -560,6 +622,14 @@ class CopilotContextBuilder:
             )
         ).scalar_one_or_none()
 
+    async def _owned_pool(self, user_id: str, pool_id: str | None) -> Pool | None:
+        stmt = select(Pool).where(Pool.user_id == user_id)
+        if pool_id:
+            stmt = stmt.where(Pool.id == pool_id)
+        else:
+            stmt = stmt.where(Pool.status == PoolStatus.ACTIVE)
+        return (await self._session.execute(stmt)).scalar_one_or_none()
+
     async def _claims_for_user(
         self,
         user_id: str,
@@ -585,6 +655,37 @@ class CopilotContextBuilder:
             .where(Claim.policy_id == policy_id)
             .order_by(Claim.settled_at.desc(), Claim.id.desc())
         )
+        return (await self._session.execute(stmt)).scalars().all()
+
+    async def _policies_for_pool(
+        self,
+        pool_id: str,
+        *,
+        limit: int | None = OVERVIEW_CONTEXT_LIMIT,
+    ) -> list[Policy]:
+        stmt = (
+            select(Policy)
+            .where(Policy.underwriter_pool_id == pool_id)
+            .order_by(Policy.created_at.desc(), Policy.id.desc())
+        )
+        if limit is not None:
+            stmt = stmt.limit(limit)
+        return (await self._session.execute(stmt)).scalars().all()
+
+    async def _claims_for_pool(
+        self,
+        pool_id: str,
+        *,
+        limit: int | None = OVERVIEW_CONTEXT_LIMIT,
+    ) -> list[Claim]:
+        stmt = (
+            select(Claim)
+            .join(Policy, Claim.policy_id == Policy.id)
+            .where(Policy.underwriter_pool_id == pool_id)
+            .order_by(Claim.settled_at.desc(), Claim.id.desc())
+        )
+        if limit is not None:
+            stmt = stmt.limit(limit)
         return (await self._session.execute(stmt)).scalars().all()
 
     async def _latest_claim_for_policy(self, policy_id: str) -> Claim | None:

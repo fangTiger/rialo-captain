@@ -4,9 +4,9 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
-CopilotSubjectType = Literal["overview", "flight", "policy", "claim", "evidence"]
+CopilotSubjectType = Literal["overview", "flight", "policy", "claim", "evidence", "pool"]
 CopilotStatus = Literal["ok", "unavailable"]
-CopilotSourceType = Literal["flight", "policy", "claim", "evidence"]
+CopilotSourceType = Literal["flight", "policy", "claim", "evidence", "pool"]
 CopilotStreamEventName = Literal["context", "delta", "suggestions", "done", "error"]
 
 

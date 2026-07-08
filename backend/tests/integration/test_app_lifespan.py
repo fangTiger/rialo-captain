@@ -36,6 +36,28 @@ class SpyFlightFetcher:
         self.stopped = True
 
 
+class SpyPassengerSimulator:
+    instances: list["SpyPassengerSimulator"] = []
+
+    def __init__(self, **kwargs) -> None:
+        self.kwargs = kwargs
+        self.started = False
+        self.stopped = False
+        self.cancelled = False
+        SpyPassengerSimulator.instances.append(self)
+
+    async def run_forever(self) -> None:
+        self.started = True
+        try:
+            await asyncio.Future()
+        except asyncio.CancelledError:
+            self.cancelled = True
+            raise
+
+    def stop(self) -> None:
+        self.stopped = True
+
+
 class FakeAdapter:
     pass
 
@@ -54,9 +76,11 @@ def _configure_lifespan(monkeypatch, tmp_path) -> None:
     backend.db._session_factory = None
     app_module._opensky_singleton = None
     SpyFlightFetcher.instances = []
+    SpyPassengerSimulator.instances = []
 
     monkeypatch.setattr(app_module, "OpenSkyClient", FakeOpenSky)
     monkeypatch.setattr(app_module, "FlightFetcher", SpyFlightFetcher)
+    monkeypatch.setattr(app_module, "PassengerSimulator", SpyPassengerSimulator, raising=False)
     monkeypatch.setattr(app_module, "get_contract_adapter", lambda: FakeAdapter())
 
 
@@ -103,5 +127,26 @@ async def test_lifespan_respects_flight_fetcher_enabled_false(monkeypatch, tmp_p
         assert fetcher.stopped is True
         assert fetcher.cancelled is False
         assert app_module._opensky_singleton is None
+    finally:
+        await _dispose_db()
+
+
+@pytest.mark.asyncio
+async def test_lifespan_starts_pool_simulator_by_default(monkeypatch, tmp_path):
+    _configure_lifespan(monkeypatch, tmp_path)
+    monkeypatch.setenv("FLIGHT_FETCHER_ENABLED", "false")
+    monkeypatch.delenv("POOL_SIMULATOR_ENABLED", raising=False)
+    app = FastAPI()
+
+    try:
+        async with app_module.lifespan(app):
+            await asyncio.sleep(0)
+            simulator = app.state.pool_simulator
+            assert simulator.started is True
+            assert simulator.kwargs["interval_min_seconds"] == 8
+            assert simulator.kwargs["interval_max_seconds"] == 15
+
+        assert simulator.stopped is True
+        assert simulator.cancelled is True
     finally:
         await _dispose_db()

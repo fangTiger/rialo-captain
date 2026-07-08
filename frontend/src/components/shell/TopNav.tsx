@@ -1,13 +1,33 @@
 import { Link, useLocation } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { useMe } from "../../hooks/useMe";
+import { usePoolStore } from "../../store/pool";
 
 const TABS = [
   { to: "/", label: "TOWER" },
+  { to: "/studio", label: "STUDIO" },
   { to: "/policies", label: "MY HANGAR" },
   { to: "/claims", label: "CLAIMS FEED" },
   { to: "/routes", label: "HOT ROUTES" },
   { to: "/rialo-inside", label: "RIALO INSIDE" },
 ];
+
+function studioBadge(
+  activePool: ReturnType<typeof usePoolStore.getState>["activePool"],
+  closedFlashUntil: number,
+  now: number,
+) {
+  if (closedFlashUntil > now) {
+    return { label: "CLOSED", color: "var(--warn-amber)" };
+  }
+  if (!activePool) return null;
+
+  const roundedPl = Math.round(activePool.pl);
+  return {
+    label: roundedPl >= 0 ? `+${roundedPl}` : `${roundedPl}`,
+    color: roundedPl >= 0 ? "var(--accent-radar)" : "var(--warn-amber)",
+  };
+}
 
 function BrandMark() {
   return (
@@ -129,6 +149,19 @@ function BrandMark() {
 export function TopNav() {
   const { user } = useMe();
   const loc = useLocation();
+  const activePool = usePoolStore((state) => state.activePool);
+  const closedFlashUntil = usePoolStore((state) => state.closedFlashUntil);
+  const [now, setNow] = useState(() => Date.now());
+  const currentStudioBadge = studioBadge(activePool, closedFlashUntil, now);
+
+  useEffect(() => {
+    if (closedFlashUntil <= now) return undefined;
+    const timer = window.setTimeout(
+      () => setNow(Date.now()),
+      Math.max(0, closedFlashUntil - now + 16),
+    );
+    return () => window.clearTimeout(timer);
+  }, [closedFlashUntil, now]);
 
   return (
     <nav
@@ -222,6 +255,9 @@ export function TopNav() {
                   loc.pathname === tab.to
                     ? "var(--text-primary)"
                     : "var(--text-secondary)",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
                 flex: "0 1 auto",
                 minWidth: 0,
                 textDecoration: "none",
@@ -234,7 +270,17 @@ export function TopNav() {
                 overflowWrap: "anywhere",
               }}
             >
-              {tab.label}
+              <span>{tab.label}</span>
+              {tab.to === "/studio" && currentStudioBadge ? (
+                <span
+                  data-testid="studio-nav-badge"
+                  style={{
+                    color: currentStudioBadge.color,
+                  }}
+                >
+                  {currentStudioBadge.label}
+                </span>
+              ) : null}
             </Link>
           ))}
         </div>

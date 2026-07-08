@@ -159,6 +159,27 @@ async def test_create_policy_returns_policy_with_payout(app_client: AsyncClient)
 
 
 @pytest.mark.asyncio
+async def test_manual_create_policy_keeps_underwriter_pool_null_and_response_compatible(
+    app_client: AsyncClient,
+):
+    res = await app_client.post(
+        "/policies",
+        json={
+            "flight_id": "BA178-20260614",
+            "premium": 10,
+        },
+    )
+    assert res.status_code == 201, res.text
+    body = res.json()
+    assert "underwriter_pool_id" not in body
+
+    async with get_session_factory()() as session:
+        policy = await session.get(Policy, body["id"])
+
+    assert policy.underwriter_pool_id is None
+
+
+@pytest.mark.asyncio
 async def test_create_policy_broadcasts_policy_created_without_changing_response_schema(
     app_client: AsyncClient,
 ):

@@ -34,6 +34,10 @@ describe("App routes", () => {
         );
       }
 
+      if (url.includes("/api/pools/me")) {
+        return Promise.resolve(new Response("null", { status: 200 }));
+      }
+
       if (url.includes("/api/policies")) {
         return Promise.resolve(
           new Response(
@@ -171,6 +175,23 @@ describe("App routes", () => {
     await waitFor(() => expect(screen.getByText(/Six roles/)).toBeInTheDocument());
     expect(screen.getByText("TRADITIONAL")).toBeInTheDocument();
     expect(screen.getByText("Reactive Contract")).toBeInTheDocument();
+    expect(screen.getByText("990 RIA")).toBeInTheDocument();
+  });
+
+  it("mounts Studio at /studio inside the protected app shell", async () => {
+    window.history.pushState({}, "", "/studio");
+
+    render(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <App />
+      </SWRConfig>,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("Underwrite delay risk in 3 seconds."),
+      ).toBeInTheDocument(),
+    );
     expect(screen.getByText("990 RIA")).toBeInTheDocument();
   });
 });

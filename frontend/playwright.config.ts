@@ -18,7 +18,7 @@ export default defineConfig({
     ? [
         {
           command:
-            `cd .. && DATABASE_URL=${smokeDbUrl} .venv/bin/python -m uvicorn backend.app:app --port 8000`,
+            `cd .. && DATABASE_URL=${smokeDbUrl} OPENSKY_ENABLED=false POOL_SIMULATOR_INTERVAL_MIN=1 POOL_SIMULATOR_INTERVAL_MAX=2 .venv/bin/python -m uvicorn backend.app:app --port 8000`,
           url: "http://localhost:8000/health",
           reuseExistingServer: true,
           timeout: 30000,
