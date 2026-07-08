@@ -78,7 +78,7 @@ describe("pool store", () => {
     expect(usePoolStore.getState().activePool?.balance).toBe(210);
     expect(latestTicker()).toMatchObject({
       type: "bound",
-      label: "Bound AA100",
+      label: "Passenger → Pool · AA100",
       amount: 10,
     });
 
@@ -101,7 +101,7 @@ describe("pool store", () => {
     });
     expect(latestTicker()).toMatchObject({
       type: "paid",
-      label: "Paid out AA100",
+      label: "Pool → Passenger · AA100 ⛓︎ auto-settled",
       amount: 80,
     });
   });
@@ -152,7 +152,7 @@ describe("pool store", () => {
     });
     expect(usePoolStore.getState().ticker[0]).toMatchObject({
       type: "rule",
-      label: "Rule updated",
+      label: "Reactive contract updated",
     });
   });
 });

@@ -60,7 +60,7 @@ describe("PoolCopilotPanel", () => {
     expect(screen.getByText("Pool briefing")).toBeInTheDocument();
   });
 
-  it("briefs after pool open, first bind, and every fifth bind", async () => {
+  it("briefs after pool open and first bind, staying quiet on subsequent binds", async () => {
     usePoolStore.getState().setActivePool(pool);
     render(<PoolCopilotPanel pool={pool} />);
 
@@ -75,6 +75,11 @@ describe("PoolCopilotPanel", () => {
       }),
       { openPanel: false },
     );
+
+    // Advance past the 30s cooldown so the first-bind briefing can fire.
+    act(() => {
+      vi.advanceTimersByTime(30_001);
+    });
 
     act(() => {
       for (let index = 1; index <= 5; index += 1) {
@@ -95,15 +100,15 @@ describe("PoolCopilotPanel", () => {
       }),
       { openPanel: false },
     );
-    expect(copilotHarness.ask).toHaveBeenCalledWith(
-      expect.objectContaining({
-        question: "Brief the latest 5 bound policies and forward exposure.",
-      }),
-      { openPanel: false },
+    // No batched "every 5th bind" briefing anymore — subsequent binds should stay silent.
+    const askCalls = copilotHarness.ask.mock.calls.filter(
+      ([input]: [{ question?: string }]) =>
+        input.question === "Brief the latest 5 bound policies and forward exposure.",
     );
+    expect(askCalls).toHaveLength(0);
   });
 
-  it("briefs on payout and bankrupt close events", async () => {
+  it("briefs on payout events", async () => {
     usePoolStore.getState().setActivePool(pool);
     render(<PoolCopilotPanel pool={pool} />);
 
@@ -117,11 +122,6 @@ describe("PoolCopilotPanel", () => {
         balance_after: 120,
         pl: -80,
       });
-      usePoolStore.getState().applyPoolEvent("pool.closed", {
-        pool_id: "pool-1",
-        reason: "bankrupt",
-        final_pl: -220,
-      });
     });
 
     expect(copilotHarness.ask).toHaveBeenCalledWith(
@@ -130,6 +130,20 @@ describe("PoolCopilotPanel", () => {
       }),
       { openPanel: false },
     );
+  });
+
+  it("briefs when the pool closes after drawdown", async () => {
+    usePoolStore.getState().setActivePool(pool);
+    render(<PoolCopilotPanel pool={pool} />);
+
+    act(() => {
+      usePoolStore.getState().applyPoolEvent("pool.closed", {
+        pool_id: "pool-1",
+        reason: "bankrupt",
+        final_pl: -220,
+      });
+    });
+
     expect(copilotHarness.ask).toHaveBeenCalledWith(
       expect.objectContaining({
         subjectType: "pool",

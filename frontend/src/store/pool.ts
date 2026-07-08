@@ -133,7 +133,7 @@ export const usePoolStore = create<PoolStore>((set) => ({
         return {
           ticker: withTicker(state.ticker, {
             type: "opened",
-            label: "Pool opened",
+            label: "You → Pool · stake locked",
             amount: numberValue(payload.stake_ria),
             tone: "positive",
             payload,
@@ -163,7 +163,7 @@ export const usePoolStore = create<PoolStore>((set) => ({
             : state.activePool,
           ticker: withTicker(state.ticker, {
             type: "bound",
-            label: `Bound ${callsign}`,
+            label: `Passenger → Pool · ${callsign}`,
             amount: premium,
             flightId: flightId || undefined,
             policyId: textValue(payload.policy_id, ""),
@@ -191,7 +191,7 @@ export const usePoolStore = create<PoolStore>((set) => ({
             : state.activePool,
           ticker: withTicker(state.ticker, {
             type: "paid",
-            label: `Paid out ${callsign}`,
+            label: `Pool → Passenger · ${callsign} ⛓︎ auto-settled`,
             amount: payout,
             flightId: flightId || undefined,
             policyId: textValue(payload.policy_id, ""),
@@ -211,7 +211,7 @@ export const usePoolStore = create<PoolStore>((set) => ({
             : state.activePool,
           ticker: withTicker(state.ticker, {
             type: "rule",
-            label: "Rule updated",
+            label: "Reactive contract updated",
             tone: "neutral",
             payload,
           }),
@@ -229,8 +229,8 @@ export const usePoolStore = create<PoolStore>((set) => ({
             type: "closed",
             label:
               payload.reason === "bankrupt"
-                ? "Pool closed by drawdown"
-                : "Pool closed",
+                ? "Pool empty · closed by drawdown"
+                : "Pool → You · stake returned",
             amount: numberValue(payload.final_pl),
             tone: "warning",
             payload,

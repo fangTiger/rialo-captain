@@ -12,6 +12,38 @@ function multiplierLabel(value: number) {
 
 export function RuleLine({ rule, onChange }: RuleLineProps) {
   return (
+    <div style={{ display: "grid", gap: 8 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        <span
+          style={{
+            color: "var(--accent-radar)",
+            fontFamily: "var(--font-mono)",
+            fontSize: "var(--font-size-micro)",
+            letterSpacing: "0.16em",
+            textTransform: "uppercase",
+          }}
+        >
+          Your reactive contract · tap any chip to edit
+        </span>
+        <span
+          style={{
+            color: "var(--text-tertiary)",
+            fontFamily: "var(--font-mono)",
+            fontSize: "var(--font-size-micro)",
+            letterSpacing: "0.08em",
+          }}
+        >
+          ⛓︎ deployed on rialo
+        </span>
+      </div>
     <div
       aria-label="Pool rule"
       role="group"
@@ -72,6 +104,7 @@ export function RuleLine({ rule, onChange }: RuleLineProps) {
       >
         {rule.cover_red_eye ? "Red-eye covered" : "Red-eye off"}
       </RuleChipEditor>
+    </div>
     </div>
   );
 }

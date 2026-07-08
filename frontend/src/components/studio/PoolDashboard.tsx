@@ -97,11 +97,17 @@ export function PoolDashboard({
             role="list"
             style={{
               display: "grid",
-              gap: 8,
+              gap: 6,
             }}
           >
-            {ticker.map((event) => {
+            {ticker.slice(0, 6).map((event, index) => {
               const amount = tickerAmount(event);
+              const isKeyMoment =
+                event.type === "paid" ||
+                event.type === "opened" ||
+                event.type === "closed" ||
+                event.type === "rule";
+              const rowOpacity = Math.max(0.35, 1 - index * 0.12);
               return (
                 <div
                   key={event.id}
@@ -111,14 +117,22 @@ export function PoolDashboard({
                     gridTemplateColumns: "minmax(0, 1fr) auto",
                     gap: 10,
                     alignItems: "center",
-                    minHeight: 38,
-                    padding: "8px 10px",
-                    color: "var(--text-primary)",
-                    background: "var(--command-surface-glass)",
-                    border: "1px solid var(--border-subtle)",
+                    minHeight: isKeyMoment ? 38 : 30,
+                    padding: isKeyMoment ? "8px 10px" : "5px 10px",
+                    color: isKeyMoment
+                      ? "var(--text-primary)"
+                      : "var(--text-secondary)",
+                    background: isKeyMoment
+                      ? "var(--command-surface-glass)"
+                      : "transparent",
+                    border: isKeyMoment
+                      ? "1px solid var(--border-subtle)"
+                      : "1px solid transparent",
                     borderRadius: "var(--radius-soft)",
                     fontFamily: "var(--font-mono)",
                     fontSize: "var(--font-size-caption)",
+                    opacity: rowOpacity,
+                    transition: "opacity 240ms ease",
                   }}
                 >
                   <span>{event.label}</span>
@@ -129,6 +143,7 @@ export function PoolDashboard({
                           event.type === "paid"
                             ? "var(--warn-amber)"
                             : "var(--accent-radar)",
+                        opacity: isKeyMoment ? 1 : 0.7,
                       }}
                     >
                       {amount}

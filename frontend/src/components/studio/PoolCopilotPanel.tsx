@@ -16,6 +16,8 @@ function poolSubject(poolId: string, question: string) {
   };
 }
 
+const BRIEFING_COOLDOWN_MS = 30_000;
+
 export function PoolCopilotPanel({ pool }: PoolCopilotPanelProps) {
   const { ask, errorMessage, isLoading, response } = useCopilot();
   const hits24h = usePoolStore((state) => state.hits24h);
@@ -25,10 +27,20 @@ export function PoolCopilotPanel({ pool }: PoolCopilotPanelProps) {
   const lastHitsRef = useRef(hits24h);
   const lastPaidOutRef = useRef(paidOut);
   const seenClosedEventsRef = useRef<Set<string>>(new Set());
+  const lastBriefingAtRef = useRef(0);
+
+  function askIfIdle(input: Parameters<typeof ask>[0]) {
+    const now = Date.now();
+    if (isLoading) return;
+    if (now - lastBriefingAtRef.current < BRIEFING_COOLDOWN_MS) return;
+    lastBriefingAtRef.current = now;
+    void ask(input, { openPanel: false });
+  }
 
   useEffect(() => {
     if (pool || emptyBriefingAskedRef.current) return;
     emptyBriefingAskedRef.current = true;
+    lastBriefingAtRef.current = Date.now();
     void ask(
       {
         question: "Recommend a starter underwriting preset for Underwriter Studio.",
@@ -41,6 +53,7 @@ export function PoolCopilotPanel({ pool }: PoolCopilotPanelProps) {
   useEffect(() => {
     if (!pool) return undefined;
     const timer = window.setTimeout(() => {
+      lastBriefingAtRef.current = Date.now();
       void ask(
         poolSubject(pool.id, "Brief this underwriting pool now that it is live."),
         { openPanel: false },
@@ -54,22 +67,13 @@ export function PoolCopilotPanel({ pool }: PoolCopilotPanelProps) {
       lastHitsRef.current = hits24h;
       return;
     }
-    if (hits24h > lastHitsRef.current) {
-      if (lastHitsRef.current === 0 && hits24h >= 1) {
-        void ask(
-          poolSubject(pool.id, "Report the first simulator policy bound to my pool."),
-          { openPanel: false },
-        );
-      }
-      if (hits24h > 0 && hits24h % 5 === 0) {
-        void ask(
-          poolSubject(pool.id, "Brief the latest 5 bound policies and forward exposure."),
-          { openPanel: false },
-        );
-      }
+    if (hits24h > lastHitsRef.current && lastHitsRef.current === 0 && hits24h >= 1) {
+      askIfIdle(
+        poolSubject(pool.id, "Report the first simulator policy bound to my pool."),
+      );
     }
     lastHitsRef.current = hits24h;
-  }, [ask, hits24h, pool]);
+  }, [hits24h, pool]);
 
   useEffect(() => {
     if (!pool) {
@@ -77,13 +81,12 @@ export function PoolCopilotPanel({ pool }: PoolCopilotPanelProps) {
       return;
     }
     if (paidOut > lastPaidOutRef.current) {
-      void ask(
+      askIfIdle(
         poolSubject(pool.id, "Explain the latest payout from my underwriting pool."),
-        { openPanel: false },
       );
     }
     lastPaidOutRef.current = paidOut;
-  }, [ask, paidOut, pool]);
+  }, [paidOut, pool]);
 
   useEffect(() => {
     for (const event of ticker) {
@@ -98,12 +101,11 @@ export function PoolCopilotPanel({ pool }: PoolCopilotPanelProps) {
       const poolId =
         typeof event.payload.pool_id === "string" ? event.payload.pool_id : pool?.id;
       if (!poolId) continue;
-      void ask(
+      askIfIdle(
         poolSubject(poolId, "Explain why this underwriting pool closed after drawdown."),
-        { openPanel: false },
       );
     }
-  }, [ask, pool?.id, ticker]);
+  }, [pool?.id, ticker]);
 
   const visibleAnswer =
     errorMessage ??

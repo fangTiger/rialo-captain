@@ -8,12 +8,13 @@ import {
   type PoolRule,
   type PresetStyle,
 } from "../api/pool";
-import { CommandPanel, SignalPill } from "../design/commandCenter";
+import { CommandPanel } from "../design/commandCenter";
 import {
   PresetCards,
   STUDIO_PRESETS,
   type StudioPresetDefinition,
 } from "../components/studio/PresetCards";
+import { RoleIdentity } from "../components/studio/RoleIdentity";
 import { RuleLine } from "../components/studio/RuleLine";
 import { StakeSlider } from "../components/studio/StakeSlider";
 import { PoolDashboard } from "../components/studio/PoolDashboard";
@@ -143,14 +144,9 @@ export function StudioShell() {
         }
       >
         <div style={{ display: "grid", gap: "var(--layout-panel-gap)" }}>
+          <RoleIdentity pool={activePool} />
           {activePool ? (
             <>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                <SignalPill tone="radar">Preset {activePool.preset_style}</SignalPill>
-                <SignalPill tone={activePool.pl >= 0 ? "radar" : "elevated"}>
-                  P/L {activePool.pl >= 0 ? `+${activePool.pl}` : activePool.pl} RIA
-                </SignalPill>
-              </div>
               <DevInjectDelayButton poolId={activePool.id} />
               <RuleLine rule={rule} onChange={handleRuleChange} />
               <PoolDashboard
