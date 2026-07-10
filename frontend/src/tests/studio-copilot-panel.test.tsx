@@ -102,7 +102,7 @@ describe("PoolCopilotPanel", () => {
     );
     // No batched "every 5th bind" briefing anymore — subsequent binds should stay silent.
     const askCalls = copilotHarness.ask.mock.calls.filter(
-      ([input]: [{ question?: string }]) =>
+      ([input]) =>
         input.question === "Brief the latest 5 bound policies and forward exposure.",
     );
     expect(askCalls).toHaveLength(0);
