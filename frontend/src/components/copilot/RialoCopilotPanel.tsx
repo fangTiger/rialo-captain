@@ -15,6 +15,12 @@ const focusableSelector = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(", ");
 
+const COPILOT_PROVIDER_LABEL = "Latch";
+
+function displayProviderText(value: string) {
+  return value.replace(/\bDeepSeek\b/g, COPILOT_PROVIDER_LABEL);
+}
+
 function scopeLabel(subjectType: string) {
   switch (subjectType) {
     case "flight":
@@ -97,18 +103,18 @@ export function RialoCopilotPanel() {
     : liveStatus ?? (response ? "Answer ready" : null);
   const providerStatus = (() => {
     if (errorMessage) {
-      return "provider: DeepSeek / error";
+      return `provider: ${COPILOT_PROVIDER_LABEL} / error`;
     }
 
     if (response?.status === "unavailable") {
-      return "provider: DeepSeek / unavailable";
+      return `provider: ${COPILOT_PROVIDER_LABEL} / unavailable`;
     }
 
     if (response?.model) {
-      return `provider: DeepSeek / active model ${response.model}`;
+      return `provider: ${COPILOT_PROVIDER_LABEL} / active`;
     }
 
-    return "provider: DeepSeek / waiting for stream context";
+    return `provider: ${COPILOT_PROVIDER_LABEL} / waiting for stream context`;
   })();
 
   useEffect(() => {
@@ -548,7 +554,7 @@ export function RialoCopilotPanel() {
                     }}
                   >
                     <span>status: {response.status}</span>
-                    <span>model: {response.model}</span>
+                    <span>route: {COPILOT_PROVIDER_LABEL}</span>
                     <span>confidence: {Math.round(response.confidence * 100)}%</span>
                   </div>
                 ) : null}
@@ -561,7 +567,7 @@ export function RialoCopilotPanel() {
                       lineHeight: 1.6,
                     }}
                   >
-                    {errorMessage}
+                    {displayProviderText(errorMessage)}
                   </div>
                 ) : null}
               </div>

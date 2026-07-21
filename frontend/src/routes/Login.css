@@ -266,6 +266,7 @@
 }
 
 .login-app-trigger:focus-visible,
+.login-panel-dev-button:focus-visible,
 .dev-login-card__close:focus-visible,
 .dev-login-card__submit:focus-visible,
 .dev-login-card__field input:focus-visible {
@@ -428,6 +429,31 @@
   display: grid;
   justify-items: start;
   gap: 14px;
+}
+
+.login-panel-dev-button {
+  width: 100%;
+  min-height: 50px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--accent-radar);
+  color: var(--surface-0);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  cursor: pointer;
+  box-shadow: 0 0 28px rgba(0, 255, 157, 0.18);
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    opacity 180ms ease;
+}
+
+.login-panel-dev-button:hover {
+  box-shadow: 0 0 34px rgba(0, 255, 157, 0.3);
+}
+
+.login-panel-dev-button:active {
+  transform: translateY(1px);
 }
 
 .login-signal-panel {
@@ -849,6 +875,7 @@
 
   .login-app-trigger,
   .login-hero,
+  .login-panel-dev-button,
   .dev-login-card__close,
   .dev-login-card__field input,
   .dev-login-card__submit {

@@ -14,6 +14,8 @@ import "./Login.css";
 
 export function Login() {
   const deployConfig = resolvePublicDeployConfig();
+  const showLatchLoginAction =
+    deployConfig.devLoginEnabled && !deployConfig.googleClientId;
   const [devPanelOpen, setDevPanelOpen] = useState(false);
   const launcherRef = useRef<HTMLButtonElement | null>(null);
   const shellRef = useRef<HTMLDivElement | null>(null);
@@ -158,11 +160,25 @@ export function Login() {
                 <span className="login-panel-eyebrow">Production access</span>
                 <h2>Enter the live tower</h2>
                 <p className="login-panel-copy">
-                  Google-auth clearance into the active flight field.
+                  {showLatchLoginAction
+                    ? "Latch demo clearance into the active flight field."
+                    : "Google-auth clearance into the active flight field."}
                 </p>
               </div>
               <div className="login-panel-body">
-                <GoogleSignIn />
+                {showLatchLoginAction ? (
+                  <button
+                    type="button"
+                    className="login-panel-dev-button command-focus-ring"
+                    aria-haspopup="dialog"
+                    aria-controls="dev-access-card"
+                    onClick={openDevPanel}
+                  >
+                    Login with Latch
+                  </button>
+                ) : (
+                  <GoogleSignIn />
+                )}
               </div>
             </div>
 

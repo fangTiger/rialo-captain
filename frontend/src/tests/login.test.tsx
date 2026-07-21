@@ -76,7 +76,10 @@ describe("Login", () => {
     expect(screen.getByText("Ready latch")).toBeInTheDocument();
     expect(screen.getByText("Warm relay")).toBeInTheDocument();
     expect(
-      screen.getByText("Google-auth clearance into the active flight field."),
+      screen.getByText("Latch demo clearance into the active flight field."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Login with Latch" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Sweep live")).toBeInTheDocument();
     expect(screen.getByText("Bind ready")).toBeInTheDocument();
@@ -254,5 +257,21 @@ describe("Login", () => {
       ),
     );
     await waitFor(() => expect(screen.getByText("Tower shell")).toBeInTheDocument());
+  });
+
+  it("opens dev login from the main Latch login action", async () => {
+    vi.stubEnv("VITE_DEV_LOGIN_ENABLED", "true");
+    vi.stubEnv("VITE_GOOGLE_CLIENT_ID", "");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(new Response("", { status: 401 }))),
+    );
+
+    renderLogin();
+
+    fireEvent.click(screen.getByRole("button", { name: "Login with Latch" }));
+
+    expect(screen.getByRole("dialog", { name: "DEV access" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText("Dev login email")).toHaveFocus());
   });
 });

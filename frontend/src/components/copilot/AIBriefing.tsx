@@ -131,7 +131,7 @@ export function AIBriefing() {
             label="AI Briefing provider status"
             className="ai-briefing__provider-status"
           >
-            provider: DeepSeek
+            provider: Latch
           </SignalPill>
           {!isCollapsed ? (
             <div

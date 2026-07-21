@@ -25,7 +25,7 @@ describe("AIBriefing", () => {
       "signal-pill--radar",
     );
     expect(screen.getByLabelText("AI Briefing provider status")).toHaveTextContent(
-      /provider:\s*deepseek/i,
+      /provider:\s*latch/i,
     );
     expect(screen.queryByText(/fake|mock|offline/i)).not.toBeInTheDocument();
 

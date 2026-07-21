@@ -346,7 +346,7 @@ describe("RialoCopilotPanel", () => {
       "signal-pill--radar",
     );
     expect(screen.getByLabelText("Copilot provider status")).toHaveTextContent(
-      /provider:\s*deepseek/i,
+      /provider:\s*latch/i,
     );
     expect(screen.queryByText(/fake|mock|offline/i)).not.toBeInTheDocument();
 
@@ -678,10 +678,10 @@ describe("RialoCopilotPanel", () => {
       await screen.findByText("BA178 is still closest to the payout threshold."),
     ).toBeInTheDocument();
     expect(
-      await screen.findByText("DeepSeek request timed out. Please try again."),
+      await screen.findByText("Latch request timed out. Please try again."),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Copilot provider status")).toHaveTextContent(
-      /provider:\s*deepseek.*error/i,
+      /provider:\s*latch.*error/i,
     );
     expect(screen.getByLabelText("Copilot provider status")).not.toHaveTextContent(
       /active model/i,
@@ -697,7 +697,7 @@ describe("RialoCopilotPanel", () => {
           status: "unavailable",
           answer: "Rialo Copilot is not configured in this environment yet.",
           sources: [],
-          suggested_prompts: ["Try again after DeepSeek is connected."],
+          suggested_prompts: ["Try again after Latch is connected."],
           confidence: 0,
           model: "deepseek-v4-flash",
         }),
@@ -726,9 +726,10 @@ describe("RialoCopilotPanel", () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getByText(/status: unavailable/i)).toBeInTheDocument();
-    expect(screen.getByText(/model: deepseek-v4-flash/i)).toBeInTheDocument();
+    expect(screen.getByText(/route:\s*latch/i)).toBeInTheDocument();
+    expect(screen.queryByText(/model:\s*deepseek/i)).not.toBeInTheDocument();
     expect(screen.getByLabelText("Copilot provider status")).toHaveTextContent(
-      /provider:\s*deepseek.*unavailable/i,
+      /provider:\s*latch.*unavailable/i,
     );
     expect(screen.getByLabelText("Copilot provider status")).not.toHaveTextContent(
       /active model/i,
