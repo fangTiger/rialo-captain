@@ -2,7 +2,7 @@ import enum
 import time
 import uuid
 
-from sqlalchemy import Boolean, Enum, Float, ForeignKey, Index, Integer, String, Text, text
+from sqlalchemy import BigInteger, Boolean, Enum, Float, ForeignKey, Index, Integer, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.db import Base
@@ -113,7 +113,7 @@ class PoolEvent(Base):
     event_type: Mapped[str] = mapped_column(String(64))
     payload_json: Mapped[str] = mapped_column(Text, default="{}")
     created_at: Mapped[int] = mapped_column(Integer, default=_now)
-    event_sequence: Mapped[int] = mapped_column(Integer, default=_now_ns)
+    event_sequence: Mapped[int] = mapped_column(BigInteger, default=_now_ns)
 
 
 class Policy(Base):
@@ -166,7 +166,7 @@ class PolicyEvent(Base):
     source: Mapped[str] = mapped_column(String(32))
     payload_json: Mapped[str] = mapped_column(Text, default="{}")
     created_at: Mapped[int] = mapped_column(Integer, default=_now)
-    event_sequence: Mapped[int] = mapped_column(Integer, default=_now_ns)
+    event_sequence: Mapped[int] = mapped_column(BigInteger, default=_now_ns)
 
 
 class FailedTrigger(Base):

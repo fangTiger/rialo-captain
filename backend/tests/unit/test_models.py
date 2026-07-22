@@ -1,8 +1,8 @@
 import pytest
-from sqlalchemy import inspect
+from sqlalchemy import BigInteger, inspect
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.models import Claim, Policy, PolicyStatus, Pool, PoolStatus, PresetStyle
+from backend.models import Claim, Policy, PolicyEvent, PolicyStatus, Pool, PoolEvent, PoolStatus, PresetStyle
 from backend.tests.factories import make_user, make_flight
 
 
@@ -109,3 +109,8 @@ def test_policy_table_exposes_underwriter_pool_foreign_key():
     assert "underwriter_pool_id" in columns
     foreign_keys = columns.underwriter_pool_id.foreign_keys
     assert {key.column.table.name for key in foreign_keys} == {"pools"}
+
+
+def test_event_sequence_columns_are_big_integer_for_nanosecond_ordering():
+    assert isinstance(PolicyEvent.__table__.c.event_sequence.type, BigInteger)
+    assert isinstance(PoolEvent.__table__.c.event_sequence.type, BigInteger)

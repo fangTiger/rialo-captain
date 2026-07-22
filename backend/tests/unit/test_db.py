@@ -1,4 +1,4 @@
-from backend.db import normalize_async_database_url
+from backend.db import normalize_async_database_url, postgresql_compatibility_statements
 
 
 def test_normalize_async_database_url_keeps_sqlite_urls_unchanged():
@@ -40,3 +40,10 @@ def test_normalize_async_database_url_removes_libpq_only_channel_binding():
     normalized = normalize_async_database_url(url)
 
     assert normalized == "postgresql+asyncpg://user:pass@ep-test.neon.tech/rialo?ssl=require"
+
+
+def test_postgresql_compatibility_statements_expand_event_sequence_columns_to_bigint():
+    statements = "\n".join(postgresql_compatibility_statements())
+
+    assert "ALTER TABLE IF EXISTS policy_events ALTER COLUMN event_sequence TYPE BIGINT" in statements
+    assert "ALTER TABLE IF EXISTS pool_events ALTER COLUMN event_sequence TYPE BIGINT" in statements

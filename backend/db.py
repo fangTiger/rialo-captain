@@ -1,6 +1,7 @@
 from collections.abc import AsyncIterator
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
@@ -49,6 +50,21 @@ def normalize_async_database_url(database_url: str) -> str:
     )
 
 
+def postgresql_compatibility_statements() -> tuple[str, ...]:
+    return (
+        "ALTER TABLE IF EXISTS policy_events ALTER COLUMN event_sequence TYPE BIGINT",
+        "ALTER TABLE IF EXISTS pool_events ALTER COLUMN event_sequence TYPE BIGINT",
+    )
+
+
+async def _ensure_postgresql_compatibility(engine: AsyncEngine) -> None:
+    if engine.dialect.name != "postgresql":
+        return
+    async with engine.begin() as conn:
+        for statement in postgresql_compatibility_statements():
+            await conn.execute(text(statement))
+
+
 def get_engine() -> AsyncEngine:
     global _engine
     if _engine is None:
@@ -68,6 +84,7 @@ async def init_db() -> None:
     engine = get_engine()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    await _ensure_postgresql_compatibility(engine)
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:
