@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
-import useSWR from "swr";
+import useSWR, { useSWRConfig } from "swr";
 import { apiFetch } from "../../api/client";
 import {
   CommandPanel,
@@ -9,6 +9,11 @@ import {
   type CommandMetric,
 } from "../../design/commandCenter";
 import { useMe } from "../../hooks/useMe";
+import {
+  recordRecentPurchasedPolicy,
+  type Policy,
+  type PolicyStatus,
+} from "../../hooks/usePolicies";
 import { multiplierFor } from "../flight/multiplier";
 import { DelayHistogram } from "./DelayHistogram";
 import { PremiumPicker } from "./PremiumPicker";
@@ -27,7 +32,7 @@ export interface PurchasedPolicy {
   flight_id: string;
   premium: number;
   payout: number;
-  status: string;
+  status: PolicyStatus;
   contract_ref: string;
   created_at: number;
 }
@@ -44,6 +49,7 @@ export function BuyDrawer({ flightId, onClose, onPurchased }: Props) {
     (p: string) => apiFetch<FlightDetailDto>(p),
   );
   const { refresh } = useMe();
+  const { mutate } = useSWRConfig();
   const [premium, setPremium] = useState(10);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -106,6 +112,15 @@ export function BuyDrawer({ flightId, onClose, onPurchased }: Props) {
         method: "POST",
         body: JSON.stringify({ flight_id: flightId, premium }),
       });
+      recordRecentPurchasedPolicy(policy);
+      await mutate<Policy[]>(
+        "/policies",
+        (current = []) => [
+          policy,
+          ...current.filter((item) => item.id !== policy.id),
+        ],
+        { revalidate: false },
+      );
       onPurchased?.(policy);
       await refresh();
       onClose();

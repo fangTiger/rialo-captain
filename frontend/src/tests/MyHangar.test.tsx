@@ -12,6 +12,8 @@ import type { EvidenceSubject } from "../hooks/useEvidenceTimeline";
 import { MyHangar } from "../routes/MyHangar";
 import { useEventStore } from "../store/eventStore";
 
+const RECENT_POLICIES_STORAGE_KEY = "rialo:recent-purchased-policies:v1";
+
 const copilotHarness = vi.hoisted(() => ({
   ask: vi.fn(),
   openPanel: vi.fn(),
@@ -48,7 +50,8 @@ let policiesPayload: Array<Record<string, unknown>> = [];
 
 describe("MyHangar", () => {
   beforeEach(() => {
-    useEventStore.setState({ flares: [], toasts: [], wsState: "idle" });
+    window.localStorage.removeItem(RECENT_POLICIES_STORAGE_KEY);
+    useEventStore.setState({ flares: [], toasts: [], events: [], wsState: "idle" });
     policiesPayload = [
       {
         id: "p1",
@@ -89,6 +92,7 @@ describe("MyHangar", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    window.localStorage.removeItem(RECENT_POLICIES_STORAGE_KEY);
     copilotHarness.ask.mockReset();
     copilotHarness.openPanel.mockReset();
   });
@@ -210,6 +214,40 @@ describe("MyHangar", () => {
     expect(within(summary).getAllByText("0 RIA")).toHaveLength(3);
     expect(within(summary).getByText("0 policies")).toBeInTheDocument();
     expect(screen.getAllByText("none")).toHaveLength(3);
+  });
+
+  it("keeps a just-purchased policy visible when the serverless policies response is briefly empty", async () => {
+    policiesPayload = [];
+    const purchasedPolicy = {
+      id: "p-recent",
+      flight_id: "ET500-20260722",
+      premium: 10,
+      payout: 80,
+      status: "active",
+      contract_ref: "mock-recent-policy",
+      created_at: 1_784_718_500,
+    };
+    window.localStorage.setItem(
+      RECENT_POLICIES_STORAGE_KEY,
+      JSON.stringify([{ policy: purchasedPolicy, recordedAt: Date.now() }]),
+    );
+
+    render(
+      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+          <MyHangar />
+        </SWRConfig>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByText("ET500-20260722")).toBeInTheDocument(),
+    );
+
+    const summary = screen.getByRole("region", { name: /hangar risk summary/i });
+    expect(within(summary).getByText("10 RIA")).toBeInTheDocument();
+    expect(within(summary).getByText("80 RIA")).toBeInTheDocument();
+    expect(screen.getAllByText("none")).toHaveLength(2);
   });
 
   it("orders active policies by risk priority, payout, and created time", async () => {

@@ -4,6 +4,8 @@ import { MemoryRouter } from "react-router-dom";
 import { SWRConfig } from "swr";
 import { BuyDrawer } from "../components/drawer/BuyDrawer";
 
+const RECENT_POLICIES_STORAGE_KEY = "rialo:recent-purchased-policies:v1";
+
 const fakeFlight = {
   id: "BA178-20260614",
   callsign: "BA178",
@@ -15,6 +17,7 @@ const fakeFlight = {
 
 describe("BuyDrawer", () => {
   beforeEach(() => {
+    window.localStorage.removeItem(RECENT_POLICIES_STORAGE_KEY);
     vi.stubGlobal(
       "fetch",
       vi
@@ -27,6 +30,7 @@ describe("BuyDrawer", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    window.localStorage.removeItem(RECENT_POLICIES_STORAGE_KEY);
   });
 
   it("renders flight callsign and route", async () => {
@@ -149,6 +153,11 @@ describe("BuyDrawer", () => {
       expect(call).toBeDefined();
     });
     expect(onPurchased).toHaveBeenCalledWith(createdPolicy);
+
+    const storedPolicies = JSON.parse(
+      window.localStorage.getItem(RECENT_POLICIES_STORAGE_KEY) ?? "[]",
+    ) as Array<{ policy: typeof createdPolicy }>;
+    expect(storedPolicies[0]?.policy).toMatchObject(createdPolicy);
   });
 
   it("exposes a compact desktop ticket panel via responsive shell styles", async () => {
