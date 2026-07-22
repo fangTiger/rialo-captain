@@ -632,6 +632,42 @@ describe("RialoCopilotPanel", () => {
     expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledTimes(1);
   });
 
+  it("does not fall back to /api/copilot/ask when the stream request fails", async () => {
+    vi.mocked(globalThis.fetch)
+      .mockResolvedValueOnce(new Response("missing stream route", { status: 404 }))
+      .mockResolvedValueOnce(new Response("legacy ask should not run", { status: 404 }));
+
+    render(
+      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <CopilotProvider>
+          <OpenCopilotButton />
+          <RialoCopilotPanel />
+        </CopilotProvider>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /open ask rialo/i }));
+    fireEvent.change(screen.getByRole("textbox", { name: /question/i }), {
+      target: { value: "What needs attention right now?" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /submit question/i }));
+
+    expect(
+      await screen.findByText("Rialo Copilot is temporarily unavailable."),
+    ).toBeInTheDocument();
+    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledTimes(1);
+    expect(String(vi.mocked(globalThis.fetch).mock.calls[0]?.[0])).toContain(
+      "/api/copilot/ask/stream",
+    );
+    expect(
+      vi
+        .mocked(globalThis.fetch)
+        .mock.calls.some(([url]) =>
+          /\/api\/copilot\/ask(?:$|\?)/.test(String(url)),
+        ),
+    ).toBe(false);
+  });
+
   it("keeps partial stream output after an error but hides evidence until a successful final answer", async () => {
     const sse = createSseResponse();
     vi.mocked(globalThis.fetch).mockResolvedValue(sse.response);

@@ -12,7 +12,6 @@ import {
 } from "../../api/client";
 import {
   CopilotStreamProtocolError,
-  askCopilot,
   askCopilotStream,
   type CopilotAnswer,
   type CopilotAskInput,
@@ -278,32 +277,13 @@ export function CopilotProvider({ children }: { children: ReactNode }) {
           setErrorMessage("Rialo Copilot stream ended unexpectedly.");
           return;
         }
-        try {
-          const fallback = await askCopilot({
-            ...input,
-            question: trimmedQuestion,
-          });
-          if (requestSequenceRef.current !== requestSequence) {
-            return;
-          }
-          setConnectionStatus("idle");
-          setResponse({
-            ...fallback,
-            suggested_prompts: capPrompts(fallback.suggested_prompts),
-          });
-          setErrorMessage(null);
-        } catch (fallbackError) {
-          if (requestSequenceRef.current !== requestSequence) {
-            return;
-          }
-          setConnectionStatus("error");
-          if (fallbackError instanceof ApiError && fallbackError.status === 401) {
-            setErrorMessage("Session expired. Sign in again to use Rialo Copilot.");
-          } else if (error instanceof CopilotStreamProtocolError) {
-            setErrorMessage("Rialo Copilot stream ended unexpectedly.");
-          } else {
-            setErrorMessage("Rialo Copilot is temporarily unavailable.");
-          }
+        setConnectionStatus("error");
+        if (error instanceof ApiError && error.status === 401) {
+          setErrorMessage("Session expired. Sign in again to use Rialo Copilot.");
+        } else if (error instanceof CopilotStreamProtocolError) {
+          setErrorMessage("Rialo Copilot stream ended unexpectedly.");
+        } else {
+          setErrorMessage("Rialo Copilot is temporarily unavailable.");
         }
       } finally {
         if (requestSequenceRef.current === requestSequence) {
