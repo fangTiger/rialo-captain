@@ -29,3 +29,14 @@ def test_normalize_async_database_url_keeps_asyncpg_url_driver():
     normalized = normalize_async_database_url(url)
 
     assert normalized == "postgresql+asyncpg://user:pass@ep-test.neon.tech/rialo?ssl=require"
+
+
+def test_normalize_async_database_url_removes_libpq_only_channel_binding():
+    url = (
+        "postgres://user:pass@ep-test.neon.tech/rialo"
+        "?sslmode=require&channel_binding=require"
+    )
+
+    normalized = normalize_async_database_url(url)
+
+    assert normalized == "postgresql+asyncpg://user:pass@ep-test.neon.tech/rialo?ssl=require"

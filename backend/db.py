@@ -13,6 +13,7 @@ class Base(DeclarativeBase):
 
 _engine: AsyncEngine | None = None
 _session_factory: async_sessionmaker[AsyncSession] | None = None
+_ASYNC_PG_UNSUPPORTED_QUERY_PARAMS = {"channel_binding"}
 
 
 def normalize_async_database_url(database_url: str) -> str:
@@ -28,6 +29,8 @@ def normalize_async_database_url(database_url: str) -> str:
     has_ssl = any(key == "ssl" for key, _ in query_items)
     normalized_query_items: list[tuple[str, str]] = []
     for key, value in query_items:
+        if key in _ASYNC_PG_UNSUPPORTED_QUERY_PARAMS:
+            continue
         if key != "sslmode":
             normalized_query_items.append((key, value))
             continue
