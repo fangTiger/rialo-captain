@@ -62,6 +62,28 @@ async def test_run_once_stores_to_cache_and_upserts_flights(db_session: AsyncSes
 
 
 @pytest.mark.asyncio
+async def test_refresh_cache_only_does_not_upsert_flights(db_session: AsyncSession):
+    cache = FlightCache(ttl_seconds=30)
+    fake = FakeOpenSky([_state("BA178"), _state("DL101")])
+    fetcher = FlightFetcher(
+        opensky=fake,
+        cache=cache,
+        session_factory=_session_factory(db_session),
+        today_id=lambda: "20260614",
+    )
+
+    summary = await fetcher.refresh_cache_only()
+
+    assert summary.fetched == 2
+    assert summary.upserted == 0
+    entry = cache.get()
+    assert entry.stale is False
+    assert len(entry.states) == 2
+    rows = (await db_session.execute(select(Flight))).scalars().all()
+    assert rows == []
+
+
+@pytest.mark.asyncio
 async def test_run_once_idempotent_upsert(db_session: AsyncSession):
     cache = FlightCache(ttl_seconds=30)
     fake = FakeOpenSky([_state("BA178")])

@@ -83,6 +83,20 @@ class FlightFetcher:
 
         return summary
 
+    async def refresh_cache_only(self) -> FetchSummary:
+        summary = FetchSummary()
+        try:
+            states = await self._opensky.fetch_all()
+        except Exception as exc:
+            summary.error = str(exc)
+            logger.exception("FlightFetcher 刷新航班缓存失败")
+            return summary
+
+        valid = [state for state in states if state.callsign]
+        self._cache.store(valid)
+        summary.fetched = len(valid)
+        return summary
+
     async def run_forever(self) -> None:
         while not self._stop_event.is_set():
             try:

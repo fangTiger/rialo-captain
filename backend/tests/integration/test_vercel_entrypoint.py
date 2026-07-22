@@ -2,11 +2,17 @@ import importlib
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from backend.config import get_settings
+from backend.db import get_engine
+from backend.flights.cache import FlightCache
+from backend.flights.opensky import FlightState
+from backend.models import Flight
 
 
 def import_vercel_entrypoint():
@@ -22,6 +28,34 @@ def import_vercel_entrypoint():
 
 def reset_vercel_sqlite():
     Path("/tmp/rialo-captain.db").unlink(missing_ok=True)
+
+
+def _flight_state(index: int) -> FlightState:
+    return FlightState(
+        icao24=f"{index:06x}",
+        callsign=f"QA{index:03d}",
+        origin_country="UK",
+        longitude=float(index),
+        latitude=float(index),
+        velocity=200.0,
+        heading=90.0,
+        on_ground=False,
+    )
+
+
+class RecordingFetcher:
+    def __init__(self, cache: FlightCache):
+        self.cache = cache
+        self.run_once_calls = 0
+        self.refresh_cache_only_calls = 0
+
+    async def run_once(self):
+        self.run_once_calls += 1
+        self.cache.store([_flight_state(index) for index in range(20)])
+
+    async def refresh_cache_only(self):
+        self.refresh_cache_only_calls += 1
+        self.cache.store([_flight_state(index) for index in range(20)])
 
 
 @pytest.mark.asyncio
@@ -84,6 +118,52 @@ async def test_vercel_entrypoint_serves_mock_live_flights_on_cold_start(monkeypa
     assert len(body["flights"]) >= 20
     assert all(flight["longitude"] is not None for flight in body["flights"])
     assert all(flight["latitude"] is not None for flight in body["flights"])
+
+
+@pytest.mark.asyncio
+async def test_vercel_entrypoint_refreshes_stale_cache_without_db_upsert_when_flights_exist(
+    monkeypatch,
+    tmp_path,
+):
+    db_file = tmp_path / "vercel-fast-flights.db"
+    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{db_file}")
+    monkeypatch.setenv("CLAIM_ENGINE_ENABLED", "false")
+    monkeypatch.setenv("FLIGHT_FETCHER_ENABLED", "false")
+    monkeypatch.setenv("OPENSKY_ENABLED", "false")
+
+    entrypoint = import_vercel_entrypoint()
+    await entrypoint.init_db()
+    factory = async_sessionmaker(get_engine(), expire_on_commit=False)
+    async with factory() as session:
+        async with session.begin():
+            session.add_all(
+                [
+                    Flight(
+                        id=f"QA{index:03d}-20260722",
+                        callsign=f"QA{index:03d}",
+                        origin="UK",
+                        destination="",
+                    )
+                    for index in range(20)
+                ]
+            )
+
+    now = 0
+
+    def current_time() -> int:
+        return now
+
+    cache = FlightCache(ttl_seconds=30, now=current_time)
+    cache.store([_flight_state(index) for index in range(20)])
+    now = 40
+    fetcher = RecordingFetcher(cache)
+    app = SimpleNamespace(state=SimpleNamespace(flight_cache=cache, flight_fetcher=fetcher))
+
+    await entrypoint.ensure_live_flights_ready(app)
+
+    assert fetcher.refresh_cache_only_calls == 1
+    assert fetcher.run_once_calls == 0
 
 
 @pytest.mark.asyncio

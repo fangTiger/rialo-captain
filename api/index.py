@@ -38,7 +38,7 @@ async def persisted_flight_count() -> int:
         return int(result.scalar_one())
 
 
-async def ensure_live_flights_ready(app) -> None:
+async def ensure_live_flights_ready(app, *, require_persisted_flights: bool = False) -> None:
     if os.environ.get("VERCEL") != "1":
         return
     cache = getattr(app.state, "flight_cache", None)
@@ -47,19 +47,18 @@ async def ensure_live_flights_ready(app) -> None:
         return
     min_flights = 20 if os.environ.get("OPENSKY_ENABLED", "").lower() == "false" else 1
     entry = cache.get()
-    if (
-        len(entry.states) >= min_flights
-        and not entry.stale
-        and await persisted_flight_count() >= min_flights
-    ):
+    if len(entry.states) >= min_flights and not entry.stale and not require_persisted_flights:
         return
     async with _flight_seed_lock:
         entry = cache.get()
-        if (
-            len(entry.states) >= min_flights
-            and not entry.stale
-            and await persisted_flight_count() >= min_flights
-        ):
+        if len(entry.states) >= min_flights and not entry.stale and not require_persisted_flights:
+            return
+        persisted_count = await persisted_flight_count()
+        if len(entry.states) >= min_flights and not entry.stale and persisted_count >= min_flights:
+            return
+        if persisted_count >= min_flights:
+            if len(entry.states) < min_flights or entry.stale:
+                await fetcher.refresh_cache_only()
             return
         await fetcher.run_once()
 
@@ -81,7 +80,10 @@ async def ensure_database_ready(request, call_next):
                 await init_db()
                 _init_done = True
     if should_prepare_live_flights(request.url.path):
-        await ensure_live_flights_ready(request.app)
+        await ensure_live_flights_ready(
+            request.app,
+            require_persisted_flights=request.url.path != "/flights/live",
+        )
     return await call_next(request)
 
 
