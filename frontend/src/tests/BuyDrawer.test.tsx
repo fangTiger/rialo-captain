@@ -217,4 +217,33 @@ describe("BuyDrawer", () => {
     );
     expect(screen.getByRole("button", { name: /Confirm/i })).toBeEnabled();
   });
+
+  it("uses a readable quote metric layout in the narrow drawer", async () => {
+    render(
+      <SWRConfig value={{ provider: () => new Map() }}>
+        <MemoryRouter
+          future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
+        >
+          <BuyDrawer flightId="BA178-20260614" onClose={() => {}} />
+        </MemoryRouter>
+      </SWRConfig>,
+    );
+
+    await waitFor(() => expect(screen.getByText("BA178")).toBeInTheDocument());
+
+    const styleText = Array.from(document.querySelectorAll("style"))
+      .map((node) => node.textContent ?? "")
+      .join("\n");
+
+    expect(styleText).toContain(
+      "grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr)",
+    );
+    expect(styleText).toContain(
+      ".buy-drawer-metrics .metric-deck__item:nth-child(3)",
+    );
+    expect(styleText).toContain("grid-template-areas:");
+    expect(styleText).not.toContain(
+      ".buy-drawer-metrics {\n            grid-template-columns: repeat(3, minmax(0, 1fr));",
+    );
+  });
 });

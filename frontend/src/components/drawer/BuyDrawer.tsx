@@ -299,7 +299,49 @@ function Shell({
           }
 
           .buy-drawer-metrics {
-            grid-template-columns: repeat(3, minmax(0, 1fr));
+            grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+            gap: 10px;
+          }
+
+          .buy-drawer-metrics .metric-deck__item {
+            min-height: 92px;
+            display: grid;
+            align-content: start;
+            padding: 12px;
+          }
+
+          .buy-drawer-metrics .metric-deck__label {
+            line-height: 1.28;
+          }
+
+          .buy-drawer-metrics .metric-deck__value {
+            white-space: nowrap;
+            overflow-wrap: normal;
+          }
+
+          .buy-drawer-metrics .metric-deck__item:nth-child(3) {
+            grid-column: 1 / -1;
+            min-height: 0;
+            grid-template-columns: minmax(0, 1fr) auto;
+            grid-template-areas:
+              "label value"
+              "detail value";
+            align-items: center;
+            column-gap: 12px;
+          }
+
+          .buy-drawer-metrics .metric-deck__item:nth-child(3) .metric-deck__label {
+            grid-area: label;
+          }
+
+          .buy-drawer-metrics .metric-deck__item:nth-child(3) .metric-deck__value {
+            grid-area: value;
+            margin-top: 0;
+            text-align: right;
+          }
+
+          .buy-drawer-metrics .metric-deck__item:nth-child(3) .metric-deck__detail {
+            grid-area: detail;
           }
 
           .buy-drawer-boundary {

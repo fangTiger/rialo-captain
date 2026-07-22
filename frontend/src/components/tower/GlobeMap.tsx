@@ -1102,7 +1102,8 @@ function WeatherCellShape({
 }) {
   const projected = projection([cell.longitude, cell.latitude]);
   if (!projected) return null;
-  const radius = Math.max(10, cell.radiusDeg * radiusScale);
+  const viewportScale = Math.max(0.001, viewport.k);
+  const radius = Math.max(10, cell.radiusDeg * radiusScale) / viewportScale;
   const squash = cell.drift === "ne" || cell.drift === "sw" ? 0.64 : 0.78;
   return (
     <g

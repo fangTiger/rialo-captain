@@ -615,6 +615,48 @@ describe("GlobeMap spotlight and legacy camera target", () => {
     expect(delta).toHaveAttribute("textLength", `${118 / expected.k}`);
   });
 
+  it("keeps severe weather cells visually stable during selected-flight zoom", () => {
+    render(
+      <GlobeMap
+        cameraTarget={target}
+        weatherLayerVisible
+        riskSignal={riskSignal}
+      />,
+    );
+
+    runNextFrame(0);
+    runNextFrame(1_000);
+
+    const expected = cameraTargetToViewport(target, size);
+    const severeCell = riskSignal.weatherCells.find(
+      (cell) => cell.level === "severe",
+    );
+    expect(severeCell).toBeDefined();
+
+    const baseRadius = Math.max(
+      10,
+      (severeCell?.radiusDeg ?? 0) * (size.width / 360),
+    );
+    const severeStormMass = screen.getAllByTestId("weather-storm-mass-severe")[0];
+    const severeField = screen
+      .getAllByTestId("weather-cell-severe")[0]
+      .querySelector(".weather-risk-cell-field");
+    const severePulse = screen.getAllByTestId("weather-severe-cell-pulse")[0];
+
+    expect(Number(severeStormMass.getAttribute("rx"))).toBeCloseTo(
+      (baseRadius * 1.32) / expected.k,
+      5,
+    );
+    expect(Number(severeField?.getAttribute("rx"))).toBeCloseTo(
+      baseRadius / expected.k,
+      5,
+    );
+    expect(Number(severePulse.getAttribute("r"))).toBeCloseTo(
+      Math.max(8, baseRadius * 0.86) / expected.k,
+      5,
+    );
+  });
+
   it("hides weather risk visuals when the weather layer is disabled", () => {
     render(<GlobeMap weatherLayerVisible={false} riskSignal={riskSignal} />);
 
