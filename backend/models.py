@@ -72,6 +72,7 @@ class Pool(Base):
             "ix_pools_active_per_user",
             "user_id",
             unique=True,
+            postgresql_where=text("status = 'active'"),
             sqlite_where=text("status = 'active'"),
         ),
     )

@@ -1,4 +1,5 @@
 from collections.abc import AsyncIterator
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
@@ -14,10 +15,42 @@ _engine: AsyncEngine | None = None
 _session_factory: async_sessionmaker[AsyncSession] | None = None
 
 
+def normalize_async_database_url(database_url: str) -> str:
+    if database_url.startswith("postgres://"):
+        database_url = f"postgresql://{database_url.removeprefix('postgres://')}"
+    if database_url.startswith("postgresql://"):
+        database_url = f"postgresql+asyncpg://{database_url.removeprefix('postgresql://')}"
+    if not database_url.startswith("postgresql+asyncpg://"):
+        return database_url
+
+    parts = urlsplit(database_url)
+    query_items = parse_qsl(parts.query, keep_blank_values=True)
+    has_ssl = any(key == "ssl" for key, _ in query_items)
+    normalized_query_items: list[tuple[str, str]] = []
+    for key, value in query_items:
+        if key != "sslmode":
+            normalized_query_items.append((key, value))
+            continue
+        if not has_ssl:
+            normalized_query_items.append(("ssl", value))
+            has_ssl = True
+
+    return urlunsplit(
+        (
+            parts.scheme,
+            parts.netloc,
+            parts.path,
+            urlencode(normalized_query_items),
+            parts.fragment,
+        )
+    )
+
+
 def get_engine() -> AsyncEngine:
     global _engine
     if _engine is None:
-        _engine = create_async_engine(get_settings().database_url, echo=False)
+        database_url = normalize_async_database_url(get_settings().database_url)
+        _engine = create_async_engine(database_url, echo=False)
     return _engine
 
 

@@ -100,6 +100,7 @@ def test_pool_active_per_user_partial_unique_index_exists():
     assert [column.name for column in active_index.columns] == ["user_id"]
     assert active_index.unique is True
     assert "status = 'active'" in str(active_index.dialect_options["sqlite"]["where"])
+    assert "status = 'active'" in str(active_index.dialect_options["postgresql"]["where"])
 
 
 def test_policy_table_exposes_underwriter_pool_foreign_key():
